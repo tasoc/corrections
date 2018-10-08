@@ -1,0 +1,6 @@
+six
+numpy
+scipy
+matplotlib
+astropy
+Bottleneck

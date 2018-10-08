@@ -1,0 +1,2 @@
+rasmus/*.sqlite filter=lfs diff=lfs merge=lfs -text
+rasmus/*.npy filter=lfs diff=lfs merge=lfs -text
