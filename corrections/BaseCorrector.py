@@ -15,7 +15,7 @@ import logging
 
 __docformat__ = 'restructuredtext'
 
-class BaseCorrection(object):
+class BaseCorrector(object):
 	"""
 	The basic correction class for the TASOC Correction pipeline.
 	All other specific correction algorithms will inherit from this.

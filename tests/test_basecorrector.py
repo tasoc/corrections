@@ -7,7 +7,7 @@ Tests of BaseCorrection.
 """
 
 from __future__ import division, print_function, with_statement, absolute_import
-from correction import BaseCorrection
+from corrections import BaseCorrector
 
 #----------------------------------------------------------------------
 def test_import():
@@ -16,7 +16,7 @@ def test_import():
 	
 	Doesn't really do anything else..."""
 	
-	with BaseCorrection() as bc:
+	with BaseCorrector() as bc:
 		pass
 
 #----------------------------------------------------------------------
