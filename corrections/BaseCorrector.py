@@ -28,7 +28,7 @@ class STATUS(enum.enum):
     WARNING = 3
     # TODO: various statuses as required
 
-class BaseCorrection(object):
+class BaseCorrector(object):
     """
     The basic correction class for the TASOC Photometry pipeline.
     All other specific correction classes will inherit from BaseCorrection
@@ -73,7 +73,7 @@ class BaseCorrection(object):
         """
         raise NotImplementedError("A helpful error message goes here") # TODO
 
-    def correction(self, *args, **kwargs):
+    def correct(self, *args, **kwargs):
         """
         Run correction.
 
