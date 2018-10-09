@@ -26,11 +26,12 @@ import sqlite3
 import sys
 from tqdm import tqdm
 from operator import add
-from sphere_dist import sphere_dist
 from copy import deepcopy
 from time import sleep
 
-from star import Star
+# from star import Star
+import lightkurve
+from sphere_dist import sphere_dist
 
 #set up output directory
 if not os.path.isdir("toutput"):
@@ -38,8 +39,8 @@ if not os.path.isdir("toutput"):
 
 #TODO: These shouldn't be hard coded!
 # data_folder = "../TESS_Collab_Data"
-__sql_folder__ = "../data/Rasmus"
-__data_folder__ = "../data/Rasmus/data"
+__sql_folder__ = "../../data/Rasmus"
+__data_folder__ = "../../data/Rasmus/data"
 __sector__ = "sector02"
 
 def read_todolist():
@@ -47,17 +48,11 @@ def read_todolist():
     Function to read in the sql to do list for the globally defined sector (__sector__).
 
     Returns:
-    --------
-    star_names (ndarray):
-        Labels of all the names of the stars in a given sector.
-    Tmag (ndarray):
-        TESS photometry apparent magnitude for all stars.
-    variability (ndarray):
-        A parameter describing the level of intrinsic variability for all stars.
-    eclat (ndarray):
-        Ecliptic latitude for all stars.
-    eclon (ndarray):
-        Ecliptic longitude for all stars.
+        star_names (ndarray): Labels of all the names of the stars in a given sector.
+        Tmag (ndarray): TESS photometry apparent magnitude for all stars.
+        variability (ndarray): A parameter describing the level of intrinsic variability for all stars.
+        eclat (ndarray): Ecliptic latitude for all stars.
+        eclon (ndarray): Ecliptic longitude for all stars.
     """
 
     #open sql file and find list of all stars in segment 2, camera 1, ccd 1
@@ -81,26 +76,34 @@ def read_todolist():
 
 def read_stars(star_names):
     """
-    Function to read in the flux timeseries for all stars in a sector given in star_names.
-    Time, flux, and some additional metadata are stored in a list of class instances.
-    For this, we use the lightkurve open-source Python package.
+    Function to read in the flux timeseries for all stars in a sector given in
+    star_names. Time, flux, and some additional metadata are stored in a list of
+    class instances. For this, we use the lightkurve open-source Python package.
 
     Parameters:
-        star_names (ndarray): Labels of all the names of the stars in a given sector.
+        star_names (ndarray): Labels of all the names of the stars in a given
+            sector.
 
     Returns:
-        star_array (ndarray): An array of class instances holding metadata on each star.
-            (i.e. flux, time, mean flux, std of flux).
+        star_array (ndarray): An array of lightkurve.TessLightCurve class
+            instances holding metadata on each star. (i.e. flux, time, mean
+            flux, std of flux).
     """
     # Read star data from each file and instanciate a Star object for each with all data
     star_array = np.empty(star_names.size, dtype=object)
     for name_index in tqdm(range(star_names.size)):
-
         filename =  '{}/noisy_by_sectors/Star{}-{}.noisy'.format(__data_folder__, star_names[name_index], __sector__)
-        mafs = np.loadtxt(filename, usecols=range(0,2))
+        mafs = np.loadtxt(filename, usecols=range(0,2)).T
 
-        nan_index = np.isnan(mafs[:,1])
-        star_array[name_index] = Star(mafs[~nan_index,0], mafs[~nan_index,1])
+        #Build lightkurve object and associated metadata
+        lc = lightkurve.TessLightCurve(mafs[0], mafs[1]).remove_nans()
+        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
+        drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
+        lc.meta = { 'fmean' : np.max(lc.flux),
+                    'fstd' : np.std(np.diff(lc.flux)),
+                    'frange' : frange,
+                    'drange' : drange}
+        star_array[name_index] = lc
     return star_array
 
 def get_ensemble_correction(ifile, star_names, star_array, eclat, eclon):
@@ -113,8 +116,8 @@ def get_ensemble_correction(ifile, star_names, star_array, eclat, eclon):
         ifile (int): index for the relevant star in the star_names list (and consequently also
                     the star_array, eclat and eclon lists).
         star_names (ndarray): Labels of all the names of the stars in a given sector.
-        star_array (ndarray): An array of class instances holding metadata on each star.
-            (i.e. flux, time, mean flux, std of flux).
+        star_array (ndarray): An array of lightkurve instances holding metadata
+            on each star (i.e. flux, time, mean flux, std of flux).
         eclat (ndarray): Ecliptic latitude for all stars.
         eclon (ndarray): Ecliptic longitude for all stars.
 
@@ -167,17 +170,17 @@ def get_ensemble_correction(ifile, star_names, star_array, eclat, eclon):
         # sel = (dist[:,1] < search_radius) & (np.log10(drange) < min_range) & (drange < 10*drange[ifile])
         for test_star in range(len(star_names[:])):
             if (dist[test_star][1]<search_radius  and
-                np.log10(star_array[test_star].drange) < min_range and
-                star_array[test_star].drange < 10*star_array[ifile].drange):
+                np.log10(star_array[test_star].meta['drange']) < min_range and
+                star_array[test_star].meta['drange'] < 10*star_array[ifile].meta['drange']):
 
                 num_star+=1
                 #calculate relative flux for star to be added to ensemble
                 test0 = star_array[test_star].time
                 test1 = star_array[test_star].flux
-                test1 = test1/star_array[test_star].fmean
+                test1 = test1/star_array[test_star].meta['fmean']
                 #calculate weight for star to be added to the ensemble. weight is whitened stdev relative to mean flux
                 weight = np.ones_like(test1)
-                weight = weight*star_array[test_star].fmean/star_array[test_star].fstd
+                weight = weight*star_array[test_star].meta['fmean']/star_array[test_star].meta['fstd']
 
                 #add time, flux, weight to ensemble light curve. flux is weighted flux
                 full_time = np.append(full_time,test0)
@@ -203,7 +206,7 @@ def get_ensemble_correction(ifile, star_names, star_array, eclat, eclon):
         if np.min(n[n2>0])<1000:
             #print min_range
             min_range = min_range+0.3
-            if min_range > np.log10(np.max(star_array[ifile].drange)):
+            if min_range > np.log10(np.max(star_array[ifile].meta['drange'])):
                 #if (search_radius < 0.5):
                 if (search_radius < 100):
                     #search_radius = search_radius+0.1
@@ -374,19 +377,21 @@ def get_ensemble_correction(ifile, star_names, star_array, eclat, eclon):
 if __name__ == "__main__":
     star_names, Tmag, variability, eclat, eclon = read_todolist()
     star_array = read_stars(star_names)
-
     '''Get the correction, apply the correction, output the data.'''
     #for ifile in range(len(file_list[:])):
+
     for ifile in tqdm(range(len(star_names[:15]))):
         pp = get_ensemble_correction(ifile, star_names, star_array, eclat, eclon)
 
         scale = 1.0
         cflux = np.divide(star_array[ifile].flux,(scale*pp(star_array[ifile].time)))
         ocflux = deepcopy(cflux)
-        cflux_mean = np.nanmean(cflux)
 
-
-        outfile = '../data/Rasmus/toutput2/'+str(star_names[ifile])+'.noisy_detrend'
+        import matplotlib.pyplot as plt
+        plt.plot(star_array[ifile].time, ocflux)
+        plt.plot(star_array[ifile].time, star_array[ifile].flux)
+        plt.show()
+        outfile = '../../data/Rasmus/toutput2/'+str(star_names[ifile])+'.noisy_detrend'
         file = open(outfile,'w')
         #np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, fcorr2[ifile])), fmt = '%f')
         np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, ocflux)), fmt = '%f')
