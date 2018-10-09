@@ -7,8 +7,8 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 - :py:class:`STATUS`: Status flags for pipeline performance logging
 - :py:class:`STATUS`: Status flags for pipeline performance logging
 
-.. codeauthor:: Lindsey Carboneau 
-.. code author:: 
+.. codeauthor:: Lindsey Carboneau
+.. code author::
 """
 
 # TODO: imports; must be included in requirements.txt
@@ -35,7 +35,7 @@ class BaseCorrector(object):
     The basic correction class for the TASOC Photometry pipeline.
     All other specific correction classes will inherit from BaseCorrector
 
-    Attributes: 
+    Attributes:
         # TODO
     """
 
@@ -62,18 +62,18 @@ class BaseCorrector(object):
     def status(self):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
-    
 
-	    def __enter__(self):
-		    return self
 
-	    def __exit__(self, *args):
-		    self.close()
+    def __enter__(self):
+        return self
 
-	    def close(self):
-		    """Close correction object."""
-		    pass
-  
+    def __exit__(self, *args):
+        self.close()
+
+    def close(self):
+        """Close correction object."""
+        pass
+
     def do_correction(self):
         """
         Apply corrections to target lightcurve.
