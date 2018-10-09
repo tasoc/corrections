@@ -39,7 +39,7 @@ class BaseCorrector(object):
         # TODO
     """
 
-    def __init__():
+    def __init__(self, starid, input_folder, output_folder, plot=False):
         """
         Initialize the correction object
 
@@ -58,6 +58,18 @@ class BaseCorrector(object):
         logger = logging.getLogger(__name__)
 
         self._status = STATUS.UNKNOWN
+        self.starid = starid
+        self.input_folder = input_folder
+    
+    def __enter__(self):
+	    return self
+    
+    def __exit__(self, *args):
+	    self.close()
+
+    def close(self):
+        """Close correction object"""
+        pass
 
     def status(self):
         """ The status of the corrections. From :py:class:`STATUS`."""

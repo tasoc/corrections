@@ -20,7 +20,7 @@ import argparse
 import fnmatch
 import logging
 import functools
-from corrections import tesscorr, taskmanager
+from corrections import tesscorr, TaskManager
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -72,7 +72,7 @@ if __name__ == '__main__':
 	f = functools.partial(tesscorr, input_folder=input_folder, output_folder=output_folder, plot=args.plot)
 
 	# Run the program:
-	with taskmanager.TaskManager(input_folder) as tm:
+	with TaskManager(input_folder) as tm:
 		if args.starid is not None:
 			task = tm.get_task(starid=args.starid)
 		elif args.all:	
