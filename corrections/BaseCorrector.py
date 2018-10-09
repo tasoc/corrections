@@ -7,8 +7,8 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 - :py:class:`STATUS`: Status flags for pipeline performance logging
 - :py:class:`STATUS`: Status flags for pipeline performance logging
 
-.. codeauthor:: Lindsey Carboneau
-.. code author::
+.. codeauthor:: Lindsey Carboneau 
+.. code author:: Rasmus Handberg
 """
 
 # TODO: imports; must be included in requirements.txt
@@ -62,18 +62,17 @@ class BaseCorrector(object):
     def status(self):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
-
-
+    
     def __enter__(self):
-        return self
-
+	    return self
+    
     def __exit__(self, *args):
-        self.close()
-
+	    self.close()
+    
     def close(self):
-        """Close correction object."""
-        pass
-
+	    """Close correction object."""
+		pass
+  
     def do_correction(self):
         """
         Apply corrections to target lightcurve.
@@ -104,11 +103,12 @@ class BaseCorrector(object):
             pass
     def save_lightcurve(self, output_folder=None):
         """
-		    Save generated lightcurve to file.
+		Save generated lightcurve to file.
 
-		    Parameters:
-			    output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
+		Parameters:
+		    output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
 
-		    Returns:
-			    string: Path to the generated file.
-		    """
+		Returns:
+		    string: Path to the generated file.
+		"""
+        
