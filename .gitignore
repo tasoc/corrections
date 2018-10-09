@@ -44,6 +44,7 @@ nosetests.xml
 coverage.xml
 *,cover
 .hypothesis/
+.pytest_cache/
 
 # Translations
 *.mo
@@ -101,3 +102,6 @@ Scripts/
 
 # Visual Studio Code settings
 .vscode/
+
+# Kate
+.*.kate-swp
