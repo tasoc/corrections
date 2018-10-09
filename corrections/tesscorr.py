@@ -51,6 +51,14 @@ def _try_correction(CorrClass, *args, **kwargs):
 		return _CorrErrorDummy(*args, **kwargs)
 
 #------------------------------------------------------------------------------
+def _try_TDA5_correction():
+	"""
+	Run the ensemble correction as a test of functionality
+	NOTE: should only be needed temporarily, and replaced by 
+	"""
+	pass
+
+#------------------------------------------------------------------------------
 def tesscorr(method=None, *args, **kwargs):
 	"""
 	Run the corrector

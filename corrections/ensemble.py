@@ -411,7 +411,7 @@ class EnsembleCorrector(BaseCorrector):
 
         return lc_corr
 
-if __name__ == "__main__":
+def correct(*args):
     star_names, Tmag, variability, eclat, eclon = read_todolist()
 
     C = EnsembleCorrector(BaseCorrector)
