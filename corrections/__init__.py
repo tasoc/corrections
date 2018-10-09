@@ -2,5 +2,5 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import absolute_import
-from .BaseCorrection import BaseCorrection
+from .BaseCorrector import BaseCorrector
 # TODO: Fix this
