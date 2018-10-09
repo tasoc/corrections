@@ -7,6 +7,9 @@ Tests of BaseCorrection.
 """
 
 from __future__ import division, print_function, with_statement, absolute_import
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from corrections import BaseCorrector
 
 #----------------------------------------------------------------------
