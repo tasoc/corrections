@@ -3,4 +3,6 @@
 
 from __future__ import absolute_import
 from .BaseCorrector import BaseCorrector
-# TODO: Fix this
+from .tesscorr import tesscorr
+from .taskmanager import TaskManager
+# TODO: Add imports as needed
