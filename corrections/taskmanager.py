@@ -47,6 +47,12 @@ class TaskManager(object):
 		self.logger = logging.getLogger(__name__)
 		self.logger.addHandler(console)
 		self.logger.setLevel(logging.INFO)
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, *args):
+		pass
 	
 	def get_task(self, starid=None):
 		"""
@@ -65,4 +71,3 @@ class TaskManager(object):
 			dict or None: Dictionary of settings for task.
 		"""
 		raise NotImplementedError("A helpful error message goes here") # TODO
-		
