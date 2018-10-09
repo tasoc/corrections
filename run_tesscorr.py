@@ -31,14 +31,14 @@ if __name__ == '__main__':
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
-	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
+	parser.add_argument('-a', '--all', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
 	parser.add_argument('starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
 	if args.starid is None and not args.random:
-		parser.error("Please select either a specific STARID or RANDOM.")
+		parser.error("Please select either a specific STARID or ALL.")
 
 	# Set logging level:
 	logging_level = logging.INFO
@@ -75,11 +75,9 @@ if __name__ == '__main__':
 	with taskmanager.TaskManager(input_folder) as tm:
 		if args.starid is not None:
 			task = tm.get_task(starid=args.starid)
-			task['method'] = args.method
-		elif args.random:	
-			task = tm.get_random_task()
+		elif args.all:	
+			task = tm.get_all()
 
-		del task['priority']
 		corr = f(**task)
 
 	# Write out the results?
