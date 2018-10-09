@@ -10,7 +10,8 @@ Structure from `tessphot by Rasmus Handberg <https://github.com/tasoc/photometry
 
 from __future__ import absolute_import
 import logging
-# from . import STATUS, etc...
+from . import STATUS
+# from . import EnsembleCorrector, CBVCorrector, etc...
 
 #------------------------------------------------------------------------------
 class _CorrErrorDummy(object):
