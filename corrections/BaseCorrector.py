@@ -74,6 +74,15 @@ class BaseCorrector(object):
     def status(self):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
+
+    def load_lightcurve(self, starid):
+        """
+        Load target lightcurve for given TIC/starid
+
+        Returns:
+            Lightkurve object
+        """
+        raise NotImplementedError("¯\(°_o)/¯")
   
     def do_correction(self):
         """
@@ -103,6 +112,7 @@ class BaseCorrector(object):
             # TODO: set outputs; self._details = self.lightcurve, etc.
 
             pass
+
     def save_lightcurve(self, output_folder=None):
         """
 		Save generated lightcurve to file.

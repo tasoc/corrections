@@ -61,11 +61,15 @@ class TaskManager(object):
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-		raise NotImplementedError("A helpful error message goes here") # TODO
+		# placeholder
+		self.cursor.execute("SELECT camera,ccd FROM todolist WHERE starid = " + starid + "LIMIT 1;")
+		task = self.cursor.fetchone()
+		if task: return dict(task)
+		return None
 
-	def get_random_task(self):
+	def get_all(self):
 		"""
-		Get random task to be processed.
+		Get all tasks to be processed on camera { } ccd { }.
 
 		Returns:
 			dict or None: Dictionary of settings for task.
