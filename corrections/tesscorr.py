@@ -10,7 +10,7 @@ Structure from `tessphot by Rasmus Handberg <https://github.com/tasoc/photometry
 
 from __future__ import absolute_import
 import logging
-from . import STATUS
+from .BaseCorrector import STATUS
 # from . import EnsembleCorrector, CBVCorrector, etc...
 
 #------------------------------------------------------------------------------
@@ -45,10 +45,11 @@ def _try_correction(CorrClass, *args, **kwargs):
 		except:
 			pass
 
-    try:
+	try:
 		return corr
 	except UnboundLocalError:
 		return _CorrErrorDummy(*args, **kwargs)
+
 #------------------------------------------------------------------------------
 def tesscorr(method=None, *args, **kwargs):
 	"""
@@ -72,7 +73,6 @@ def tesscorr(method=None, *args, **kwargs):
 
 	elif method == 'placeholder':
         # TODO: add other correctors
-        pass
-    
-    else:
-        raise ValueError("Invalid method: '{0}'".format(method))
+		pass
+	else:
+		raise ValueError("Invalid method: '{0}'".format(method))

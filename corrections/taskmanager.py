@@ -47,15 +47,15 @@ class TaskManager(object):
 		self.logger = logging.getLogger(__name__)
 		self.logger.addHandler(console)
 		self.logger.setLevel(logging.INFO)
-
-    def get_task(self, starid=None):
+	
+	def get_task(self, starid=None):
 		"""
 		Get next task to be processed.
 
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-        raise NotImplementedError("A helpful error message goes here") # TODO
+		raise NotImplementedError("A helpful error message goes here") # TODO
 
 	def get_random_task(self):
 		"""
@@ -64,5 +64,5 @@ class TaskManager(object):
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-        raise NotImplementedError("A helpful error message goes here") # TODO
-
+		raise NotImplementedError("A helpful error message goes here") # TODO
+		

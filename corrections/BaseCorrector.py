@@ -16,7 +16,7 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 import enum
 import logging
 
-class STATUS(enum.enum):
+class STATUS(enum.Enum):
     """
     Status indicator of the status of the correction.
 
@@ -88,8 +88,9 @@ class BaseCorrector(object):
         if self._status in (STATUS.OK, STATUS.WARNING):
             # TODO: set outputs; self._details = self.lightcurve, etc.
 
-	def save_lightcurve(self, output_folder=None):
-		"""
+            pass
+    def save_lightcurve(self, output_folder=None):
+        """
 		Save generated lightcurve to file.
 
 		Parameters:
