@@ -87,3 +87,14 @@ class BaseCorrector(object):
 
         if self._status in (STATUS.OK, STATUS.WARNING):
             # TODO: set outputs; self._details = self.lightcurve, etc.
+
+	def save_lightcurve(self, output_folder=None):
+		"""
+		Save generated lightcurve to file.
+
+		Parameters:
+			output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
+
+		Returns:
+			string: Path to the generated file.
+		"""

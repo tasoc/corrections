@@ -24,7 +24,7 @@ def _try_correction(CorrClass, *args, **kwargs):
 	# try/except for doing correction
 	try:
 		with CorrClass(*args, **kwargs) as corr:
-			corr.correction()
+			corr.correct()
 
 			if corr.status in (STATUS.OK, STATUS.WARNING):
 				corr.save_lightcurve()
