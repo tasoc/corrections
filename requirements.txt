@@ -4,3 +4,4 @@ scipy
 matplotlib >= 2.0, < 3.0
 astropy >= 2.0, < 3.0
 Bottleneck >= 1.2
+lightkurve
