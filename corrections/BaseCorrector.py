@@ -16,6 +16,8 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 import enum
 import logging
 
+__docformat__ = 'restructuredtext'
+
 class STATUS(enum.Enum):
     """
     Status indicator of the status of the correction.
@@ -31,7 +33,7 @@ class STATUS(enum.Enum):
 class BaseCorrector(object):
     """
     The basic correction class for the TASOC Photometry pipeline.
-    All other specific correction classes will inherit from BaseCorrection
+    All other specific correction classes will inherit from BaseCorrector
 
     Attributes: 
         # TODO
@@ -61,6 +63,17 @@ class BaseCorrector(object):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
     
+
+	    def __enter__(self):
+		    return self
+
+	    def __exit__(self, *args):
+		    self.close()
+
+	    def close(self):
+		    """Close correction object."""
+		    pass
+  
     def do_correction(self):
         """
         Apply corrections to target lightcurve.
@@ -91,11 +104,11 @@ class BaseCorrector(object):
             pass
     def save_lightcurve(self, output_folder=None):
         """
-		Save generated lightcurve to file.
+		    Save generated lightcurve to file.
 
-		Parameters:
-			output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
+		    Parameters:
+			    output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
 
-		Returns:
-			string: Path to the generated file.
-		"""
+		    Returns:
+			    string: Path to the generated file.
+		    """
