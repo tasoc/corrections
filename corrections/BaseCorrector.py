@@ -15,6 +15,7 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 # from package import function as key
 import enum
 import logging
+import traceback
 import numpy as np
 from lightkurve import TessLightCurve
 
@@ -104,6 +105,15 @@ class BaseCorrector(object):
                 ccd=task['ccd'],
                 meta = {'eclon':self.eclon, 'eclat':self.eclat}
             )
+        except:
+            logger.exception("Something happened")
+            trace = traceback.format_exc().strip()
+            try:
+                corr._status = STATUS.ERROR
+                corr.report_details(error=trace)
+            except:
+                pass
+        return lightcurve
   
     def do_correction(self):
         """
