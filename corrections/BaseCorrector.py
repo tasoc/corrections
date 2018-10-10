@@ -105,8 +105,8 @@ class BaseCorrector(object):
                 ccd=task['ccd'],
                 meta = {'eclon':self.eclon, 'eclat':self.eclat}
             )
-        except:
-            logger.exception("Something happened")
+        except ValueError:
+            logger.exception("Check input file: "+self.starid+'.noisy')
             trace = traceback.format_exc().strip()
             try:
                 corr._status = STATUS.ERROR
