@@ -51,14 +51,6 @@ def _try_correction(CorrClass, *args, **kwargs):
 		return _CorrErrorDummy(*args, **kwargs)
 
 #------------------------------------------------------------------------------
-def _try_TDA5_correction():
-	"""
-	Run the ensemble correction as a test of functionality
-	NOTE: should only be needed temporarily, and replaced by 
-	"""
-	pass
-
-#------------------------------------------------------------------------------
 def tesscorr(method=None, *args, **kwargs):
 	"""
 	Run the corrector
@@ -79,8 +71,13 @@ def tesscorr(method=None, *args, **kwargs):
 		# assume general, coarse correction
 		corr = _try_correction(EnsembleCorrector, *args, **kwargs)
 
+		if corr.status == STATUS.WARNING:
+			logger.warning("A helpful warning message here") # TODO
+
 	elif method == 'placeholder':
         # TODO: add other correctors
 		pass
 	else:
 		raise ValueError("Invalid method: '{0}'".format(method))
+
+	return corr

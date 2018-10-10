@@ -15,6 +15,8 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 # from package import function as key
 import enum
 import logging
+import numpy as np
+from lightkurve import TessLightCurve
 
 __docformat__ = 'restructuredtext'
 
@@ -39,7 +41,7 @@ class BaseCorrector(object):
         # TODO
     """
 
-    def __init__(self, starid, input_folder, output_folder, plot=False):
+    def __init__(self, starid, camera, ccd, eclon, eclat, input_folder, output_folder, plot=False):
         """
         Initialize the correction object
 
@@ -59,6 +61,10 @@ class BaseCorrector(object):
 
         self._status = STATUS.UNKNOWN
         self.starid = starid
+        self.camera = camera
+        self.ccd = ccd
+        self.eclon = eclon
+        self.eclat = eclat
         self.input_folder = input_folder
     
     def __enter__(self):
@@ -74,29 +80,30 @@ class BaseCorrector(object):
     def status(self):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
-    
-    def __enter__(self):
-	    return self
-    
-    def __exit__(self, *args):
-	    self.close()
-    
-    def close(self):
-        """Close correction object"""
-        pass
 
-    def status(self):
-        """ The status of the corrections. From :py:class:`STATUS`."""
-        return self._status
-
-    def load_lightcurve(self, starid):
+    def load_lightcurve(self):
         """
         Load target lightcurve for given TIC/starid
 
         Returns:
             Lightkurve object
         """
-        raise NotImplementedError("¯\(°_o)/¯")
+        logger = logging.getLogger(__name__)
+
+        try:
+            data = np.loadtxt(self.starid+'.noisy')
+            lightcurve = TessLightCurve(
+                time=data[:,0],
+                flux=data[:,1],
+                flux_err=data[:,2],
+                quality=np.asarray(data[:,3], dtype='int32'),
+                time_format='jd',
+                time_scale='tdb',
+                targetid=task['starid'],
+                camera=task['camera'],
+                ccd=task['ccd'],
+                meta = {'eclon':self.eclon, 'eclat':self.eclat}
+            )
   
     def do_correction(self):
         """
@@ -115,6 +122,7 @@ class BaseCorrector(object):
         Run correction.
 
         """
+        self.load_lightcurve(self.starid)
 
         self._status = self.do_correction(*args, **kwargs)
 
