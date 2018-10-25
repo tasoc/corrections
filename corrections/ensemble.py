@@ -59,22 +59,21 @@ def read_todolist():
 
     #open sql file and find list of all stars in segment 2, camera 1, ccd 1
     #TODO: These should not  be hard coded!
-    conn = sqlite3.connect('{}/todo-{}.sqlite'.format(__sql_folder__, __sector__))
+    conn = sqlite3.connect('../tests/input/todo.sqlite')
+    conn.row_factory = sqlite3.Row
     # conn = sqlite3.connect('/media/derek/data/TESS/TDA-4 data/Rasmus/todo-sector02.sqlite')
     # conn = sqlite3.connect('{}/todo-sector02.sqlite'.format(data_folder))
     c = conn.cursor()
-    c.execute("SELECT * FROM todolist LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority WHERE camera = 1 AND ccd = 1 AND mean_flux > 0 ;")
-    seg2_list = c.fetchall()
-    seg2_list = np.asarray(seg2_list)
+    c.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority WHERE camera = 1 AND ccd = 1 AND mean_flux > 0 ;")
+    data = c.fetchall()
     conn.close()
 
-    star_names = seg2_list[:,1]
-    Tmag = seg2_list[:,6]
-    variability = seg2_list[:,15]
-    eclat = seg2_list[:,17].astype(float)
-    eclon = seg2_list[:,18].astype(float)
+    star_names = np.array([row['starid'] for row in data])
+    variability = np.array([row['variability'] for row in data])
+    eclat = np.array([row['eclat'] for row in data])
+    eclon = np.array([row['eclon'] for row in data])
 
-    return star_names, Tmag, variability, eclat, eclon
+    return star_names, variability, eclat, eclon
 
 def read_stars(star_names):
     """
@@ -127,7 +126,7 @@ class EnsembleCorrector(BaseCorrector):
 
         #Construct the star array in to memory
         #TODO: Make this a target readin function, which will save time.
-        self.star_array = read_stars(read_todolist()[0])
+        # self.star_array = read_stars(read_todolist()[0])
 
     def do_correction(self, lc, ifile):
         """

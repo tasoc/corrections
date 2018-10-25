@@ -7,7 +7,7 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 - :py:class:`STATUS`: Status flags for pipeline performance logging
 - :py:class:`STATUS`: Status flags for pipeline performance logging
 
-.. codeauthor:: Lindsey Carboneau 
+.. codeauthor:: Lindsey Carboneau
 .. code author:: Rasmus Handberg
 """
 
@@ -67,10 +67,10 @@ class BaseCorrector(object):
         self.eclon = eclon
         self.eclat = eclat
         self.input_folder = input_folder
-    
+
     def __enter__(self):
 	    return self
-    
+
     def __exit__(self, *args):
 	    self.close()
 
@@ -82,7 +82,7 @@ class BaseCorrector(object):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
 
-    def load_lightcurve(self):
+    def load_lightcurve(self, starid):
         """
         Load target lightcurve for given TIC/starid
 
@@ -92,7 +92,8 @@ class BaseCorrector(object):
         logger = logging.getLogger(__name__)
 
         try:
-            data = np.loadtxt(self.starid+'.noisy')
+            #TODO: Make this so that it reads in from wherever the files are stored
+            data = np.loadtxt(starid+'.noisy')
             lightcurve = TessLightCurve(
                 time=data[:,0],
                 flux=data[:,1],
@@ -114,7 +115,98 @@ class BaseCorrector(object):
             except:
                 pass
         return lightcurve
-  
+
+    def search_targets(eclon, eclat, radius, camera, ccd):
+        """Return a list of targets within a search window
+        Parameters:
+            eclon (float): the ecliptic longitude of the target
+            eclat (float): the ecliptic latitude of the target
+            radius (float): the search radius around the target
+
+        Returns:
+            targetlist (ndarray): A list of targets within the search window
+
+        Note: We don't actually do a radius search, we use the radius as half
+        the width of the sides of a box search instead, for now.
+        """
+        #TODO Docstring
+        #Upper and lower bounds on the current stamp
+        eclon_min = np.round(eclon - radius,2)
+        eclon_max = np.round(eclon + radius,2)
+        eclat_min = np.round(eclat - radius,2)
+        eclat_max = np.round(eclat + radius,2)
+
+        conn = sqlite3.connect('{}/todo.sqlite'.format(__inputfolder__))
+        cursor = conn.cursor()
+        #TODO: Camera and CCD should not be hardcoded
+        query = "SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                WHERE camera = :camera AND ccd = :ccd AND mean_flux > 0\
+                AND eclon BETWEEN :eclon_min AND :eclon_max\
+                AND eclat BETWEEN :eclat_min AND :eclat_max;"
+
+        if eclat_min < -90:
+			# We are very close to the southern pole
+			# Ignore everything about RA
+			cursor.execute(query, {
+                'camera'  : camera,
+                'ccd'      : ccd,
+				'eclon_min': 0,
+				'eclon_max': 360,
+				'eclat_min': -90,
+				'eclat_max': eclat_max})
+        elif eclat_max > 90:
+			# We are very close to the northern pole
+			# Ignore everything about RA
+            cursor.execute(query, {
+                'camera'  : camera,
+                'ccd'      : ccd,
+                'eclon_min': 0,
+                'eclon_max': 360,
+                'eclat_min': eclat_min,
+                'eclat_max': 90})
+        elif eclon_min < 0:
+			cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                    WHERE camera = :camera AND ccd = :camera AND mean_flux > 0\
+                    WHERE eclon <= :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max\
+			UNION
+			SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                    WHERE eclon BETWEEN :eclon_min AND 360\
+                    AND eclat BETWEEN :eclat_min AND :eclat_max;""", {
+                'camera'  : camera,
+                'ccd'      : ccd,
+				'eclon_min': 360 - abs(eclon_min),
+				'eclon_max': eclon_max,
+				'eclat_min': eclat_min,
+				'eclat_max': eclat_max
+			})
+        elif eclon_max > 360:
+			cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                    WHERE eclon >= :eclon_min AND eclat BETWEEN :eclat_min AND :eclat_max
+			UNION
+			SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                    WHERE eclon BETWEEN 0 AND :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max;""", {
+                'camera'  : camera,
+                'ccd'      : ccd,
+				'eclon_min': eclon_min,
+				'eclon_max': eclon_max - 360,
+				'eclat_min': eclat_min,
+				'eclat_max': eclat_max
+			})
+        else:
+			cursor.execute(query, {
+                'camera'  : camera,
+                'ccd'      : ccd,
+				'eclon_min': eclon_min,
+				'eclon_max': eclon_max,
+				'eclat_min': eclat_min,
+				'eclat_max': eclat_max
+			})
+
+        #Output the list of target names
+        targetlist = np.array(cursor.fetchall()).T[0]
+        cursor.close()
+        return targetlist
+
     def do_correction(self):
         """
         Apply corrections to target lightcurve.
@@ -155,4 +247,3 @@ class BaseCorrector(object):
 		Returns:
 		    string: Path to the generated file.
 		"""
-        
