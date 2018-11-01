@@ -12,6 +12,8 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from corrections import BaseCorrector
 
+INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+
 #----------------------------------------------------------------------
 def test_import():
 	"""
@@ -19,8 +21,9 @@ def test_import():
 	
 	Doesn't really do anything else..."""
 	
-	with BaseCorrector() as bc:
-		pass
+	with BaseCorrector(INPUT_DIR) as bc:
+		assert bc.__class__.__name__ == 'BaseCorrector', "Did not get the correct class name back"
+		assert bc.input_folder == INPUT_FOLDER, "Incorrect input folder"
 
 #----------------------------------------------------------------------
 if __name__ == '__main__':
