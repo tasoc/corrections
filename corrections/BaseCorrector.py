@@ -12,6 +12,7 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 
 from __future__ import division, with_statement, print_function, absolute_import
 import os.path
+import shutil
 import enum
 import logging
 import sqlite3
@@ -64,7 +65,7 @@ class BaseCorrector(object):
 		self.input_folder = input_folder
 		
 		# The path to the TODO list:
-		todo_file = os.path.join(input_dir, 'todo.sqlite')
+		todo_file = os.path.join(input_folder, 'todo.sqlite')
 		logger.debug("TODO file: %s", todo_file)
 		if not os.path.exists(todo_file):
 			raise ValueError("TODO file not found")
@@ -170,7 +171,7 @@ class BaseCorrector(object):
 			task = dict(task)
 		
 		# Get the path of the FITS file:
-		fname = os.path.join(self.input_dir, task.get('lightcurve_filename'))
+		fname = os.path.join(self.input_folder, task.get('lightcurve'))
 
 		# Load lightcurve file and create a TessLightCurve object:
 		if fname.endswith('.noisy') or fname.endswith('.sysnoise'):
@@ -198,7 +199,7 @@ class BaseCorrector(object):
 					flux=hdu['LIGHTCURVE'].data['FLUX_RAW'],
 					flux_err=hdu['LIGHTCURVE'].data['FLUX_RAW_ERR'],
 					quality=np.asarray(hdu['LIGHTCURVE'].data['QUALITY'], dtype='int32'),
-					time_format='jd',
+					time_format='btjd',
 					time_scale='tdb',
 					ticid=hdu[0].header.get('TICID'),
 					camera=hdu[0].header.get('CAMERA'),
@@ -230,7 +231,7 @@ class BaseCorrector(object):
 		"""
 		
 		# Get the filename of the original file from the task:
-		fname = lc.meta.get('task').get('lightcurve_filename')
+		fname = lc.meta.get('task').get('lightcurve')
 		
 		# Decide where to save the finished lightcurve:
 		if output_folder is not None:
