@@ -127,6 +127,25 @@ class BaseCorrector(object):
 		if self._status in (STATUS.OK, STATUS.WARNING):
 			# TODO: set outputs; self._details = self.lightcurve, etc.
 			pass
+			
+	def search_lightcurves(self, cbv_area=None):
+		"""
+		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
+		
+		Parameters:
+			cbv_area (integer or None): Only return stars from this CBV area.
+			
+		Returns:
+			list of dicts: 
+		"""
+	
+		constraints = []
+		if cbv_area:
+			constraints.append("cbv_area=%d" % cbv_area)
+	
+		# Ask the database:
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND %s;" % " AND ".join(constrains))
+		return [dict(row) for row in self.cursor.fetchall()]
 
 	def load_lightcurve(self, task):
 		"""
@@ -198,7 +217,7 @@ class BaseCorrector(object):
 		lc.meta['additional_headers'] = {}
 
 		return lc
-			
+		
 	def save_lightcurve(self, lc, output_folder=None):
 		"""
 		Save generated lightcurve to file.
