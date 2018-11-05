@@ -173,73 +173,64 @@ class EnsembleCorrector(BaseCorrector):
         min_range0 = min_range
         flag = 1
 
-        #start loop to build ensemble
+        # Define variables to use in the loop to build the ensemble of stars
+        # List of star indexes to be included in the ensemble
+        ensemble_list = []
+        # Initial number of closest stars to consider and variable to increase number
+        initial_num_stars = 20
+        star_count = initial_num_stars
+        # (Alternate param) Initial distance at which to consider stars around the target
+        # initial_search_radius = -1
+        
+        # Follows index of dist array to restart search after the last addded star
+        i = 0
+        # Start loop to build ensemble
         while True:
-            #num_star is number of stars in ensemble
-            num_star = 0
-            #full_time,flux,weight are time,flux,weight points in the ensemble
-            full_time = np.array([])
-            full_flux = np.array([])
-            full_flag = np.array([])
-            full_weight = np.array([])
-            tflux = np.array([])
-            comp_list = np.array([])
 
-            #loop through all other stars to build ensemble
-            #exclude stars outside search radius, flagged, too active (either relatively or absolutely)
-            #excluding stars with negative flux is only required because the synthetic data have some flawed
-            #light curves that are <0. Probably can remove this with real data.
+            # First get a list of indexes of a specified number of stars to build the ensemble
+            while len(ensemble_list) < star_count:
+                # Stars evaluated by order of distance to target
+                star_index = distance_index[i]
+                # Stars are added to ensemble if they fulfill the requirements
+                if (np.log10(self.star_array[star_index].meta['drange']) < min_range and self.star_array[star_index].meta['drange'] < 10*lc.meta['drange']):
+                    ensemble_list.append(star_index)
+                i += 1
 
-            # #Put the selection conditions into a boolean array for all stars simultaneously
-            # sel = (dist[:,1] < search_radius) & (np.log10(drange) < min_range) & (drange < 10*drange[ifile])
-            for test_star in range(len(star_names[:])):
-                if (dist[test_star][1]<search_radius  and
-                    np.log10(self.star_array[test_star].meta['drange']) < min_range and
-                    self.star_array[test_star].meta['drange'] < 10*lc.meta['drange']):
 
-                    num_star+=1
-                    #calculate relative flux for star to be added to ensemble
-                    test0 = self.star_array[test_star].time
-                    test1 = self.star_array[test_star].flux
-                    test1 = test1/self.star_array[test_star].meta['fmean']
-                    #calculate weight for star to be added to the ensemble. weight is whitened stdev relative to mean flux
-                    weight = np.ones_like(test1)
-                    weight = weight*self.star_array[test_star].meta['fmean']/self.star_array[test_star].meta['fstd']
+            # Now populate the arrays of data with the stars in the ensemble
+            full_time = np.concatenate([self.star_array[i].time for i in ensemble_list]).ravel()
+            tflux = np.concatenate(np.array([self.star_array[i].flux / self.star_array[i].meta['fmean'] for i in ensemble_list])).ravel()
+            full_weight = np.concatenate(np.array([np.full(self.star_array[i].flux.size, star_array[i].meta['fmean'] / self.star_array[i].meta['fstd']) for i in ensemble_list])).ravel()
+            full_flux = np.multiply(tflux, full_weight)
 
-                    #add time, flux, weight to ensemble light curve. flux is weighted flux
-                    full_time = np.append(full_time,test0)
-                    full_flux = np.append(full_flux,np.multiply(test1,weight))
-                    full_weight = np.append(full_weight,weight)
-                    #tflux is total unweighted flux
-                    tflux = np.append(tflux,test1)
-                    comp_list = np.append(comp_list,test_star)
+            # TODO: As of now the code begins by ensuring 20 stars are added to the ensemble and then adds one by one. Might have to change to use a search radius
+            # Fetch distance of last added star to ensemble to use as search radius
+            search_radius = distance[i-1]
 
-            #set up time array with 0.5-day resolution which spans the time range of the time series
-            #then histogram the data based on that array
+            # Set up time array with 0.5-day resolution which spans the time range of the time series then histogram the data based on that array
             gx = np.arange(time_start,time_end,0.5)
-            n = np.histogram(full_time,gx)
-            n = np.asarray(n[0])
-            n2 = np.histogram(lc.time,gx)
-            n2 = np.asarray(n2[0])
-            #if the least-populated bin has less than 2000 points, increase the size of the ensemble by first
-            #increasing the level of acceptable variability until it exceeds the variability of the star. Once that happens,
-            #increase the search radius and reset acceptable variability back to initial value. If the search radius exceeds
-            #a limiting value (pi/4 at this point), accept that we can't do any better.
-            #if np.min(n[0])<400:
-            #print np.min(n[n2>0])
-            if np.min(n[n2>0])<1000:
-                #print min_range
+            n = np.histogram(full_time, gx)[0]
+            n2 = np.histogram(lc.time, gx)[0]
+            # If the least-populated bin has less than 2000 points, increase the size of the ensemble by first
+            # increasing the level of acceptable variability until it exceeds the variability of the star. Once that happens,
+            # increase the search radius and reset acceptable variability back to initial value. If the search radius exceeds
+            # a limiting value (pi/4 at this point), accept that we can't do any better.
+            # if np.min(n[0])<400:
+            # print np.min(n[n2>0])
+            if np.min(n[n2>0]) < 1000:
+                # print(min_range)
                 min_range = min_range+0.3
                 if min_range > np.log10(np.max(lc.meta['drange'])):
                     #if (search_radius < 0.5):
                     if (search_radius < 100):
-                        #search_radius = search_radius+0.1
-                        search_radius = search_radius+10
+                        # search_radius += 10
+                        star_count += 1
                     else:
-                        search_radius = search_radius*1.1
+                        # search_radius *= 1.1
+                        star_count += 1
                         min_range = min_range0
 
-                #if search_radius > np.pi/4:
+                # if search_radius > np.pi/4:
                 if search_radius > 400:
                     break
             else:
