@@ -16,16 +16,16 @@ Created on Thu Mar 29 09:58:55 2018
 .. codeauthor:: Filipe Pereira
 """
 import numpy as np
-import glob
+import matplotlib.pyplot as plt
 import os
 import scipy.interpolate
 import scipy.optimize as sciopt
 import sqlite3
 import sys
 from tqdm import tqdm
-from operator import add
 from copy import deepcopy
-from time import sleep
+import time
+import pandas
 
 from BaseCorrector import BaseCorrector
 
@@ -95,7 +95,8 @@ def read_stars(star_names):
     star_array = np.empty(star_names.size, dtype=object)
     for name_index in tqdm(range(star_names.size)):
         filename =  '{}/noisy_by_sectors/Star{}-{}.noisy'.format(__data_folder__, star_names[name_index], __sector__)
-        mafs = np.loadtxt(filename, usecols=range(0,2)).T
+        mafs = pandas.read_csv(filename, usecols=range(0,2), header=None, sep=' ').values.T
+        # mafs = np.loadtxt(filename, usecols=range(0,2)).T
 
         #Build lightkurve object and associated metadata
         lc = lightkurve.TessLightCurve(mafs[0], mafs[1]).remove_nans()
