@@ -398,7 +398,11 @@ if __name__ == "__main__":
     for ifile in tqdm(range(len(star_names[:15]))):
 
         ax = star_array[ifile].plot()
+
+        start_time = time.time()
         lc_corr = C.do_correction(star_array[ifile], ifile)
+        print("Star: {}, Time: {}".format(star_names[ifile], time.time() - start_time))
+
         lc_corr.plot(ax=ax)
         plt.show()
 
