@@ -17,27 +17,27 @@ Structure inspired by `tessphot` by Rasmus Handberg <rasmush@phys.au.dk>
 from __future__ import with_statement, print_function
 import os
 import argparse
-import fnmatch
 import logging
-import functools
-from corrections import tesscorr, taskmanager
+import corrections
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
 
 	# Parse command line arguments:
 	parser = argparse.ArgumentParser(description='Run TESS Corrector pipeline on single star.')
-	parser.add_argument('-m', '--method', help='Corrector method to use.', default=None, choices=('ensemble', 'cbv'))
+	parser.add_argument('-m', '--method', help='Corrector method to use.', default=None, choices=('ensemble', 'cbv', 'kasoc_filter'))
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
-	parser.add_argument('starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
+	parser.add_argument('--all', help='.', action='store_true')
+	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
+	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
-	if args.starid is None and not args.random:
+	if not args.all and args.starid is None and not args.random:
 		parser.error("Please select either a specific STARID or RANDOM.")
 
 	# Set logging level:
@@ -54,36 +54,37 @@ if __name__ == '__main__':
 	logger = logging.getLogger(__name__)
 	logger.addHandler(console)
 	logger.setLevel(logging_level)
-	logger_parent = logging.getLogger('corrector')
+	logger_parent = logging.getLogger('corrections')
 	logger_parent.addHandler(console)
 	logger_parent.setLevel(logging_level)
 
 	# Get input and output folder from environment variables:
-	test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests', 'input'))
-	if args.test:
-		input_folder = test_folder
-	else:
-		input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
+	input_folder = args.input_folder
+	if input_folder is None:
+		test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests', 'input'))
+		if args.test:
+			input_folder = test_folder
+		else:
+			input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
 	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
 
-	# Create partial function of tesscorr, setting the common keywords:
-	f = functools.partial(tesscorr, input_folder=input_folder, output_folder=output_folder, plot=args.plot)
+	# Get the class for the selected method:
+	CorrClass = corrections.corrclass(args.method)
 
-	# Run the program:
-	with taskmanager.TaskManager(input_folder) as tm:
-		if args.starid is not None:
-			task = tm.get_task(starid=args.starid)
-			task['method'] = args.method
-		elif args.random:	
-			task = tm.get_random_task()
+	# Initialize the corrector class:
+	with CorrClass(input_folder, plot=args.plot) as corr:
 
-		del task['priority']
-		corr = f(**task)
+		print(corr)
 
-	# Write out the results?
-	if not args.quiet:
-		print("=======================")
-		print("STATUS: {0}".format(corr.status.name))
+		# Run the program:
+		with corrections.TaskManager(input_folder) as tm:
+			if args.all:
+				task = tm.get_task()
+			elif args.starid is not None:
+				task = tm.get_task(starid=args.starid)
+			elif args.random:
+				task = tm.get_random_task()
 
+			lc = corr.correct(task)

@@ -39,7 +39,6 @@ class TaskManager(object):
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
 
-
 		# Setup logging:
 		formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 		console = logging.StreamHandler()
@@ -47,7 +46,17 @@ class TaskManager(object):
 		self.logger = logging.getLogger(__name__)
 		self.logger.addHandler(console)
 		self.logger.setLevel(logging.INFO)
-	
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, *args):
+		self.close()
+
+	def close(self):
+		if self.cursor: self.cursor.close()
+		if self.conn: self.conn.close()
+
 	def get_task(self, starid=None):
 		"""
 		Get next task to be processed.
@@ -55,7 +64,11 @@ class TaskManager(object):
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-		raise NotImplementedError("A helpful error message goes here") # TODO
+
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority ORDER BY priority LIMIT 1;")
+		task = self.cursor.fetchone()
+		if task is not None: task = dict(task)
+		return task
 
 	def get_random_task(self):
 		"""
@@ -65,4 +78,3 @@ class TaskManager(object):
 			dict or None: Dictionary of settings for task.
 		"""
 		raise NotImplementedError("A helpful error message goes here") # TODO
-		

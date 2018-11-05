@@ -8,7 +8,7 @@ Lightcurve correction using the KASOC Filter (Handberg et al. 2015).
 
 from __future__ import division, with_statement, print_function, absolute_import
 import logging
-import kasoc_filter as kf
+from . import kasoc_filter as kf
 from . import BaseCorrector, STATUS
 
 class KASOCFilterCorrector(BaseCorrector):
@@ -26,10 +26,12 @@ class KASOCFilterCorrector(BaseCorrector):
 		#position = np.column_stack((lc.centroid_col, lc.centroid_row))
 		position = None
 
-		periods = tois_periods[tois_starid == starid]
+		#periods = tois_periods[tois_starid == starid]
+		periods = []
 		if len(periods) == 0:
 			periods = None
 		print(periods)
+
 
 		jumps = None
 		filter_timescale_long = 3.0
@@ -40,8 +42,11 @@ class KASOCFilterCorrector(BaseCorrector):
 		filter_turnover_width = 1.0
 		filter_position_mode = 'None'
 
-		if self.plot:
-			kf.set_output(self.plot_folder(lc), '%011d_' % lc.ticid, fmt='png')
+		print(self.plot)
+		if True: #self.plot:
+			kf.set_output(self.plot_folder(lc), '%011d_' % lc.targetid, fmt='png')
+		else:
+			kf.set_output(None)
 
 		# Run the KASOC Filter:
 		time2, lc.flux, lc.flux_err, kasoc_quality, filt, turnover, xlong, xpos, xtransit, xshort = kf.filter(
