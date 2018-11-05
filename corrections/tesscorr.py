@@ -10,25 +10,29 @@ Structure from `tessphot by Rasmus Handberg <https://github.com/tasoc/photometry
 
 from __future__ import absolute_import
 import logging
-from . import STATUS, ensemble
+import traceback
+from . import STATUS
+from .ensemble import EnsembleCorrector # TODO: figure out why the __init__.py doesn't work for this?
 # from . import EnsembleCorrector, CBVCorrector, etc...
 
 #------------------------------------------------------------------------------
 class _CorrErrorDummy(object):
-	def __init__(self, *args, **kwargs):
+	def __init__(self, traceback, *args, **kwargs):
 		self.status = STATUS.ERROR
-		self._details = {}
+		self._details = {'errors':traceback} if traceback else {}
 
 #------------------------------------------------------------------------------
 def _try_correction(CorrClass, *args, **kwargs):
 	logger = logging.getLogger(__name__)
+	tbcollect = []
 	# try/except for doing correction
 	try:
 		with CorrClass(*args, **kwargs) as corr:
 			corr.correct()
 
-			if corr.status in (STATUS.OK, STATUS.WARNING):
-				corr.save_lightcurve()
+			if corr._status in (STATUS.OK, STATUS.WARNING):
+				logger.info("Correction finished with status: '%s'", str(corr._status))
+				# TODO: debate if save_lightcurve() should be called here or within correct()
 
 	except (KeyboardInterrupt, SystemExit):
 		logger.info("Stopped by user or system")
@@ -43,12 +47,12 @@ def _try_correction(CorrClass, *args, **kwargs):
 			corr._status = STATUS.ERROR
 			corr.report_details(error=tb)
 		except:
-			pass
+			tbcollect.append(tb)
 
 	try:
 		return corr
 	except UnboundLocalError:
-		return _CorrErrorDummy(*args, **kwargs)
+		return _CorrErrorDummy(tbcollect, *args, **kwargs)
 
 #------------------------------------------------------------------------------
 def tesscorr(method=None, *args, **kwargs):
