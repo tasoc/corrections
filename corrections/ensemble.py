@@ -41,8 +41,8 @@ if not os.path.isdir("toutput"):
 
 #TODO: These shouldn't be hard coded!
 # data_folder = "../TESS_Collab_Data"
-__sql_folder__ = "../../data/Rasmus"
-__data_folder__ = "../../data/Rasmus/data"
+__sql_folder__ = "../../data"
+__data_folder__ = "../../data"
 __sector__ = "sector02"
 
 def read_todolist():
@@ -397,17 +397,16 @@ if __name__ == "__main__":
     '''Get the correction, apply the correction, output the data.'''
     for ifile in tqdm(range(len(star_names[:15]))):
 
-        ax = star_array[ifile].plot()
-
         start_time = time.time()
         lc_corr = C.do_correction(star_array[ifile], ifile)
         print("Star: {}, Time: {}".format(star_names[ifile], time.time() - start_time))
 
+        ax = star_array[ifile].plot()
         lc_corr.plot(ax=ax)
         plt.show()
 
-        outfile = '../../data/Rasmus/toutput2/'+str(star_names[ifile])+'.noisy_detrend'
-        file = open(outfile,'w')
-        #np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, fcorr2[ifile])), fmt = '%f')
-        np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, lc_corr.flux)), fmt = '%f')
-        file.close()
+        # outfile = '../../data/Rasmus/toutput2/'+str(star_names[ifile])+'.noisy_detrend'
+        # file = open(outfile,'w')
+        # #np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, fcorr2[ifile])), fmt = '%f')
+        # np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, lc_corr.flux)), fmt = '%f')
+        # file.close()
