@@ -235,48 +235,42 @@ class EnsembleCorrector(BaseCorrector):
                     break
             else:
                     break
-        #clean up ensemble points by removing NaNs
-        full_time = full_time[~np.isnan(full_flux)]
-        full_weight = full_weight[~np.isnan(full_flux)]
-        full_flux = full_flux[~np.isnan(full_flux)]
-        tflux = tflux[~np.isnan(full_flux)]
 
-        #sort ensemble into time order
-        idx = np.argsort(full_time)
+        # Ensemble is now built
+        # Clean up ensemble points by removing NaNs
+        not_nan_idx = ~np.isnan(full_flux) # Since index is same for all arrays save it first to use cached version
+        full_time = full_time[not_nan_idx]
+        full_weight = full_weight[not_nan_idx]
+        full_flux = full_flux[not_nan_idx]
+        tflux = tflux[not_nan_idx]
+
+        # Sort ensemble into time order
+        time_idx = np.argsort(full_time)
+        full_time = full_time[time_idx]
+        full_flux = full_flux[time_idx]
+        full_weight = full_weight[time_idx]
+
+        # Simplify by discarding ensemble points outside the temporal range of the stellar time series
+        idx = np.logical_and(full_time > time_start, full_time < time_end)
         full_time = full_time[idx]
         full_flux = full_flux[idx]
         full_weight = full_weight[idx]
-
-        #temporary copies of ensemble components
-        full_time0 = full_time
-        full_flux0 = full_flux
-        full_weight0 = full_weight
-
-        #set up temporary files
 
         temp_time = full_time
         temp_flux = full_flux
         temp_weight = full_weight
 
-        #simplify by discarding ensemble points outside the temporal range of the stellar time series
-        temp_time = full_time[(full_time>time_start) & (full_time<time_end)]
-        temp_flux = full_flux[(full_time>time_start) & (full_time<time_end)]
-        temp_weight = full_weight[(full_time>time_start) & (full_time<time_end)]
-
-        full_time = temp_time
-        full_flux = temp_flux
-        full_weight = temp_weight
-
-        #identify locations where there is a break in the time series. If there is at least one break, identify
-        #segments and label ensemble points by segment; bidx2 is the label. If there are no breaks, then identify
-        #only one segment and label accordingly
-        break_locs = np.where(np.diff(full_time)>0.1)
-        if np.size(break_locs)>0:
-            if (break_locs[0][-1] < np.size(full_time)):
+        # Identify locations where there is a break in the time series. If there is at least one break, identify
+        # segments and label ensemble points by segment; bidx2 is the label. If there are no breaks, then identify
+        # only one segment and label accordingly
+        break_locs = np.where(np.diff(full_time) > 0.1)[0]  
+        if break_locs.size > 0:
+            # TODO: Will this ever not happen?
+            if (break_locs[-1] < full_time.size):
                 break_locs = np.append(break_locs, np.size(full_time)-1)
-                break_locs = np.insert(break_locs,0,0)
-                cts, bin_edges = np.histogram(full_time,full_time[break_locs])
-                bidx2 = np.digitize(full_time,full_time[break_locs])
+                break_locs = np.insert(break_locs, 0, 0)
+                cts, bin_edges = np.histogram(full_time, full_time[break_locs])
+                bidx2 = np.digitize(full_time, full_time[break_locs])
                 num_segs = np.size(break_locs)-1
         else:
                 cts, bin_edges = np.histogram(full_time,np.squeeze(np.append(full_time[0],full_time[-1])))
