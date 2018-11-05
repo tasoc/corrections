@@ -107,3 +107,4 @@ Scripts/
 .*.kate-swp
 
 tests/input/
+tests/output/
