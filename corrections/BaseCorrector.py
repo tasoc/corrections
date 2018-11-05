@@ -87,9 +87,19 @@ class BaseCorrector(object):
         """ The status of the corrections. From :py:class:`STATUS`."""
         return self._status
 
-    def load_lightcurve(self):
+    def load_lightcurve(self, starid):
         """
         Load target lightcurve for given TIC/starid
+        NOTE: ASSUMPTIONS MADE
+            can't use self.starid b/c we might be loading in a neighbor
+            if we read/load in the data for a star that is _not_ the target
+            being corrected, than the assumption is that star is on the same
+            camera, CCD, and focal area (CBV area) as the intended target
+            I'm not really sure if it's possible that isn't true; it's not something
+            that can be checked for using the simulated data, but when we start 
+            working with the output of the photometry side of the pipeline we need:
+            TODO: update to set camera, ccd (and cbv_area?) from FITS headers;
+                  also add logic to ensure that those values match the correction target
 
         Returns:
             Lightkurve object
@@ -97,24 +107,25 @@ class BaseCorrector(object):
         logger = logging.getLogger(__name__)
 
         try:
-            data = np.loadtxt(self.starid+'.noisy')
+            data = np.loadtxt(self.input_folder + '/Star' + str(starid) +'.sysnoise')
             lightcurve = TessLightCurve(
                 time=data[:,0],
                 flux=data[:,1],
-                flux_err=data[:,2],
+                #flux_err=data[:,2],
                 quality=np.asarray(data[:,3], dtype='int32'),
+                # NOTE: this is hardcoded and gross; but the original layout did not match the T'DA 3_2 noisy sim data
                 time_format='jd',
                 time_scale='tdb',
-                targetid=task['starid'],
-                camera=task['camera'],
-                ccd=task['ccd'],
-                meta = {'eclon':self.eclon, 'eclat':self.eclat}
+                targetid=starid,
+                camera=self.camera, # for next three lines see docstring above
+                ccd=self.ccd,
+                meta = {'eclon':self.eclon, 'eclat':self.eclat, 'cbv_area':self.cbv_area}
             )
         except ValueError:
-            logger.exception("Check input file: "+self.starid+'.noisy')
+            logger.exception("Check input file: Star"+self.starid+'.sysnoise')
             trace = traceback.format_exc().strip()
             try:
-                corr._status = STATUS.ERROR
+                corr._status = STATUS.ERROR # TODO: should this be self._status = STATUS.ERROR ?
                 corr.report_details(error=trace)
             except:
                 pass
