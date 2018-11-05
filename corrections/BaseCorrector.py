@@ -250,7 +250,7 @@ class BaseCorrector(object):
 
         # Check that the status has been changed:
         if self._status == STATUS.UNKNOWN:
-            raise Exception("STATUS was not tset by do_correction")
+            raise Exception("STATUS was not set by do_correction")
 
         if self._status in (STATUS.OK, STATUS.WARNING):
             # TODO: set outputs; self._details = self.lightcurve, etc.
@@ -258,7 +258,7 @@ class BaseCorrector(object):
 
             pass
 
-    def save_lightcurve(self, output_folder=None):
+    def save_lightcurve(self, lc_corr, output_folder=None):
         """
 		Save generated lightcurve to file.
 
@@ -266,5 +266,22 @@ class BaseCorrector(object):
 		    output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
 
 		Returns:
-		    string: Path to the generated file.
+            nothing, at the moment
+		    #TODO?: string: Path to the generated file.
 		"""
+        test_lc = self.load_lightcurve(self.starid).remove_nans()
+        plt.plot(lc_corr.time, (lc_corr.normalize()).flux,'.')
+        plt.plot(test_lc.time, (test_lc.normalize()).flux, '.')
+        plt.xlabel('Time (d)')
+        plt.ylabel('Relative Flux')
+        plt.title(str(self.starid)+'.noisy_detrend')
+        plt.savefig((self.output_folder+'/img/'+str(self.starid)+'_noisy_detrend.png'),bbox_inches='tight')
+        #plt.show(block=True) # NOTE: used for testing; similar to 'interactive' on spyder
+        
+        if output_folder is None:
+            outfile = self.output_folder + '/'+str(self.starid)+'.noisy_detrend'
+        else:
+            outfile = output_folder + '/'+str(self.starid)+'.noisy_detrend'
+        with open(outfile,'w') as file:
+            np.savetxt(file,np.column_stack((lc_corr.time,self.lc.flux, lc_corr.flux)), fmt = '%f')
+            #lc_corr.to_csv(file) #NOTE: the to_csv() built into lightkurve does some funky stuff to the output, so I don't recommend it
