@@ -41,8 +41,8 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
-	if args.starid is None and not args.random:
-		parser.error("Please select either a specific STARID or ALL.")
+	if args.starid is None and not args.test:
+		parser.error("Please select either a specific STARID or TEST.")
 
 	# Set logging level:
 	logging_level = logging.INFO
@@ -65,7 +65,8 @@ if __name__ == '__main__':
 	# Get input and output folder from environment variables:
 	test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests', 'input'))
 	if args.test:
-		input_folder = test_folder
+		input_folder = os.path.join(test_folder,'input/')
+		output_folder = os.path.join(test_folder,'output/')
 	else:
 		input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
 	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
