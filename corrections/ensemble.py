@@ -148,8 +148,8 @@ class EnsembleCorrector(BaseCorrector):
         """
         star_names, Tmag, variability, eclat, eclon = read_todolist()
 
-        #Add metadata to the lightcurve object
-        #Build lightkurve object and associated metadata
+        # Add metadata to the lightcurve object
+        # Build lightkurve object and associated metadata for current target
         frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)
         frange /= np.mean(lc.flux)
         drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
@@ -158,26 +158,17 @@ class EnsembleCorrector(BaseCorrector):
                             'frange' : frange,
                             'drange' : drange}
 
-        #Begin
-        dist = np.zeros([2,len(star_names)])
-        dist[0] = range(len(star_names))
-        dist[1] = np.sqrt((eclat-eclat[ifile])**2+(eclon-eclon[ifile])**2)
+        # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance
+        idx = np.arange(len(star_names))!=ifile
+        dist = np.sqrt((eclat[idx] - eclat[ifile])**2 + (eclon[idx] - eclon[ifile])**2)
+        distance_index = dist.argsort()
+        distance = dist[distance_index]
 
-        #artificially increase distance to the star itself, so when we sort by distance it ends up last
-        dist = np.transpose(dist)
-        #dist[ifile][1] = 10*np.pi
-        dist[ifile][1] = 10000.0
-        #sort by distance
-        sort_dist = np.sort(dist,0)
-        #set up initial search radius to build ensemble so that 20 stars are included
-        search_radius = sort_dist[19][1]; #20 works well for 20s cadence...more for longer?
-
-        #set up start/end times for stellar time series
+        # Set up start/end times for stellar time series
         time_start = np.amin(lc.time)
         time_end = np.max(lc.time)
 
-        #set minimum range parameter...this is log10 photometric range, and stars more variable than this will be
-        #excluded from the ensemble
+        # Set minimum range parameter...this is log10 photometric range, and stars more variable than this will be excluded from the ensemble
         min_range = -2.0
         min_range0 = min_range
         flag = 1
