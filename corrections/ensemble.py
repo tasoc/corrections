@@ -128,7 +128,6 @@ class EnsembleCorrector(BaseCorrector):
             lc_corr (lightkurve.TessLightCurve object): Corrected light-
                 curve stored in a TessLightCurve object.
         """
-        star_names, Tmag, variability, eclat, eclon = read_todolist()
 
         #Add metadata to the lightcurve object
         #Build lightkurve object and associated metadata

@@ -65,7 +65,7 @@ class TaskManager(object):
 		# placeholder
 		self.cursor.execute("SELECT todolist.priority,camera,ccd,cbv_area,eclon,eclat FROM todolist " +
 		                    "LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority " + 
-							"WHERE todolist.starid = " + starid + " AND mean_flux > 0 ;")
+							"WHERE todolist.starid = " + str(starid) + " AND mean_flux > 0 ;")
 		task = self.cursor.fetchone()
 		if task: return dict(task)
 		return None
@@ -82,7 +82,7 @@ class TaskManager(object):
 								"LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority " + 
 								"WHERE camera = " + str(camera) + " AND ccd = " + str(ccd) + " AND mean_flux > 0 ;")
 		else:
-			self.cursor.execute("SELECT todolist.priority,todolist.starid,camera,ccd,cbv_area,eclon,eclat FROM todolist " +
+			self.cursor.execute("SELECT todolist.starid FROM todolist " +
 							"LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority " + 
 							"WHERE camera = " + str(camera) + " AND ccd = " + str(ccd) + " AND mean_flux > 0 " +
 							"LIMIT " + str(limit) + " ;")

@@ -66,7 +66,7 @@ class BaseCorrector(object):
         self.starid = starid
         self.camera = camera
         self.ccd = ccd
-        self.cbv_area
+        self.cbv_area = cbv_area
         self.eclon = eclon
         self.eclat = eclat
         self.input_folder = input_folder
