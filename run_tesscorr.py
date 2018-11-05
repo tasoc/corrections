@@ -33,12 +33,16 @@ if __name__ == '__main__':
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('-a', '--all', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
+	# TODO: are there benefits from predefined lists, etc.? (todolist would be the other place, but it stores surrounding targets too)
+	parser.add_argument('-r', '--test_range', type=int, help='Run on a maximum number of targets, primarily for testing.')
+	parser.add_argument('--camera', type=int, help='The numerical identifier of the TESS camera, primarily for testing.')
+	parser.add_argument('--ccd', type=int, help='The numerical identifier of the TESS camera CCD, primarily for testing.')
 	parser.add_argument('starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
-	if args.starid is None and not args.random:
-		parser.error("Please select either a specific STARID or ALL.")
+	if args.starid is None and not args.test:
+		parser.error("Please select either a specific STARID or TEST.")
 
 	# Set logging level:
 	logging_level = logging.INFO
@@ -61,10 +65,11 @@ if __name__ == '__main__':
 	# Get input and output folder from environment variables:
 	test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests', 'input'))
 	if args.test:
-		input_folder = test_folder
+		input_folder = os.path.join(test_folder,'input')
+		output_folder = os.path.join(test_folder,'output')
 	else:
 		input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
+		output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
 
@@ -75,10 +80,17 @@ if __name__ == '__main__':
 	with TaskManager(input_folder) as tm:
 		if args.starid is not None:
 			task = tm.get_task(starid=args.starid)
-		elif args.all:	
-			task = tm.get_all()
+			corr = f(starid=args.starid, **task)
 
-		corr = f(**task)
+		elif args.all:	
+			#TODO: there is an unimplemented case, which is "run everything"; but that should really only be done by an MPI scheduler?
+			if args.camera and args.ccd:
+				# unset int in python resolve to 0, so should be False if not set
+				target_list = tm.get_all(args.camera, args.ccd, args.test_range)
+				for starid in target_list:
+					task = tm.get_task(starid=int(starid))
+					corr = f(starid=int(starid), **task)
+		# TODO: another unimplemented case, where test_range is not None (or a list from a file) but no camera or ccd given
 
 	# Write out the results?
 	if not args.quiet:
