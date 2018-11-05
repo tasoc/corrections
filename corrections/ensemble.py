@@ -27,15 +27,12 @@ from operator import add
 from copy import deepcopy
 from time import sleep
 
-from BaseCorrector import BaseCorrector
+from corrections import BaseCorrector, STATUS
 
 
 # from star import Star
 import lightkurve
 
-#set up output directory
-if not os.path.isdir("toutput"):
-    os.mkdir('toutput')
 
 ################################<PLACEHOLDERS>
 
@@ -45,7 +42,7 @@ __sql_folder__ = "../../data/Rasmus"
 __data_folder__ = "../../data/Rasmus/data"
 __sector__ = "sector02"
 
-def read_todolist():
+def read_todolist(): # NOTE: deprecated! remove me?
     """
     Function to read in the sql to do list for the globally defined sector (__sector__).
 
@@ -75,7 +72,7 @@ def read_todolist():
 
     return star_names, variability, eclat, eclon
 
-def read_stars(star_names):
+def read_stars(star_names): # NOTE: deprecated! remove me?
     """
     Function to read in the flux timeseries for all stars in a sector given in
     star_names. Time, flux, and some additional metadata are stored in a list of
@@ -113,20 +110,7 @@ class EnsembleCorrector(BaseCorrector):
     """
     DOCSTRING
     """
-    def __init__(self, *args, **kwargs):
-        """
-        Initialize the correction object
-
-        Parameters:
-            *args: Arguments for the BaseCorrector class
-            **kwargs: Keyword Arguments for the BaseCorrector class
-        """
-        #TODO: Make sure this works in tandem with basecorrector
-        # super(self.__class__, self).__init__()
-
-        #Construct the star array in to memory
-        #TODO: Make this a target readin function, which will save time.
-        # self.star_array = read_stars(read_todolist()[0])
+    #NOTE: the __init__() was removed b/c it was overriding (overloading?) the base __init__() and breaking everything
 
     def do_correction(self, lc, ifile):
         """
