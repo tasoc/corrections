@@ -168,7 +168,7 @@ class BaseCorrector(object):
         if eclat_min < -90:
 			# We are very close to the southern pole
 			# Ignore everything about RA
-			cursor.execute(query, {
+            cursor.execute(query, {
                 'camera'  : self.lc.camera,
                 'ccd'      : self.lc.ccd,
 				'eclon_min': 0,
@@ -186,7 +186,7 @@ class BaseCorrector(object):
                 'eclat_min': eclat_min,
                 'eclat_max': 90})
         elif eclon_min < 0:
-			cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+            cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
                     WHERE camera = :camera AND ccd = :camera AND mean_flux > 0\
                     AND eclon <= :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max UNION\
                     SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
@@ -200,7 +200,7 @@ class BaseCorrector(object):
 				'eclat_max': eclat_max
 			})
         elif eclon_max > 360:
-			cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+            cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
                     WHERE eclon >= :eclon_min AND eclat BETWEEN :eclat_min AND :eclat_max UNION\
                     SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
                     WHERE eclon BETWEEN 0 AND :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max;""", {
@@ -212,7 +212,7 @@ class BaseCorrector(object):
                     'eclat_max': eclat_max
 			})
         else:
-			cursor.execute(query, {
+            cursor.execute(query, {
                 'camera'  : self.lc.camera,
                 'ccd'      : self.lc.ccd,
 				'eclon_min': eclon_min,

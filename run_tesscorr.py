@@ -63,7 +63,7 @@ if __name__ == '__main__':
 	logger_parent.setLevel(logging_level)
 
 	# Get input and output folder from environment variables:
-	test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests', 'input'))
+	test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests'))
 	if args.test:
 		input_folder = os.path.join(test_folder,'input')
 		output_folder = os.path.join(test_folder,'output')
