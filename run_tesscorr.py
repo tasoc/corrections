@@ -65,11 +65,11 @@ if __name__ == '__main__':
 	# Get input and output folder from environment variables:
 	test_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'tests', 'input'))
 	if args.test:
-		input_folder = os.path.join(test_folder,'input/')
-		output_folder = os.path.join(test_folder,'output/')
+		input_folder = os.path.join(test_folder,'input')
+		output_folder = os.path.join(test_folder,'output')
 	else:
 		input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
+		output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
 
@@ -80,10 +80,17 @@ if __name__ == '__main__':
 	with TaskManager(input_folder) as tm:
 		if args.starid is not None:
 			task = tm.get_task(starid=args.starid)
-		elif args.all:	
-			task = tm.get_all()
+			corr = f(starid=args.starid, **task)
 
-		corr = f(**task)
+		elif args.all:	
+			#TODO: there is an unimplemented case, which is "run everything"; but that should really only be done by an MPI scheduler?
+			if args.camera and args.ccd:
+				# unset int in python resolve to 0, so should be False if not set
+				target_list = tm.get_all(args.camera, args.ccd, args.test_range)
+				for starid in target_list:
+					task = tm.get_task(starid=int(starid))
+					corr = f(starid=int(starid), **task)
+		# TODO: another unimplemented case, where test_range is not None (or a list from a file) but no camera or ccd given
 
 	# Write out the results?
 	if not args.quiet:
