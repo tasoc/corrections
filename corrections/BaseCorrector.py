@@ -16,7 +16,9 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 import enum
 import logging
 import traceback
+import sqlite3
 import numpy as np
+import matplotlib.pyplot as plt 
 from lightkurve import TessLightCurve
 
 __docformat__ = 'restructuredtext'
@@ -42,7 +44,7 @@ class BaseCorrector(object):
         # TODO
     """
 
-    def __init__(self, starid, camera, ccd, eclon, eclat, input_folder, output_folder, plot=False):
+    def __init__(self, starid, camera, ccd, cbv_area, eclon, eclat, input_folder, output_folder, priority, plot=False):
         """
         Initialize the correction object
 
@@ -64,9 +66,12 @@ class BaseCorrector(object):
         self.starid = starid
         self.camera = camera
         self.ccd = ccd
+        self.cbv_area
         self.eclon = eclon
         self.eclat = eclat
         self.input_folder = input_folder
+        self.output_folder = output_folder
+        self.lc = self.load_lightcurve(self.starid)
     
     def __enter__(self):
 	    return self
