@@ -33,6 +33,10 @@ if __name__ == '__main__':
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('-a', '--all', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
+	# TODO: are there benefits from predefined lists, etc.? (todolist would be the other place, but it stores surrounding targets too)
+	parser.add_argument('-r', '--test_range', type=int, help='Run on a maximum number of targets, primarily for testing.')
+	parser.add_argument('--camera', type=int, help='The numerical identifier of the TESS camera, primarily for testing.')
+	parser.add_argument('--ccd', type=int, help='The numerical identifier of the TESS camera CCD, primarily for testing.')
 	parser.add_argument('starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	args = parser.parse_args()
 
