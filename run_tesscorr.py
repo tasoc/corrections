@@ -18,6 +18,7 @@ from __future__ import with_statement, print_function
 import os
 import argparse
 import logging
+from timeit import default_timer
 import corrections
 
 #------------------------------------------------------------------------------
@@ -31,7 +32,7 @@ if __name__ == '__main__':
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
-	parser.add_argument('--all', help='.', action='store_true')
+	parser.add_argument('--all', help='Run correction on all targets.', action='store_true')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
@@ -76,15 +77,29 @@ if __name__ == '__main__':
 	# Initialize the corrector class:
 	with CorrClass(input_folder, plot=args.plot) as corr:
 
-		print(corr)
-
-		# Run the program:
+		# Start the TaskManager:
 		with corrections.TaskManager(input_folder) as tm:
-			if args.all:
-				task = tm.get_task()
-			elif args.starid is not None:
-				task = tm.get_task(starid=args.starid)
-			elif args.random:
-				task = tm.get_random_task()
+			while True:
+				if args.all:
+					task = tm.get_task()
+					if task is None: break
+				elif args.starid is not None:
+					task = tm.get_task(starid=args.starid)
+				elif args.random:
+					task = tm.get_random_task()
 
-			lc = corr.correct(task)
+				# Run the correction:
+				t1 = default_timer()
+				status = corr.correct(task)
+				t2 = default_timer()
+
+				# Construct results to return to TaskManager:
+				result = task.copy()
+				result.update({
+					'corr_status': status,
+					'corr_elaptime': t2-t1
+				})
+				tm.save_results(result)
+
+				if not args.all:
+					break

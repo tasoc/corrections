@@ -36,6 +36,7 @@ class STATUS(enum.Enum):
 	OK = 1
 	ERROR = 2
 	WARNING = 3
+	STARTED = 6
 	# TODO: various statuses as required
 
 class BaseCorrector(object):
