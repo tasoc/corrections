@@ -15,7 +15,7 @@ to create new datasets optimized for asteroseismic analysis.
 #==============================================================================
 
 from __future__ import division, with_statement, print_function
-from six.moves import range 
+from six.moves import range
 import logging
 import numpy as np
 from numpy import zeros, empty, argsort, diff, mod, isfinite, array, append, searchsorted, NaN, Inf
@@ -28,17 +28,17 @@ import os.path
 from re import match
 from bottleneck import nanmedian, nanstd, median, nanargmax, nansum, allnan, nanmin, nanmax
 # Import our fast (Cython) routines:
-from . import cython_import
-from .TRF_filters import gap_fill, theil_sen
+#from . import cython_import
+#from .TRF_filters import gap_fill, theil_sen
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
-from scipy.interpolate import LSQUnivariateSpline
+#from scipy.interpolate import LSQUnivariateSpline
 import scipy.misc
 import scipy
 scipy.factorial = scipy.misc.factorial
 import statsmodels.api as sm
 lowess = sm.nonparametric.lowess
-from .utilities import moving_nanmedian, moving_nanmedian_cyclic, smooth, smooth_cyclic, BIC
+from .utilities import moving_nanmedian, moving_nanmedian_cyclic, smooth, smooth_cyclic, BIC, theil_sen, gap_fill
 import warnings
 
 #==============================================================================
@@ -749,7 +749,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 		indx_pos_off_x = (np.abs(x_pos-x_pos_med)>pixel_off_clip)
 		indx_pos_off_y = (np.abs(y_pos-y_pos_med)>pixel_off_clip)
 
-		indx_pos_off = indx_pos_off_x + indx_pos_off_y 
+		indx_pos_off = indx_pos_off_x + indx_pos_off_y
 		indx_bad = indx_pos_off + indx_rapid
 		flag_bad_pos[indx_chunk_finite] = indx_bad
 
@@ -758,7 +758,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 		# Add to plot:
 		ax1.scatter(t[~indx_bad], x_pos[~indx_bad], color='b', s=1)
 		ax2.scatter(t[~indx_bad], y_pos[~indx_bad], color='r', s=1)
-		  
+
 		fig2ax1.scatter(t[~indx_bad], dsdt[~indx_bad], color='k', s=1, alpha=0.5)
 		fig2ax1.plot([t[0], t[-1]], [m+rapid_threshold, m+rapid_threshold], 'r--')
 		fig2ax1.plot([t[0], t[-1]], [m-rapid_threshold, m-rapid_threshold], 'r--')
@@ -791,7 +791,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 
 		# Apply the PCA model to the valid positions:
 		pos2 = pca.transform(pos)
-		
+
 		# Create smooth curve along the movement:
 		# TODO: This is sorting one time more than should be nessacery.
 		cl_per05, cl_per95 = np.nanpercentile(pos2[:,0], [5, 95])
@@ -834,9 +834,9 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 			# Sort everything along the principle axis:
 			pos3[indx_finite[chunk]] = pos2[:,1]
 			poscurve = poscurve2[argsort(pos2[:,1]), :]
-			indx_good2 = indx_good[argsort(pos2[:,1])] 
+			indx_good2 = indx_good[argsort(pos2[:,1])]
 
-				#print('chis', chi2_1, chi2_2)  
+				#print('chis', chi2_1, chi2_2)
 				#print('Fin poscurve', poscurve[0:10,:])
 
 		# Create version of position curve in original pixel-space:
