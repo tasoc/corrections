@@ -276,6 +276,7 @@ class BaseCorrector(object):
         plt.ylabel('Relative Flux')
         plt.title(str(self.starid)+'.noisy_detrend')
         plt.savefig((self.output_folder+'/img/'+str(self.starid)+'_noisy_detrend.png'),bbox_inches='tight')
+        plt.close()
         #plt.show(block=True) # NOTE: used for testing; similar to 'interactive' on spyder
         
         if output_folder is None:
