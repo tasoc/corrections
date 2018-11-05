@@ -246,7 +246,7 @@ class BaseCorrector(object):
         """
         self.load_lightcurve(self.starid)
 
-        self._status = self.do_correction(*args, **kwargs)
+        lc_corr, self._status = self.do_correction(*args, **kwargs)
 
         # Check that the status has been changed:
         if self._status == STATUS.UNKNOWN:
@@ -254,6 +254,7 @@ class BaseCorrector(object):
 
         if self._status in (STATUS.OK, STATUS.WARNING):
             # TODO: set outputs; self._details = self.lightcurve, etc.
+            self.save_lightcurve(lc_corr)
 
             pass
 
