@@ -298,9 +298,6 @@ class BaseCorrector(object):
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
-		# Get the filename of the original file from the task:
-		fname = lc.meta.get('task').get('lightcurve')
-
 		# Find the name of the correction method based on the class name:
 		CorrMethod = {
 			'EnsembleCorrector': 'ensemble',
@@ -312,26 +309,60 @@ class BaseCorrector(object):
 		if output_folder is None:
 			output_folder = self.input_folder
 
-		#if output_folder != self.input_folder:
-		save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
-		shutil.copy(os.path.join(self.input_folder, fname), save_file)
+		# Get the filename of the original file from the task:
+		fname = lc.meta.get('task').get('lightcurve')
 
-		# Open the FITS file to overwrite the corrected flux columns:
-		with fits.open(save_file, mode='update') as hdu:
-			# Overwrite the corrected flux columns:
-			hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
-			hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
+		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
+			#if output_folder != self.input_folder:
+			save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
+			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 
-			# Set headers about the correction:
-			hdu['LIGHTCURVE'].header['CORRMET'] = (CorrMethod, 'Lightcurve correction method')
-			hdu['LIGHTCURVE'].header['CORRVER'] = (__version__, 'Version of correction pipeline')
+			# Open the FITS file to overwrite the corrected flux columns:
+			with fits.open(save_file, mode='update') as hdu:
+				# Overwrite the corrected flux columns:
+				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
+				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
 
-			# Set additional headers provided by the individual methods:
-			if lc.meta['additional_headers']:
-				for key, value in lc.meta['additional_headers'].items():
-					hdu['LIGHTCURVE'].header[key] = value
+				# Set headers about the correction:
+				hdu['LIGHTCURVE'].header['CORRMET'] = (CorrMethod, 'Lightcurve correction method')
+				hdu['LIGHTCURVE'].header['CORRVER'] = (__version__, 'Version of correction pipeline')
 
-			# Save the updated FITS file:
-			hdu.flush()
+				# Set additional headers provided by the individual methods:
+				if lc.meta['additional_headers']:
+					for key, value in lc.meta['additional_headers'].items():
+						hdu['LIGHTCURVE'].header[key] = value
 
-		return fname
+				# Save the updated FITS file:
+				hdu.flush()
+
+		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
+		# with an extension ".corr":
+		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'):
+			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(fname)[0] + '.corr')
+
+			# Create new ASCII file:
+			with open(save_file, 'w') as fid:
+				fid.write("# TESS Asteroseismic Science Operations Center\n")
+				fid.write("# TIC identifier:     %d\n" % lc.targetid)
+				fid.write("# Sector:             %s\n" % lc.sector)
+				fid.write("# Correction method:  %s\n" % CorrMethod)
+				fid.write("# Correction Version: %s\n" % __version__)
+				if lc.meta['additional_headers']:
+					for key, value in lc.meta['additional_headers'].items():
+						fid.write("# %18s: %s\n" % (key, value[0]))
+				fid.write("#\n")
+				fid.write("# Column 1: Time (days)\n")
+				fid.write("# Column 2: Corrected flux (ppm)\n")
+				fid.write("# Column 3: Corrected flux error (ppm)\n")
+				fid.write("# Column 4: Quality flags\n")
+				fid.write("#-------------------------------------------------\n")
+				for k in range(len(lc.time)):
+					fid.write("%f  %e  %e  %d\n" % (
+						lc.time[k],
+						lc.flux[k],
+						lc.flux_err[k],
+						lc.quality[k]
+					))
+				fid.write("#-------------------------------------------------\n")
+
+		return save_file
