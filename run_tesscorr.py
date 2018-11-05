@@ -95,5 +95,5 @@ if __name__ == '__main__':
 	# Write out the results?
 	if not args.quiet:
 		print("=======================")
-		print("STATUS: {0}".format(corr.status.name))
+		#print("STATUS: {0}".format(corr.status.name))
 

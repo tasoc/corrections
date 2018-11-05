@@ -78,11 +78,11 @@ class TaskManager(object):
 			List of target starids that can now be fed into get_task() by the caller
 		"""
 		if not limit:
-			self.cursor.execute("SELECT todolist.priority,starid,camera,ccd,cbv_area,eclon,eclat FROM todolist " +
+			self.cursor.execute("SELECT todolist.priority,todolist.starid,camera,ccd,cbv_area,eclon,eclat FROM todolist " +
 								"LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority " + 
 								"WHERE camera = " + str(camera) + " AND ccd = " + str(ccd) + " AND mean_flux > 0 ;")
 		else:
-			self.cursor.execute("SELECT todolist.priority,starid,camera,ccd,cbv_area,eclon,eclat FROM todolist " +
+			self.cursor.execute("SELECT todolist.priority,todolist.starid,camera,ccd,cbv_area,eclon,eclat FROM todolist " +
 							"LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority " + 
 							"WHERE camera = " + str(camera) + " AND ccd = " + str(ccd) + " AND mean_flux > 0 " +
 							"LIMIT " + str(limit) + " ;")
