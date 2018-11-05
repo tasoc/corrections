@@ -131,7 +131,7 @@ class BaseCorrector(object):
                 pass
         return lightcurve
 
-    def search_targets(eclon, eclat, radius, camera, ccd):
+    def search_targets(self):
         """Return a list of targets within a search window
         Parameters:
             eclon (float): the ecliptic longitude of the target
@@ -145,13 +145,19 @@ class BaseCorrector(object):
         the width of the sides of a box search instead, for now.
         """
         #TODO Docstring
+        logger = logging.getLogger(__name__)
+        # TODO: fix this so that the radius is determined by something smart and that it can grow if the list is too short
+        #       -- Or, alternatively, we set a radius, make sure it returns "enough" elements (>=2k right now) and then let the corrector figure out
+        #       -- what it wants to do with the list it gets back; we're only returning starids anyway, not data
+        radius = 4
+        
         #Upper and lower bounds on the current stamp
-        eclon_min = np.round(eclon - radius,2)
-        eclon_max = np.round(eclon + radius,2)
-        eclat_min = np.round(eclat - radius,2)
-        eclat_max = np.round(eclat + radius,2)
+        eclon_min = np.round(self.lc.meta['eclon'] - radius,2)
+        eclon_max = np.round(self.lc.meta['eclon'] + radius,2)
+        eclat_min = np.round(self.lc.meta['eclat'] - radius,2)
+        eclat_max = np.round(self.lc.meta['eclat'] + radius,2)
 
-        conn = sqlite3.connect('{}/todo.sqlite'.format(__inputfolder__))
+        conn = sqlite3.connect('{}/todo.sqlite'.format(self.input_folder))
         cursor = conn.cursor()
         #TODO: Camera and CCD should not be hardcoded
         query = "SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
@@ -163,8 +169,8 @@ class BaseCorrector(object):
 			# We are very close to the southern pole
 			# Ignore everything about RA
 			cursor.execute(query, {
-                'camera'  : camera,
-                'ccd'      : ccd,
+                'camera'  : self.lc.camera,
+                'ccd'      : self.lc.ccd,
 				'eclon_min': 0,
 				'eclon_max': 360,
 				'eclat_min': -90,
@@ -173,8 +179,8 @@ class BaseCorrector(object):
 			# We are very close to the northern pole
 			# Ignore everything about RA
             cursor.execute(query, {
-                'camera'  : camera,
-                'ccd'      : ccd,
+                'camera'  : self.lc.camera,
+                'ccd'      : self.lc.ccd,
                 'eclon_min': 0,
                 'eclon_max': 360,
                 'eclat_min': eclat_min,
@@ -182,13 +188,12 @@ class BaseCorrector(object):
         elif eclon_min < 0:
 			cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
                     WHERE camera = :camera AND ccd = :camera AND mean_flux > 0\
-                    WHERE eclon <= :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max\
-			UNION
-			SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                    AND eclon <= :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max UNION\
+                    SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
                     WHERE eclon BETWEEN :eclon_min AND 360\
                     AND eclat BETWEEN :eclat_min AND :eclat_max;""", {
-                'camera'  : camera,
-                'ccd'      : ccd,
+                'camera'  : self.lc.camera,
+                'ccd'      : self.lc.ccd,
 				'eclon_min': 360 - abs(eclon_min),
 				'eclon_max': eclon_max,
 				'eclat_min': eclat_min,
@@ -196,21 +201,20 @@ class BaseCorrector(object):
 			})
         elif eclon_max > 360:
 			cursor.execute("""SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
-                    WHERE eclon >= :eclon_min AND eclat BETWEEN :eclat_min AND :eclat_max
-			UNION
-			SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
+                    WHERE eclon >= :eclon_min AND eclat BETWEEN :eclat_min AND :eclat_max UNION\
+                    SELECT todolist.starid FROM todolist INNER JOIN diagnostics ON todolist.priority = diagnostics.priority\
                     WHERE eclon BETWEEN 0 AND :eclon_max AND eclat BETWEEN :eclat_min AND :eclat_max;""", {
-                'camera'  : camera,
-                'ccd'      : ccd,
-				'eclon_min': eclon_min,
-				'eclon_max': eclon_max - 360,
-				'eclat_min': eclat_min,
-				'eclat_max': eclat_max
+                    'camera'  : self.lc.camera,
+                    'ccd'      : self.lc.ccd,
+                    'eclon_min': eclon_min,
+                    'eclon_max': eclon_max - 360,
+                    'eclat_min': eclat_min,
+                    'eclat_max': eclat_max
 			})
         else:
 			cursor.execute(query, {
-                'camera'  : camera,
-                'ccd'      : ccd,
+                'camera'  : self.lc.camera,
+                'ccd'      : self.lc.ccd,
 				'eclon_min': eclon_min,
 				'eclon_max': eclon_max,
 				'eclat_min': eclat_min,
@@ -220,6 +224,7 @@ class BaseCorrector(object):
         #Output the list of target names
         targetlist = np.array(cursor.fetchall()).T[0]
         cursor.close()
+        logger.info("Number of found targets in radius: '%f'", len(targetlist))
         return targetlist
 
     def do_correction(self):
