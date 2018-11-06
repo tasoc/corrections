@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import absolute_import
-from .BaseCorrector import BaseCorrector
-from .tesscorr import tesscorr
+from .BaseCorrector import BaseCorrector, STATUS
+from .KASOCFilterCorrector import KASOCFilterCorrector
+from .tesscorr import corrclass
 from .taskmanager import TaskManager
-# TODO: Add imports as needed
