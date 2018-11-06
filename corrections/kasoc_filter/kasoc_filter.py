@@ -1192,8 +1192,9 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 			xtransit = filt - (xlong+xpos)
 
 	# Save the figure:
-	if _output_format != 'native':
+	if _output_folder is not None:
 		fig.savefig(os.path.join(_output_folder, _output_prefix+'decorrelation.'+_output_format), format=_output_format, bbox_inches='tight')
+	if _output_format != 'native':
 		plt.close(fig)
 
 	# Make sure we have removed the bad datapoints:

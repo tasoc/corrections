@@ -55,6 +55,10 @@ class TaskManager(object):
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
 
+		self.cursor.execute("UPDATE todolist SET corr_status=NULL")
+		self.conn.commit()
+
+
 	def __enter__(self):
 		return self
 

@@ -278,7 +278,7 @@ class BaseCorrector(object):
 
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
-		lc.meta['additional_headers'] = {}
+		lc.meta['additional_headers'] = fits.Header()
 
 		if logger.isEnabledFor(logging.DEBUG):
 			lc.show_properties()
@@ -331,7 +331,7 @@ class BaseCorrector(object):
 				# Set additional headers provided by the individual methods:
 				if lc.meta['additional_headers']:
 					for key, value in lc.meta['additional_headers'].items():
-						hdu['LIGHTCURVE'].header[key] = value
+						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
 
 				# Save the updated FITS file:
 				hdu.flush()
@@ -350,7 +350,7 @@ class BaseCorrector(object):
 				fid.write("# Correction Version: %s\n" % __version__)
 				if lc.meta['additional_headers']:
 					for key, value in lc.meta['additional_headers'].items():
-						fid.write("# %18s: %s\n" % (key, value[0]))
+						fid.write("# %18s: %s\n" % (key, value))
 				fid.write("#\n")
 				fid.write("# Column 1: Time (days)\n")
 				fid.write("# Column 2: Corrected flux (ppm)\n")
