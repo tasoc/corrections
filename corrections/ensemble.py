@@ -253,34 +253,6 @@ class EnsembleCorrector(BaseCorrector):
         temp_flux = full_flux
         temp_weight = full_weight
 
-        # Identify locations where there is a break in the time series. If there is at least one break, identify
-        # segments and label ensemble points by segment; bidx2 is the label. If there are no breaks, then identify
-        # only one segment and label accordingly
-        break_locs = np.where(np.diff(full_time) > 0.1)[0]  
-        if break_locs.size > 0:
-            # TODO: Will this ever not happen?
-            if (break_locs[-1] < full_time.size):
-                break_locs = np.append(break_locs, np.size(full_time)-1)
-                break_locs = np.insert(break_locs, 0, 0)
-                cts, bin_edges = np.histogram(full_time, full_time[break_locs])
-                bidx2 = np.digitize(full_time, full_time[break_locs])
-                num_segs = np.size(break_locs)-1
-        else:
-                cts, bin_edges = np.histogram(full_time,np.squeeze(np.append(full_time[0],full_time[-1])))
-                bidx2 = np.digitize(full_time,np.squeeze(np.append(full_time[0],full_time[-1]+1)))
-                num_segs = 1;
-                break_locs = np.append(0,np.size(full_time)-1)
-
-        #pp will be components of spline fit to ensemble for each segment
-        pp_ensemble = []
-        #set up influx, inweight,intime as flux/weight/time of ensemble segment-by-segment
-        for iseg in range(num_segs):
-            influx = full_flux[bidx2-1==iseg]
-            inweight = full_weight[bidx2-1==iseg]
-            intime = full_time[bidx2-1==iseg]
-
-            intime0 = intime;
-            influx0 = influx;
 
         #initialize bin size in days. We will fit the ensemble with splines
         bin_size = 4.0
