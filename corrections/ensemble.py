@@ -27,6 +27,9 @@ from copy import deepcopy
 import time
 import pandas
 
+import pickle
+from pathlib import Path
+
 from BaseCorrector import BaseCorrector
 
 
@@ -128,7 +131,8 @@ class EnsembleCorrector(BaseCorrector):
 
         #Construct the star array in to memory
         #TODO: Make this a target readin function, which will save time.
-        self.star_array = read_stars(read_todolist()[0])
+        self.star_names, self.Tmag, self.variability, self.eclat, self.eclon = read_todolist()
+        self.star_array = read_stars(self.star_names)
 
     def do_correction(self, lc, ifile):
         """
@@ -146,21 +150,10 @@ class EnsembleCorrector(BaseCorrector):
             lc_corr (lightkurve.TessLightCurve object): Corrected light-
                 curve stored in a TessLightCurve object.
         """
-        star_names, Tmag, variability, eclat, eclon = read_todolist()
-
-        # Add metadata to the lightcurve object
-        # Build lightkurve object and associated metadata for current target
-        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)
-        frange /= np.mean(lc.flux)
-        drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-        lc.meta = { 'fmean' : np.max(lc.flux),
-                            'fstd' : np.std(np.diff(lc.flux)),
-                            'frange' : frange,
-                            'drange' : drange}
 
         # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance
-        idx = np.arange(len(star_names))!=ifile
-        dist = np.sqrt((eclat[idx] - eclat[ifile])**2 + (eclon[idx] - eclon[ifile])**2)
+        idx = np.arange(len(self.star_names))!=ifile
+        dist = np.sqrt((self.eclat[idx] - self.eclat[ifile])**2 + (self.eclon[idx] - self.eclon[ifile])**2)
         distance_index = dist.argsort()
         distance = dist[distance_index]
 
@@ -391,7 +384,19 @@ class EnsembleCorrector(BaseCorrector):
 if __name__ == "__main__":
     star_names, Tmag, variability, eclat, eclon = read_todolist()
 
+    # TODO: Temporary. Pickle the file to save time
+    if Path("../../data/ensemble_sector02.pkl").is_file():
+        start_time = time.time()
+        with open('../../data/ensemble_sector02.pkl', 'rb') as input:
+            C = pickle.load(input)
+        print("Loading pickle: {}".format(time.time() - start_time))
+    else:
+        start_time = time.time()
     C = EnsembleCorrector(BaseCorrector)
+        with open('../../data/ensemble_sector02.pkl', 'wb') as output:
+            pickle.dump(C, output, pickle.HIGHEST_PROTOCOL)
+        print("Created instance and pickle: {}".format(time.time() - start_time))
+
     star_array = C.star_array
 
     '''Get the correction, apply the correction, output the data.'''
