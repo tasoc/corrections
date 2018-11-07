@@ -53,7 +53,7 @@ class KASOCFilterCorrector(BaseCorrector):
 		#position = np.column_stack((lc.centroid_col, lc.centroid_row))
 		position = None
 
-		periods = np.array(self.tois_periods[lc.targetid])
+		periods = np.array(self.tois_periods.get(lc.targetid, []))
 		if len(periods) == 0:
 			periods = None
 		else:
