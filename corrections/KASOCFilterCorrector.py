@@ -34,7 +34,7 @@ class KASOCFilterCorrector(BaseCorrector):
 		passwd = getpass.getpass('Password: ')
 
 		# Contact TASOC database for list of TOIs:
-		with psql.connect(host='trinity.phys.au.dk', user='rasmush', password=passwd, database='db_aadc') as conn:
+		with psql.connect(host='trinity.phys.au.dk', user=username, password=passwd, database='db_aadc') as conn:
 			with conn.cursor() as cursor:
 				cursor.execute("SELECT starid,period FROM tasoc.toi WHERE NOT period IS NULL;")
 				for row in cursor.fetchall():
@@ -53,7 +53,7 @@ class KASOCFilterCorrector(BaseCorrector):
 		#position = np.column_stack((lc.centroid_col, lc.centroid_row))
 		position = None
 
-		periods = np.array(self.tois_periods[lc.targetid])
+		periods = np.array(self.tois_periods.get(lc.targetid, []))
 		if len(periods) == 0:
 			periods = None
 		else:

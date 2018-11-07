@@ -77,14 +77,14 @@ class TaskManager(object):
 			dict or None: Dictionary of settings for task.
 		"""
 
+		constraints = []
 		if starid is not None:
-			constraints = f" AND todolist.starid={starid:d}" 
-		else:
-			constraints = ''
+			constraints.append('todolist.starid=%d' % starid)
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL"
-		+ constraints + " ORDER BY priority LIMIT 1;")
-		
+		if constraints:
+			constraints = ' AND ' + " AND ".join(constraints)
+
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % constraints)
 		task = self.cursor.fetchone()
 		if task: return dict(task)
 		return None
