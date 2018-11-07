@@ -26,11 +26,12 @@ from tqdm import tqdm
 from copy import deepcopy
 import time
 import pandas
+import lightkurve
 
 import pickle
 from pathlib import Path
 
-from BaseCorrector import BaseCorrector
+from . import BaseCorrector, STATUS
 
 
 class EnsembleCorrector(BaseCorrector):
@@ -45,30 +46,22 @@ class EnsembleCorrector(BaseCorrector):
             *args: Arguments for the BaseCorrector class
             **kwargs: Keyword Arguments for the BaseCorrector class
         """
-        #TODO: Make sure this works in tandem with basecorrector
-        # super(self.__class__, self).__init__()
+        super(self.__class__, self).__init__(*args, **kwargs)
 
-        #Construct the star array in to memory
-        #TODO: Make this a target readin function, which will save time.
-        self.star_names, self.Tmag, self.variability, self.eclat, self.eclon = read_todolist()
-        self.star_array = read_stars(self.star_names)
-
-    def do_correction(self, lc, ifile):
+    def do_correction(self, lc):
         """
         Function that takes all input stars for a sector and uses them to find a detrending
         function using ensemble photometry for a star 'star_names[ifile]', where ifile is the
         index for the star in the star_array and star_names list.
 
         Parameters:
-            lc (lightkurve.TessLightCurve object): Raw lightcurve stored
-                in a TessLightCurve object.
-            ifile (int): TEMPORARY index of the relevant star in the star_names
-                list.
+            lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
 
         Returns:
-            lc_corr (lightkurve.TessLightCurve object): Corrected light-
-                curve stored in a TessLightCurve object.
+            lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
+            The status of the correction.
         """
+        fstart_time = time.time()
 
         # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance
         idx = np.arange(len(self.star_names))!=ifile
