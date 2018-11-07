@@ -228,7 +228,7 @@ class BaseCorrector(object):
 		logger = logging.getLogger(__name__)
 
 		# Find the relevant information in the TODO-list:
-		if not isinstance(task, dict):
+		if not isinstance(task, dict) or task.get("lightcurve") is None:
 			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (task, ))
 			task = self.cursor.fetchone()
 			if task is None:
