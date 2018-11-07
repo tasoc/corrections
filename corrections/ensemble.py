@@ -33,87 +33,6 @@ from pathlib import Path
 from BaseCorrector import BaseCorrector
 
 
-# from star import Star
-import lightkurve
-
-#set up output directory
-if not os.path.isdir("toutput"):
-    os.mkdir('toutput')
-
-################################<PLACEHOLDERS>
-
-#TODO: These shouldn't be hard coded!
-# data_folder = "../TESS_Collab_Data"
-__sql_folder__ = "../../data"
-__data_folder__ = "../../data"
-__sector__ = "sector02"
-
-def read_todolist():
-    """
-    Function to read in the sql to do list for the globally defined sector (__sector__).
-
-    Returns:
-        star_names (ndarray): Labels of all the names of the stars in a given sector.
-        Tmag (ndarray): TESS photometry apparent magnitude for all stars.
-        variability (ndarray): A parameter describing the level of intrinsic variability for all stars.
-        eclat (ndarray): Ecliptic latitude for all stars.
-        eclon (ndarray): Ecliptic longitude for all stars.
-    """
-
-    #open sql file and find list of all stars in segment 2, camera 1, ccd 1
-    #TODO: These should not  be hard coded!
-    conn = sqlite3.connect('{}/todo-{}.sqlite'.format(__sql_folder__, __sector__))
-    # conn = sqlite3.connect('/media/derek/data/TESS/TDA-4 data/Rasmus/todo-sector02.sqlite')
-    # conn = sqlite3.connect('{}/todo-sector02.sqlite'.format(data_folder))
-    c = conn.cursor()
-    c.execute("SELECT * FROM todolist LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority WHERE camera = 1 AND ccd = 1 AND mean_flux > 0 ;")
-    seg2_list = c.fetchall()
-    seg2_list = np.asarray(seg2_list)
-    conn.close()
-
-    star_names = seg2_list[:,1]
-    Tmag = seg2_list[:,6]
-    variability = seg2_list[:,15]
-    eclat = seg2_list[:,17].astype(float)
-    eclon = seg2_list[:,18].astype(float)
-
-    return star_names, Tmag, variability, eclat, eclon
-
-def read_stars(star_names):
-    """
-    Function to read in the flux timeseries for all stars in a sector given in
-    star_names. Time, flux, and some additional metadata are stored in a list of
-    class instances. For this, we use the lightkurve open-source Python package.
-
-    Parameters:
-        star_names (ndarray): Labels of all the names of the stars in a given
-            sector.
-
-    Returns:
-        star_array (ndarray): An array of lightkurve.TessLightCurve class
-            instances holding metadata on each star. (i.e. flux, time, mean
-            flux, std of flux).
-    """
-    # Read star data from each file and instanciate a Star object for each with all data
-    star_array = np.empty(star_names.size, dtype=object)
-    for name_index in tqdm(range(star_names.size)):
-        filename =  '{}/noisy_by_sectors/Star{}-{}.noisy'.format(__data_folder__, star_names[name_index], __sector__)
-        mafs = pandas.read_csv(filename, usecols=range(0,2), header=None, sep=' ').values.T
-        # mafs = np.loadtxt(filename, usecols=range(0,2)).T
-
-        #Build lightkurve object and associated metadata
-        lc = lightkurve.TessLightCurve(mafs[0], mafs[1]).remove_nans()
-        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
-        drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-        lc.meta = { 'fmean' : np.max(lc.flux),
-                    'fstd' : np.std(np.diff(lc.flux)),
-                    'frange' : frange,
-                    'drange' : drange}
-        star_array[name_index] = lc
-    return star_array
-
-################################</PLACEHOLDERS>
-
 class EnsembleCorrector(BaseCorrector):
     """
     DOCSTRING
@@ -254,6 +173,7 @@ class EnsembleCorrector(BaseCorrector):
         temp_weight = full_weight
 
 
+        start_time = time.time()
         #initialize bin size in days. We will fit the ensemble with splines
         bin_size = 4.0
         for ib in range(6):
@@ -345,45 +265,17 @@ class EnsembleCorrector(BaseCorrector):
                 tbidx = deepcopy(bidx)
 
             bin_size = bin_size/2
+        print(f"Spline Fit, Time: {time.time()-start_time}")
 
         #Correct the lightcurve
         lc_corr = deepcopy(lc)
         scale = 1.0
         lc_corr /= scale*pp(lc.time)
 
-        return lc_corr
+        print(f"Full correction function, Time: {time.time()-fstart_time}")
 
-if __name__ == "__main__":
-    star_names, Tmag, variability, eclat, eclon = read_todolist()
-
-    # TODO: Temporary. Pickle the file to save time
-    if Path("../../data/ensemble_sector02.pkl").is_file():
-        start_time = time.time()
-        with open('../../data/ensemble_sector02.pkl', 'rb') as input:
-            C = pickle.load(input)
-        print("Loading pickle: {}".format(time.time() - start_time))
-    else:
-        start_time = time.time()
-    C = EnsembleCorrector(BaseCorrector)
-        with open('../../data/ensemble_sector02.pkl', 'wb') as output:
-            pickle.dump(C, output, pickle.HIGHEST_PROTOCOL)
-        print("Created instance and pickle: {}".format(time.time() - start_time))
-
-    star_array = C.star_array
-
-    '''Get the correction, apply the correction, output the data.'''
-    for ifile in tqdm(range(len(star_names[:15]))):
-
-        start_time = time.time()
-        lc_corr = C.do_correction(star_array[ifile], ifile)
-        print("Star: {}, Time: {}".format(star_names[ifile], time.time() - start_time))
-
-        ax = star_array[ifile].plot()
+        ax = lc.plot()
         lc_corr.plot(ax=ax)
         plt.show()
 
-        # outfile = '../../data/Rasmus/toutput2/'+str(star_names[ifile])+'.noisy_detrend'
-        # file = open(outfile,'w')
-        # #np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, fcorr2[ifile])), fmt = '%f')
-        # np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, lc_corr.flux)), fmt = '%f')
-        # file.close()
+        return lc_corr, STATUS.OK
