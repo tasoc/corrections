@@ -166,20 +166,27 @@ class BaseCorrector(object):
 		return status
 
 
-	def search_lightcurves(self, search=None, order_by=None, limit=None):
+	def search_lightcurves(self, select=None, search=None, order_by=None, limit=None):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
 		Parameters:
-			cbv_area (integer or None): Only return stars from this CBV area.
+			search (list of strings or None): Conditions to apply to the selection of stars from the database
+			order_by (string or None): Column to order the database output by
+			limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved
 
 		Returns:
-			list of dicts:
+			list of dicts: Returns all stars retrieved by the call to the database as dicts/tasks that can be consumed directly by load_lightcurve
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
+
+		if select is None:
+			select = '*'
+		elif isinstance(select, (list, tuple)):
+			select = ", ".join(select)
 
 		if search is None:
 			search = ''
@@ -189,7 +196,8 @@ class BaseCorrector(object):
 		order_by = '' if order_by is None else " ORDER BY " + order_by
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND {search:s}{order_by:s}{limit:s};".format(
+			select=select,
 			search=search,
 			order_by=order_by,
 			limit=limit
