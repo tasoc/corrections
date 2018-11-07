@@ -117,14 +117,14 @@ class EnsembleCorrector(BaseCorrector):
             while len(temp_list) < star_count:
                 
                 # Get lightkurve for next star closest to target
-                # TODO: This seems needlesly complicated. Probably can just change load_lightcurve
+                # NOTE: This seems needlesly complicated. Probably can just change load_lightcurve
                 next_star_index = distance_index[i]
                 search_loop.append(f"todolist.starid={starid[next_star_index]:}")
                 next_star_task = self.search_lightcurves(search=search_loop, select=select_loop)[0]
                 next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
                 search_loop.pop(-1)
                 
-                # Compute the rest of its data. TODO: Change this to the database
+                # Compute the rest of its data. NOTE: Change this to the database or not ???
                 frange = np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) / np.mean(next_star_lc.flux)
                 drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
                 next_star_lc.meta.update({ 'fmean' : np.max(next_star_lc.flux),
@@ -146,7 +146,7 @@ class EnsembleCorrector(BaseCorrector):
             full_flux = np.multiply(tflux, full_weight)
 
             # TODO: As of now the code begins by ensuring 20 stars are added to the ensemble and then adds one by one. Might have to change to use a search radius
-            # Fetch distance of last added star to ensemble to use as search radius
+            # Fetch distance of last added star to ensemble to use as search radius to test conditions ahead
             search_radius = distance[i-1]
 
             # Set up time array with 0.5-day resolution which spans the time range of the time series then histogram the data based on that array
@@ -160,17 +160,17 @@ class EnsembleCorrector(BaseCorrector):
             # if np.min(n[0])<400:
             # print np.min(n[n2>0])
             if np.min(n[n2>0]) < 1000:
-                # print(min_range)
                 min_range = min_range+0.3
                 if min_range > np.log10(np.max(lc.meta['drange'])):
-                    #if (search_radius < 0.5):
                     if (search_radius < 100):
                         # search_radius += 10
                         star_count += 1
+                        search_radius = distance[i]
                     else:
                         # search_radius *= 1.1
-                        star_count += 1
                         min_range = min_range0
+                        star_count += 1
+                        search_radius = distance[i]
 
                 # if search_radius > np.pi/4:
                 if search_radius > 400:
@@ -204,7 +204,7 @@ class EnsembleCorrector(BaseCorrector):
 
 
         start_time = time.time()
-        #initialize bin size in days. We will fit the ensemble with splines
+        # Initialize bin size in days. We will fit the ensemble with splines
         bin_size = 4.0
         for ib in range(6):
             #decrease bin size and bin data
