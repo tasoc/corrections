@@ -98,32 +98,51 @@ class EnsembleCorrector(BaseCorrector):
 
         # Define variables to use in the loop to build the ensemble of stars
         # List of star indexes to be included in the ensemble
-        ensemble_list = []
+        temp_list = []
         # Initial number of closest stars to consider and variable to increase number
         initial_num_stars = 20
         star_count = initial_num_stars
         # (Alternate param) Initial distance at which to consider stars around the target
         # initial_search_radius = -1
         
-        # Follows index of dist array to restart search after the last addded star
-        i = 0
+        # Follows index of dist array to restart search after the last addded star. Starts at 1 as the first star ordered by distance is the target
+        i = 1
+        # Setup search and select params to use in loop
+        select_loop = ["todolist.starid", "camera", "ccd", "lightcurve"]
+        search_loop = [f"camera={lc.camera:d}", f"ccd={lc.ccd:d}", "mean_flux>0"]
         # Start loop to build ensemble
         while True:
 
             # First get a list of indexes of a specified number of stars to build the ensemble
-            while len(ensemble_list) < star_count:
-                # Stars evaluated by order of distance to target
-                star_index = distance_index[i]
+            while len(temp_list) < star_count:
+                
+                # Get lightkurve for next star closest to target
+                # TODO: This seems needlesly complicated. Probably can just change load_lightcurve
+                next_star_index = distance_index[i]
+                search_loop.append(f"todolist.starid={starid[next_star_index]:}")
+                next_star_task = self.search_lightcurves(search=search_loop, select=select_loop)[0]
+                next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
+                search_loop.pop(-1)
+                
+                # Compute the rest of its data. TODO: Change this to the database
+                frange = np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) / np.mean(next_star_lc.flux)
+                drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
+                next_star_lc.meta = { 'fmean' : np.max(next_star_lc.flux),
+                            'fstd' : np.std(np.diff(next_star_lc.flux)),
+                            'frange' : frange,
+                            'drange' : drange}
+
                 # Stars are added to ensemble if they fulfill the requirements
-                if (np.log10(self.star_array[star_index].meta['drange']) < min_range and self.star_array[star_index].meta['drange'] < 10*lc.meta['drange']):
-                    ensemble_list.append(star_index)
+                if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange']):
+                    temp_list.append([next_star_index, next_star_lc])
                 i += 1
 
 
+            ensemble_list = np.array(temp_list)
             # Now populate the arrays of data with the stars in the ensemble
-            full_time = np.concatenate([self.star_array[i].time for i in ensemble_list]).ravel()
-            tflux = np.concatenate(np.array([self.star_array[i].flux / self.star_array[i].meta['fmean'] for i in ensemble_list])).ravel()
-            full_weight = np.concatenate(np.array([np.full(self.star_array[i].flux.size, star_array[i].meta['fmean'] / self.star_array[i].meta['fstd']) for i in ensemble_list])).ravel()
+            full_time = np.concatenate([temp_lc.time for temp_lc in ensemble_list[:,1]]).ravel()
+            tflux = np.concatenate(np.array([temp_lc.flux / temp_lc.meta['fmean'] for temp_lc in ensemble_list[:,1]])).ravel()
+            full_weight = np.concatenate(np.array([np.full(temp_lc.flux.size, temp_lc.meta['fmean'] / temp_lc.meta['fstd']) for temp_lc in ensemble_list[:,1]])).ravel()
             full_flux = np.multiply(tflux, full_weight)
 
             # TODO: As of now the code begins by ensuring 20 stars are added to the ensemble and then adds one by one. Might have to change to use a search radius
