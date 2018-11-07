@@ -63,10 +63,28 @@ class EnsembleCorrector(BaseCorrector):
         """
         fstart_time = time.time()
 
-        # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance
-        idx = np.arange(len(self.star_names))!=ifile
-        dist = np.sqrt((self.eclat[idx] - self.eclat[ifile])**2 + (self.eclon[idx] - self.eclon[ifile])**2)
+        # Calculate extra data for the target lightcurve
+        lc = lc.remove_nans()
+        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
+        drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
+        lc.meta = { 'fmean' : np.max(lc.flux),
+                            'fstd' : np.std(np.diff(lc.flux)),
+                            'frange' : frange,
+                            'drange' : drange}
+
+        # StarID, pixel positions and lightcurve filenames are retrieved from the database
+        select_params = ["todolist.starid", "pos_row", "pos_column"]
+        search_params = [f"camera={lc.camera:d}", f"ccd={lc.ccd:d}", "mean_flux>0"]
+        db_raw = self.search_lightcurves(select=select_params, search=search_params)
+        starid = np.array([row['starid'] for row in db_raw])
+        pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
+
+        # TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist 
+        # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance. Pixel distance used
+        idx = starid != lc.targetid
+        dist = np.sqrt((pixel_coords[:,0] - pixel_coords[~idx,0])**2 + (pixel_coords[:,1] - pixel_coords[~idx,1])**2)
         distance_index = dist.argsort()
+        target_index = distance_index[0]
         distance = dist[distance_index]
 
         # Set up start/end times for stellar time series
