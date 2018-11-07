@@ -347,7 +347,7 @@ class BaseCorrector(object):
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
 		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'):
-			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(fname)[0] + '.corr')
+			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(os.path.basename(fname))[0] + '.corr')
 
 			# Create new ASCII file:
 			with open(save_file, 'w') as fid:
