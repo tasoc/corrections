@@ -67,10 +67,10 @@ class EnsembleCorrector(BaseCorrector):
         lc = lc.remove_nans()
         frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
         drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-        lc.meta = { 'fmean' : np.max(lc.flux),
-                            'fstd' : np.std(np.diff(lc.flux)),
-                            'frange' : frange,
-                            'drange' : drange}
+        lc.meta.update({ 'fmean' : np.max(lc.flux),
+                        'fstd' : np.std(np.diff(lc.flux)),
+                        'frange' : frange,
+                        'drange' : drange})
 
         # StarID, pixel positions and lightcurve filenames are retrieved from the database
         select_params = ["todolist.starid", "pos_row", "pos_column"]
@@ -104,7 +104,7 @@ class EnsembleCorrector(BaseCorrector):
         star_count = initial_num_stars
         # (Alternate param) Initial distance at which to consider stars around the target
         # initial_search_radius = -1
-        
+
         # Follows index of dist array to restart search after the last addded star. Starts at 1 as the first star ordered by distance is the target
         i = 1
         # Setup search and select params to use in loop
@@ -127,10 +127,10 @@ class EnsembleCorrector(BaseCorrector):
                 # Compute the rest of its data. TODO: Change this to the database
                 frange = np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) / np.mean(next_star_lc.flux)
                 drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
-                next_star_lc.meta = { 'fmean' : np.max(next_star_lc.flux),
-                            'fstd' : np.std(np.diff(next_star_lc.flux)),
-                            'frange' : frange,
-                            'drange' : drange}
+                next_star_lc.meta.update({ 'fmean' : np.max(next_star_lc.flux),
+                                            'fstd' : np.std(np.diff(next_star_lc.flux)),
+                                            'frange' : frange,
+                                            'drange' : drange})
 
                 # Stars are added to ensemble if they fulfill the requirements
                 if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange']):
