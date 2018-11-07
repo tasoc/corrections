@@ -76,10 +76,18 @@ class TaskManager(object):
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL ORDER BY priority LIMIT 1;")
+
+		if starid is not None:
+			constraints = f" AND todolist.starid={starid:d}" 
+		else:
+			constraints = ''
+
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL"
+		+ constraints + " ORDER BY priority LIMIT 1;")
+		
 		task = self.cursor.fetchone()
-		if task is not None: task = dict(task)
-		return task
+		if task: return dict(task)
+		return None
 
 	def save_results(self, result):
 		# Update the status in the TODO list:
