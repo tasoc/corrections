@@ -7,3 +7,5 @@ lightkurve
 matplotlib >= 2.0, < 3.0
 seaborn
 psycopg2-binary
+scikit-learn
+statsmodels
