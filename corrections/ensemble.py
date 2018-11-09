@@ -210,46 +210,46 @@ class EnsembleCorrector(BaseCorrector):
         # Initialize bin size in days. We will fit the ensemble with splines
         bin_size = 4.0
         for ib in range(6):
-            #decrease bin size and bin data
+            # Decrease bin size and bin data
             clip_c = 6 - ib*0.75
-            gx = np.arange(time_start-0.5*bin_size,time_end+bin_size,bin_size)
-            #bidx  = np.digitize(full_time,gx)
-            bidx  = np.digitize(temp_time,gx)
-            bidx = bidx-1
-            #n, bin_edges = np.histogram(full_time,gx) #bin data
-            n, bin_edges = np.histogram(temp_time,gx) #bin data
-            #if there are too few points in the least-populated bin after the first couple of iterations, break out
-            #and stop decreasing the size of the bins
-            #if np.nanmin(n) < 10 and ib > 2:
-            #    break
-            ttflux = []
-            ttweight = []
-            ttime = []
-            #bin by bin build temporary arrays for weight, time, flux
-            for ix in range(len(n)):
-                ttweight = np.append(ttweight,np.nanmean(temp_weight[bidx==ix]))
-                ttime = np.append(ttime,np.nanmean(temp_time[bidx==ix]))
-                ttflux = np.append(ttflux,np.nanmedian(np.divide(temp_flux[bidx==ix],temp_weight[bidx==ix])))
-            ottime = ttime #keep track of originals since we will modify the tt arrays
-            otflux = ttflux
-            #clean up any NaNs
-            ttime = np.asarray(ttime)
-            ttflux = np.asarray(ttflux)
-            w1 = ttime[~np.isnan(ttflux)]
-            w2 = ttflux[~np.isnan(ttflux)]
+            # Define bins to divide the data and get index of bin where each time measure falls into
+            gx = np.arange(time_start - 0.5 * bin_size, time_end + bin_size, bin_size)
+            bidx  = np.digitize(temp_time, gx) - 1
+            n, bin_edges = np.histogram(temp_time, gx)
 
-            counter = len(ttime)
+            # If there are too few points in the least-populated bin after the first couple of iterations, break out and stop decreasing the size of the bins
+            # if np.nanmin(n) < 10 and ib > 2:
+                # break
+
+            # Average time and flux/weight for each bin defined for the lightcurve, clean nan and use it as weights for the spline
+            # NOTE --------- Implementation 1: Uses all bins and handles when there is an empty array with a RuntimeWarning -------NOTE
+            # num_bins = len(gx)-1
+            # bin_weight = np.array([np.nanmean(temp_weight[bidx==b]) for b in range(num_bins)])
+            # bin_time = np.array([np.nanmean(temp_time[bidx==b]) for b in range(num_bins)])
+            # bin_flux = np.array([np.nanmedian(np.divide(temp_flux[bidx==b], temp_weight[bidx==b])) for b in range(num_bins)])
+            # w1 = bin_time[~np.isnan(bin_flux)]
+            # w2 = bin_flux[~np.isnan(bin_flux)]
+            # NOTE --------- Implementation 2: Uses result from extra histogram to pick the non empty bins. -----------------------NOTE
+            # NOTE --------- Seems to accommplish the same without the warnings but needs testing to confirm ----------------------NOTE
+            bins_idx = np.where(n>0)[0]
+            bin_weight = np.array([np.mean(temp_weight[bidx==b]) for b in bins_idx])
+            w1 = np.array([np.mean(temp_time[bidx==b]) for b in bins_idx])
+            w2 = np.array([np.median(np.divide(temp_flux[bidx==b], temp_weight[bidx==b])) for b in bins_idx])
+            # NOTE --------------------------------------------------------------------------------------------------------------- NOTE
+
+            pp = scipy.interpolate.pchip(w1,w2)
+
+            counter = bin_weight.size
             while counter > 0:
-                pp = scipy.interpolate.pchip(w1,w2)
-                diff1 = np.divide(temp_flux,temp_weight)-pp(temp_time)
-                sdiff = clip_c*np.nanstd(diff1)
+                diff1 = np.divide(temp_flux, temp_weight) - pp(temp_time)
+                sdiff = clip_c * np.nanstd(diff1)
                 counter = len(diff1[np.abs(diff1)>sdiff])
                 temp_time = temp_time[np.abs(diff1)<sdiff]
                 temp_flux = temp_flux[np.abs(diff1)<sdiff]
                 temp_weight = temp_weight[np.abs(diff1)<sdiff]
 
-            pp = scipy.interpolate.pchip(w1,w2)
-
+            # NOTE Currently not used for anything. tscale is ignored
+            # Calculates the scale for the lightcurve
             break_locs = np.where(np.diff(lc.time)>0.1) #find places where there is a break in time
             break_locs = np.array(break_locs)
             if break_locs.size>0: #set up boundaries to correspond with breaks
