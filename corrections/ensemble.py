@@ -61,10 +61,12 @@ class EnsembleCorrector(BaseCorrector):
             lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
             The status of the correction.
         """
+        # TODO: Remove in final version. Used to test execution time
         fstart_time = time.time()
 
         # Calculate extra data for the target lightcurve
         lc = lc.remove_nans()
+        # NOTE: Is frange supposed to be missing the brackets and not join the percentiles ??
         frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
         drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
         lc.meta.update({ 'fmean' : np.max(lc.flux),
@@ -81,8 +83,8 @@ class EnsembleCorrector(BaseCorrector):
 
         # TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist 
         # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance. Pixel distance used
-        idx = starid != lc.targetid
-        dist = np.sqrt((pixel_coords[:,0] - pixel_coords[~idx,0])**2 + (pixel_coords[:,1] - pixel_coords[~idx,1])**2)
+        idx = starid == lc.targetid
+        dist = np.sqrt((pixel_coords[:,0] - pixel_coords[idx,0])**2 + (pixel_coords[:,1] - pixel_coords[idx,1])**2)
         distance_index = dist.argsort()
         target_index = distance_index[0]
         distance = dist[distance_index]
@@ -134,9 +136,8 @@ class EnsembleCorrector(BaseCorrector):
 
                 # Stars are added to ensemble if they fulfill the requirements
                 if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange']):
-                    temp_list.append([next_star_index, next_star_lc])
+                    temp_list.append([next_star_index, next_star_lc.copy()])
                 i += 1
-
 
             ensemble_list = np.array(temp_list)
             # Now populate the arrays of data with the stars in the ensemble
@@ -153,6 +154,8 @@ class EnsembleCorrector(BaseCorrector):
             gx = np.arange(time_start,time_end,0.5)
             n = np.histogram(full_time, gx)[0]
             n2 = np.histogram(lc.time, gx)[0]
+
+            # TODO: Probably should change the condition that adds stars to the algorithm
             # If the least-populated bin has less than 2000 points, increase the size of the ensemble by first
             # increasing the level of acceptable variability until it exceeds the variability of the star. Once that happens,
             # increase the search radius and reset acceptable variability back to initial value. If the search radius exceeds
@@ -178,8 +181,8 @@ class EnsembleCorrector(BaseCorrector):
             else:
                     break
 
-        # Ensemble is now built
-        # Clean up ensemble points by removing NaNs
+        
+        # Ensemble is now built. Clean up ensemble points by removing NaNs
         not_nan_idx = ~np.isnan(full_flux) # Since index is same for all arrays save it first to use cached version
         full_time = full_time[not_nan_idx]
         full_weight = full_weight[not_nan_idx]
@@ -193,7 +196,7 @@ class EnsembleCorrector(BaseCorrector):
         full_weight = full_weight[time_idx]
 
         # Simplify by discarding ensemble points outside the temporal range of the stellar time series
-        idx = np.logical_and(full_time > time_start, full_time < time_end)
+        idx = (full_time>time_start) & (full_time<time_end)
         full_time = full_time[idx]
         full_flux = full_flux[idx]
         full_weight = full_weight[idx]
@@ -202,7 +205,7 @@ class EnsembleCorrector(BaseCorrector):
         temp_flux = full_flux
         temp_weight = full_weight
 
-
+        # TODO: Remove in final version. Used to test execution time
         start_time = time.time()
         # Initialize bin size in days. We will fit the ensemble with splines
         bin_size = 4.0
@@ -295,6 +298,8 @@ class EnsembleCorrector(BaseCorrector):
                 tbidx = deepcopy(bidx)
 
             bin_size = bin_size/2
+
+        # TODO: Remove in final version. Used to test execution time
         print(f"Spline Fit, Time: {time.time()-start_time}")
 
         #Correct the lightcurve
@@ -302,10 +307,11 @@ class EnsembleCorrector(BaseCorrector):
         scale = 1.0
         lc_corr /= scale*pp(lc.time)
 
-        print(f"Full correction function, Time: {time.time()-fstart_time}")
+        # TODO: Remove in final version. Used to test execution time
+        print(f"\nFull correction function, Time: {time.time()-fstart_time}")
 
-        ax = lc.plot()
-        lc_corr.plot(ax=ax)
-        plt.show()
+        # ax = lc.plot(marker='o', label="Original LC")
+        # lc_corr.plot(ax=ax, color='orange', marker='o', markersize=3, ls='--', label="Correction")
+        # plt.show()
 
         return lc_corr, STATUS.OK
