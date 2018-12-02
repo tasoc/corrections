@@ -6,9 +6,9 @@
 Corrects Kepler/K2 data for instrumental effects and planetary signals
 to create new datasets optimized for asteroseismic analysis.
 
-@version: $Revision: 910 $
-@author:  Rasmus Handberg & Mikkel N. Lund ($Author: MikkelNL $)
-@date:    $Date: 2018-09-25 05:20:38 -0400 (ti, 25 sep 2018) $"""
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+.. codeauthor:: Mikkel N. Lund
+"""
 
 #==============================================================================
 # Required Packages:
@@ -20,12 +20,10 @@ import logging
 import numpy as np
 from numpy import zeros, empty, argsort, diff, mod, isfinite, array, append, searchsorted, NaN, Inf
 from scipy.stats import norm
-import astropy.io.fits as pyfits
 from copy import deepcopy as dc
 import matplotlib
 import matplotlib.pylab as plt
 import os.path
-from re import match
 from bottleneck import nanmedian, nanstd, median, nanargmax, nansum, allnan, nanmin, nanmax
 # Import our fast (Cython) routines:
 #from . import cython_import
@@ -64,7 +62,7 @@ def pixelversion(pixelmask=1, custom_version=None):
 		else:
 			return 'CUSTOM:' + custom_version
 	elif pixelmask == 2:
-		raise NotImplemented("K2P2 version not implemented here anymore")
+		raise NotImplementedError("K2P2 version not implemented here anymore")
 	elif pixelmask == 1:
 		return 'SB:0.4beta'
 	elif pixelmask == 0:
@@ -88,10 +86,20 @@ def set_output(folder=None, prefix='', fmt='png', native=False):
 #==============================================================================
 
 def scale_timescales(numax, min_value_long=30.0):
-	"""Scale the filter timescales with estimated nu_max of the star in question to avoid disturbing oscillation signals for low-numax stars."""
+	"""
+	Scale the filter timescales with estimated nu_max of the star in question to avoid disturbing oscillation signals for low-numax stars.
+
+	Parameters:
+		numax (float): nu_max in microHz.
+		min_value_long (float, optional): The shortest filter width to return in days. Default=30.
+
+	Returns:
+		float: New timescale which will avoid the specified nu_max region.
+	"""
 
 	# If invalid numax is given, return default filter value:
-	if numax is None or numax <= 0: return min_value_long
+	if numax is None or numax <= 0:
+		return min_value_long
 
 	# Estimate the FWHM and sigma of the oscillation envelope:
 	fwhm = 0.66*numax**0.88
@@ -120,14 +128,15 @@ class InvalidSigmasWarning(UserWarning):
 #==============================================================================
 
 def remove_jumps(t, x, jumps, width=3, return_flags=False):
-	"""Remove jumps from timeseries.
+	"""
+	Remove jumps from timeseries.
 
-	Input:
-		t	  - Time vector (days). Must be sorted in time.
-		x	  - Flux vector. Can contain invalid points (NaN).
-		jumps  - Vector of timestamps where jumps are to be corrected.
-		width  - Width of the region on each side of jumps to compare (default=3 days)
-		return_flags - Return two additional arrays with location of corrected jumps
+	Parameters:
+		t (ndarray): Time vector (days). Must be sorted in time.
+		x (ndarray): Flux vector. Can contain invalid points (NaN).
+		jumps (list): Vector of timestamps where jumps are to be corrected.
+		width (float): Width of the region on each side of jumps to compare (default=3 days).
+		return_flags (boolean): Return two additional arrays with location of corrected jumps.
 	"""
 
 	# Get the logger to use for printing messages:
@@ -299,36 +308,51 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 
 
 #==============================================================================
-def filter_flags(t, x, quality, return_flags=False):
-	"""Filter out flagged data from Kepler quality column.
+def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, return_flags=False):
+	"""
+	Filter out flagged data from Kepler quality column.
+
 	Returns new flux vector with bad datapoints removed (set to NaN) and a vector
-	with flagged jump time postions. This vector can later be passed into filter_jumps.
+	with flagged jump time postions. This vector can later be passed into :py:func:`filter_jumps`.
 
-	Input:
-		t       - Time vector (days)
-		x       - Flux vector
-		quality - Quality flags (integers)
+	Parameters:
+		t (ndarray): Time vector (days).
+		x (ndarray): Flux vector.
+		quality (ndarray): Quality flags (integers).
+		quality_remove (integer, optional): Flags that corresponds to bad data points.
+		return_flags (boolean): Also return flags of removed points.
 
-	Quality bits (*=used):
-		 1	     1*  Attitude Tweak (Correct+Remove)
-		 2	     2   Spacecraft in Safe Mode.
-		 3	     4   Spacecraft in Coarse Point.
-		 4	     8   Spacecraft in Earth Point.
-		 5	    16   Reaction wheel zero crossing.
-		 6	    32*  Reaction wheel Desaturation Event (Remove)
-		 7	    64   Argabrightening detected across multiple channels
-		 8     128   Cosmic Ray in Optimal Aperture pixel
-		 9     256*  Manual Exclude. The cadence was excluded because of an anomaly. (Remove)
-		10     512   Reserved
-		11    1024*  Discontinuity corrected between this cadence and the following one (Correct)
-		12    2048   Impulsive outlier removed after cotrending.
-		13    4096*  Argabrightening event on specified CCD mod/out detected (Remove)
-		14    8192   Cosmic Ray detected on collateral pixel row or column in optimal aperture.
-		15   16385   Detector Anomaly
-		16   32768   Spacecraft is not in Fine Point
-		17   65536*  No Data Reported (Remove)
-		18  131072   Possible Thruster Firing
-		19  262144*  Definite Thruster Firing (Remove)
+	Returns:
+		ndarray: Flux vector filterd for bad data points.
+		list: jumps
+		ndarray: flag_removed
+
+	Quality flags
+
+	===  ======  ==============  ==========================================================================
+	Bit  Value   Default Action  Meaning
+	===  ======  ==============  ==========================================================================
+	  1       1  Correct+Remove  Attitude Tweak.
+	  2       2  Ignore          Spacecraft in Safe Mode.
+	  3       4  Ignore          Spacecraft in Coarse Point.
+	  4       8  Ignore          Spacecraft in Earth Point.
+	  5      16  Ignore          Reaction wheel zero crossing.
+	  6      32  Remove          Reaction wheel Desaturation Event.
+	  7      64  Ignore          Argabrightening detected across multiple channels.
+	  8     128  Ignore          Cosmic Ray in Optimal Aperture pixel.
+	  9     256  Remove          Manual Exclude. The cadence was excluded because of an anomaly.
+	 10     512  Ignore          Reserved.
+	 11    1024  Correct         Discontinuity corrected between this cadence and the following one.
+	 12    2048  Ignore          Impulsive outlier removed after cotrending.
+	 13    4096  Remove          Argabrightening event on specified CCD mod/out detected.
+	 14    8192  Ignore          Cosmic Ray detected on collateral pixel row or column in optimal aperture.
+	 15   16385  Ignore          Detector Anomaly.
+	 16   32768  Ignore          Spacecraft is not in Fine Point.
+	 17   65536  Remove          No Data Reported.
+	 18  131072  Ignore          Possible Thruster Firing.
+	 19  262144  Remove          Definite Thruster Firing.
+	===  ======  ==============  ==========================================================================
+
 	"""
 
 	N = len(t)
@@ -359,7 +383,7 @@ def filter_flags(t, x, quality, return_flags=False):
 		jumps = append(jumps, [{'time': t[i], 'type': 'additive', 'force': False} for i in np.where(indx)[0]])
 
 	# Remove points flagged as bad data:
-	flag_removed = (quality & 1+32+256+4096+65536+262144 != 0 | ~isfinite(x))
+	flag_removed = (quality & quality_remove != 0 | ~isfinite(x))
 	x[flag_removed] = NaN
 
 	# Return results:
@@ -371,7 +395,18 @@ def filter_flags(t, x, quality, return_flags=False):
 
 #==============================================================================
 def _filter_single_phase(phase, x, width, dphase):
-	"""Function that takes single phase-curve and returns smoothed version"""
+	"""
+	Function that takes single phase-curve and returns smoothed version.
+
+	Parameters:
+		phase (ndarray):
+		x (ndarray):
+		width (float):
+		dphase (float):
+
+	Returns:
+		ndarray: Smoothed phase curve.
+	"""
 
 	phase_smooth = moving_nanmedian_cyclic(phase, x, width, dt=dphase)
 	phase_smooth = smooth_cyclic(phase_smooth, width/dphase)
@@ -380,17 +415,19 @@ def _filter_single_phase(phase, x, width, dphase):
 
 #==============================================================================
 def filter_phase(t, x, Plist, smooth_factor=1000):
-	"""Filter out specific periods by smoothing the phase-curve.
+	"""
+	Filter out specific periods by smoothing the phase-curve.
 
-	Input:
-		t	 - Time vector (days)
-		x	 - Flux vector
-		P	 - List of periods to remove
+	Parameters:
+		t (ndarray): Time vector (days).
+		x (ndarray): Flux vector.
+		P (list): List of periods to remove.
+		smooth_factor (float, optional): Factor of phase to use as smooth width.
 
-	Output:
+	Returns:
 		Filter flux vector that can be removed from timeseries.
 
-	Please note:
+	Note:
 		Does not require time to be sorted.
 		Can handle NaN in flux vector.
 	"""
@@ -461,129 +498,6 @@ def filter_phase(t, x, Plist, smooth_factor=1000):
 	# Return the total time-sorted phase curve:
 	return phase_tot
 
-#==============================================================================
-def load_kepler_fits(filelst, apply_filter=False, return_file_flag=False):
-	"""Load Kepler lightcurve FITS files.
-
-	Input:
-		filelst - List of paths to files to be loaded.
-		apply_filter - Boolean specifying if flags should be considered (default=True)
-
-	Output:
-		time  - Time vector (truncated barycentric julian day)
-		flux  - Flux vector
-		sigma - Flux vector errors
-		quality - Vector of quality stamps
-		position - Ditionary containing information about centroid positon of star.
-		jumps - List of timestamps where jumps are flagged to be present.
-		file_flag - Vector mapping datapoints to the files they originated from.
-
-	Please note:
-		The routine will attempt at correcting known issues with the timestamps in older versions of the Kepler data.
-	"""
-
-	# Basic check that the provided list is not empty:
-	filelst = np.atleast_1d(filelst)
-	if len(filelst) <= 0:
-		raise Exception("No files to be loaded")
-
-	t = array([], dtype='float64')
-	x = array([], dtype='float64')
-	sigma = array([], dtype='float64')
-	quality = array([], dtype='int32')
-	position = empty(shape=(0,2), dtype='float64')
-	position_breaks = np.array([], dtype='float64')
-	jumps = array([], dtype='float64')
-	file_flag = array([], dtype='int')
-	prev_quarter = -1
-	for fid,path_fits in enumerate(filelst):
-		# Load data:
-		with pyfits.open(path_fits, mode='readonly', memmap=True) as hdulist:
-			hdr = hdulist[0].header
-			LightCurveTable = hdulist[1].data
-
-		# Extract table columns - assume new FITS format:
-		tmpTime = LightCurveTable.field('TIME')
-		tmpFlux = LightCurveTable.field('SAP_FLUX')
-		tmpSigma = LightCurveTable.field('SAP_FLUX_ERR')
-		tmpQuality = LightCurveTable.field('SAP_QUALITY')
-		tmpCadenceNo = LightCurveTable.field('CADENCENO')
-		if 'MOM_CENTR1' in LightCurveTable and 'MOM_CENTR2' in LightCurveTable:
-			tmpCentroidRow = LightCurveTable.field('MOM_CENTR1')
-			tmpCentroidColumn = LightCurveTable.field('MOM_CENTR2')
-			tmpPosition = np.column_stack((tmpCentroidRow, tmpCentroidColumn))
-		else:
-			tmpPosition = empty((len(tmpTime),2))
-			tmpPosition.fill(NaN)
-
-		# Convert from BKJD to TBJD:
-		tmpTime += 54833.0
-
-		# Apply correction of times in all data releases prior to 21 (Nominal Kepler):
-		if not 'MISSION' in hdr or hdr['MISSION'] != 'K2':
-			if hdr['DATA_REL'] < 20:
-				tmpTime += 66.184/86400 # Add 66.184 seconds to entire timeseries
-				# Add an extra second to all cadences after additional leap-second:
-				if hdr['OBSMODE'] == 'long cadence':
-					indx = (tmpCadenceNo > 57139)
-				else:
-					indx = (tmpCadenceNo > 1702663)
-				tmpTime[indx] += 1.0/86400
-
-		# Remove flagged points:
-		if apply_filter:
-			tmpFlux, tmpJumps = filter_flags(tmpTime, tmpFlux, tmpQuality)
-			jumps = append(jumps, tmpJumps)
-
-		# Find timestamps where positions should be breaked,
-		# because of attitude tweaks and earth points:
-		indx = np.where(tmpQuality & 8+1 != 0)[0]
-		for i in indx:
-			if isfinite(tmpTime[i]):
-				position_breaks = append(position_breaks, tmpTime[i])
-			else:
-				k = i-1
-				while (k > 0 and ~isfinite(tmpTime[k])): k-=1
-				t1 = tmpTime[k]
-				k = i+1
-				while (k < len(tmpTime)-1 and ~isfinite(tmpTime[k])): k+=1
-				t2 = tmpTime[k]
-				position_breaks = append(position_breaks, (t1+t2)/2)
-
-		# Remove data with undefined times (eg. in attitude tweaks)
-		indx = isfinite(tmpTime)
-		tmpTime = tmpTime[indx]
-		tmpFlux = tmpFlux[indx]
-		tmpSigma = tmpSigma[indx]
-		tmpQuality = tmpQuality[indx]
-		tmpPosition = tmpPosition[indx, :]
-
-		# Always assume that there is a jump between quarters:
-		if len(t) > 0:
-			jumpforce = (hdr['QUARTER'] != prev_quarter)
-			jumps = append(jumps, {'time': np.min(tmpTime), 'type': 'multiplicative', 'force': jumpforce})
-
-		# Append to final timeseries:
-		t = append(t, tmpTime)
-		x = append(x, tmpFlux)
-		sigma = append(sigma, tmpSigma)
-		quality = append(quality, tmpQuality)
-		position = append(position, tmpPosition, axis=0)
-		if return_file_flag: file_flag = append(file_flag, [fid]*len(tmpTime))
-		prev_quarter = int(hdr['QUARTER'])
-
-	# Ensure that position breaks are unique and gather the positions
-	# and position breaks into one dictionary, which we will return:
-	if allnan(position):
-		position = None
-	else:
-		position_breaks = np.unique(position_breaks)
-		position = {'pixels': position, 'break': position_breaks}
-
-	if return_file_flag:
-		return t, x, sigma, quality, position, jumps, file_flag
-	else:
-		return t, x, sigma, quality, position, jumps
 
 #==============================================================================
 def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma_clip=5.0, pixel_off_clip=15.0):
@@ -1000,23 +914,23 @@ def filter_position_1d(time, flux, star_movement, timescale_position_smooth=None
 def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long=3.0, timescale_short=1/24, sigma_clip=4.5, scale_clip=5.0, scale_width=1.0, phase_smooth_factor=1000, transit_model=None, it=3):
 	"""Main filter function.
 
-	Input:
-		t			  - Time vector (days)
-		x			  - Flux vector
-		quality		- Quality vector (bit-flags) from Kepler data; default=None.
-		position	   - Centroid positions of star on CCD as two column list; default=None.
-		P			  - Known planetary period (days); default=None.
-		jumps		  - List of known jumps in the flux (timestamp in days); default=None.
-		timescale_long - Timescale of long filter in days; default=3.
-		timescale_short - Timescale of short filter in days; default=1/24.
-		sigma_clip	  - Sigma-clip threshold; default=4.5.
-		scale_clip	  - Scale at which to switch between long and short filters; default=5.
-		scale_width	 - Width of transition region between filters; default=1.
-		phase_smooth_factor - Fraction of period to smooth phase curce with; default=1000.
-		transit_model   - Full transit model to be used instead of smoothed phase curve; default=None.
-		it  -  Number of iterations between different filters. Default=3.
+	Parameters:
+		t (ndarray): Time vector (days).
+		x (ndarray): Flux vector.
+		quality (ndarray, None): Quality vector (bit-flags) from Kepler data; default=None.
+		position (ndarray, None): Centroid positions of star on CCD as two column list; default=None.
+		P (ndarray): Known planetary period (days); default=None.
+		jumps (list): List of known jumps in the flux (timestamp in days); default=None.
+		timescale_long (float): Timescale of long filter in days; default=3.
+		timescale_short (float): Timescale of short filter in days; default=1/24.
+		sigma_clip (float): Sigma-clip threshold; default=4.5.
+		scale_clip (float): Scale at which to switch between long and short filters; default=5.
+		scale_width (float): Width of transition region between filters; default=1.
+		phase_smooth_factor (float): Fraction of period to smooth phase curce with; default=1000.
+		transit_model (ndarray): Full transit model to be used instead of smoothed phase curve; default=None.
+		it (integer): Number of iterations between different filters. Default=3.
 
-	Output:
+	Returns:
 		tnew	   - New time vector with the same length as the input vectors.
 		xnew	   - New flux vector with the same length as the input vectors.
 		sigma	  - Vector of estmated errors on measurements.
@@ -1047,8 +961,6 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	if not quality is None: quality = quality[indx_sorttime] # sorted quality
 	if not position is None: position['pixels'] = position['pixels'][indx_sorttime, :] # sorted position
 
-
-
 	# If not correcting position and transits, don't iterate:
 	if position is None and transit_model is None and P is None:
 		it = 1
@@ -1067,13 +979,10 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	else:
 		flag_removed = ~isfinite(x)
 
-
-
 	# Remove jumps:
 	if not jumps is None:
 		logger.info('Removing jumps...')
 		x, jumps_flag, flag_jumps2 = remove_jumps(t, x, jumps, return_flags=True)
-
 
 	# Fill gaps in timeseries with NaN
 	# "ori" is a flag so xg[ori] will retrive the original points
