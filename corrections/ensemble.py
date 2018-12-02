@@ -311,7 +311,7 @@ class EnsembleCorrector(BaseCorrector):
         print(f"\nFull correction function, Time: {time.time()-fstart_time}")
 
         # ax = lc.plot(marker='o', label="Original LC")
-        # lc_corr.plot(ax=ax, color='orange', marker='o', markersize=3, ls='--', label="Correction")
+        # lc_corr.plot(ax=ax, color='orange', marker='o', markersize=3, ls='--', label="Corrected LC")
         # plt.show()
 
         return lc_corr, STATUS.OK
