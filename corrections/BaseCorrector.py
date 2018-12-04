@@ -31,13 +31,13 @@ class STATUS(enum.Enum):
 	Status indicator of the status of the correction.
 
 	"""
-
-	UNKNOWN = 0
-	OK = 1
-	ERROR = 2
-	WARNING = 3
-	STARTED = 6
-	# TODO: various statuses as required
+	UNKNOWN = 0 #: The status is unknown. The actual calculation has not started yet.
+	STARTED = 6 #: The calculation has started, but not yet finished.
+	OK = 1      #: Everything has gone well.
+	ERROR = 2   #: Encountered a catastrophic error that I could not recover from.
+	WARNING = 3 #: Something is a bit fishy. Maybe we should try again with a different algorithm?
+	ABORT = 4   #: The calculation was aborted.
+	SKIPPED = 5 #: The target was skipped because the algorithm found that to be the best solution.
 
 class BaseCorrector(object):
 	"""
@@ -166,20 +166,27 @@ class BaseCorrector(object):
 		return status
 
 
-	def search_lightcurves(self, search=None, order_by=None, limit=None):
+	def search_lightcurves(self, select=None, search=None, order_by=None, limit=None):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
 		Parameters:
-			cbv_area (integer or None): Only return stars from this CBV area.
+			search (list of strings or None): Conditions to apply to the selection of stars from the database
+			order_by (string or None): Column to order the database output by
+			limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved
 
 		Returns:
-			list of dicts:
+			list of dicts: Returns all stars retrieved by the call to the database as dicts/tasks that can be consumed directly by load_lightcurve
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
+
+		if select is None:
+			select = '*'
+		elif isinstance(select, (list, tuple)):
+			select = ", ".join(select)
 
 		if search is None:
 			search = ''
@@ -189,7 +196,8 @@ class BaseCorrector(object):
 		order_by = '' if order_by is None else " ORDER BY " + order_by
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND {search:s}{order_by:s}{limit:s};".format(
+			select=select,
 			search=search,
 			order_by=order_by,
 			limit=limit
@@ -220,7 +228,7 @@ class BaseCorrector(object):
 		logger = logging.getLogger(__name__)
 
 		# Find the relevant information in the TODO-list:
-		if not isinstance(task, dict):
+		if not isinstance(task, dict) or task.get("lightcurve") is None:
 			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (task, ))
 			task = self.cursor.fetchone()
 			if task is None:
@@ -339,7 +347,7 @@ class BaseCorrector(object):
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
 		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'):
-			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(fname)[0] + '.corr')
+			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(os.path.basename(fname))[0] + '.corr')
 
 			# Create new ASCII file:
 			with open(save_file, 'w') as fid:
