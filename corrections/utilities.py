@@ -46,13 +46,12 @@ def sphere_distance(ra1, dec1, ra2, dec2):
 	))
 
 #------------------------------------------------------------------------------
-def rms_timescale(time, flux, timescale=3600/86400):
+def rms_timescale(lc, timescale=3600/86400):
 	"""
 	Compute robust RMS on specified timescale. Using MAD scaled to RMS.
 
 	Parameters:
-		time (ndarray): Timestamps in days.
-		flux (ndarray): Flux to calculate RMS for.
+		lc (``lightkurve.TessLightCurve`` object): Timeseries to calculate RMS for.
 		timescale (float, optional): Timescale to bin timeseries before calculating RMS. Default=1 hour.
 
 	Returns:
@@ -62,11 +61,11 @@ def rms_timescale(time, flux, timescale=3600/86400):
 	"""
 
 	# Construct the bin edges seperated by the timescale:
-	bins = np.arange(np.nanmin(time), np.nanmax(time), timescale)
-	bins = np.append(bins, np.nanmax(time))
+	bins = np.arange(np.nanmin(lc.time), np.nanmax(lc.time), timescale)
+	bins = np.append(bins, np.nanmax(lc.time))
 
 	# Bin the timeseries to one hour:
-	flux_bin, _, _ = binned_statistic(time, flux, nanmean, bins=bins)
+	flux_bin, _, _ = binned_statistic(lc.time, lc.flux, nanmean, bins=bins)
 
 	# Compute robust RMS value (MAD scaled to RMS)
 	return mad_to_sigma * nanmedian(np.abs(flux_bin - nanmedian(flux_bin)))

@@ -176,7 +176,7 @@ class BaseCorrector(object):
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc.flux, ddof=1)
-			details['rms_hour'] = rms_timescale(lc.time, lc.flux, timescale=3600/86400)
+			details['rms_hour'] = rms_timescale(lc, timescale=3600/86400)
 			details['ptp'] = nanmedian(np.abs(np.diff(lc.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
