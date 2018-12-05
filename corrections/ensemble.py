@@ -27,7 +27,7 @@ from operator import add
 from copy import deepcopy
 from time import sleep
 
-from BaseCorrector import BaseCorrector
+from . import BaseCorrector
 
 
 # from star import Star
