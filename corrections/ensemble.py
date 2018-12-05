@@ -3,13 +3,10 @@
 # -*- coding: utf-8 -*-
 """
 Initial code structure for the ensemble photometry detrending program.
-
 Global Parameters:
     __data_folder__ (str): Location of the data
     __sector__ (str): Sector to look at
-
 Created on Thu Mar 29 09:58:55 2018
-
 .. codeauthor:: Derek Buzasi
 .. codeauthor:: Oliver J. Hall
 .. codeauthor:: Lindsey Carboneau
@@ -41,7 +38,6 @@ class EnsembleCorrector(BaseCorrector):
     def __init__(self, *args, **kwargs):
         """
         Initialize the correction object
-
         Parameters:
             *args: Arguments for the BaseCorrector class
             **kwargs: Keyword Arguments for the BaseCorrector class
@@ -53,10 +49,8 @@ class EnsembleCorrector(BaseCorrector):
         Function that takes all input stars for a sector and uses them to find a detrending
         function using ensemble photometry for a star 'star_names[ifile]', where ifile is the
         index for the star in the star_array and star_names list.
-
         Parameters:
             lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
-
         Returns:
             lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
             The status of the correction.
@@ -310,8 +304,8 @@ class EnsembleCorrector(BaseCorrector):
         # TODO: Remove in final version. Used to test execution time
         print(f"\nFull correction function, Time: {time.time()-fstart_time}")
 
-        # ax = lc.plot(marker='o', label="Original LC")
-        # lc_corr.plot(ax=ax, color='orange', marker='o', markersize=3, ls='--', label="Corrected LC")
-        # plt.show()
+        ax = lc.plot(marker='o', label="Original LC")
+        lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
+        plt.show()
 
         return lc_corr, STATUS.OK

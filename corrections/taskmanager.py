@@ -5,12 +5,14 @@ A TaskManager which keeps track of which targets to process.
 
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 .. codeauthor:: Lindsey Carboneau
+.. codeauthor:: Filipe Pereira
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
 import os.path
 import sqlite3
 import logging
+import numpy as np
 
 class TaskManager(object):
 	"""
@@ -104,11 +106,33 @@ class TaskManager(object):
 		self.cursor.execute("UPDATE todolist SET corr_status=6 WHERE priority=?;", (taskid,))
 		self.conn.commit()
 
-	def get_random_task(self):
+	def get_all(self, camera=None, ccd=None, limit=None):
 		"""
-		Get random task to be processed.
+		Get all tasks to be processed on camera { } ccd { }.
 
 		Returns:
-			dict or None: Dictionary of settings for task.
+			List of target starids that can now be fed into get_task() by the caller
 		"""
-		raise NotImplementedError("A helpful error message goes here") # TODO
+		
+		constraints = []
+		if camera is not None:
+			constraints.append(f'camera={camera:d}')
+		if ccd is not None:
+			constraints.append(f'ccd={ccd:d}')
+		# Still necessary?
+		constraints.append(f'mean_flux>0')
+		if constraints:
+			constraints = ' AND ' + " AND ".join(constraints)
+
+		limit = '' if limit is None else " LIMIT %d" % limit
+
+		query = "SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL {constraints:s} ORDER BY priority {limit:s};".format(
+			search=search,
+			limit=limit
+		)
+		self.cursor.execute(query)
+
+		tasks = self.cursor.fetchall()
+		if tasks:
+			return [dict(task) for task in tasks]
+			

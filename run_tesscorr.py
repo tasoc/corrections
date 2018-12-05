@@ -32,7 +32,9 @@ if __name__ == '__main__':
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
-	parser.add_argument('--all', help='Run correction on all targets.', action='store_true')
+	parser.add_argument('-a', '--all', help='Run correction on all targets.', action='store_true')
+	parser.add_argument('--camera', type=int, help='The numerical identifier of the TESS camera, primarily for testing.')
+	parser.add_argument('--ccd', type=int, help='The numerical identifier of the TESS camera CCD, primarily for testing.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
@@ -103,3 +105,33 @@ if __name__ == '__main__':
 
 				if not args.all:
 					break
+	
+	
+	# ------------------------------------------------------------------------------------
+	# Lindsey's code
+
+	# import functools
+
+	# # Create partial function of tesscorr, setting the common keywords:
+	# f = functools.partial(tesscorr, input_folder=input_folder, output_folder=output_folder, plot=args.plot)
+
+	# # Run the program:
+	# with TaskManager(input_folder) as tm:
+	# 	if args.starid is not None:
+	# 		task = tm.get_task(starid=args.starid)
+	# 		corr = f(starid=args.starid, **task)
+
+	# 	elif args.all:	
+	# 		#TODO: there is an unimplemented case, which is "run everything"; but that should really only be done by an MPI scheduler?
+	# 		if args.camera and args.ccd:
+	# 			# unset int in python resolve to 0, so should be False if not set
+	# 			target_list = tm.get_all(args.camera, args.ccd, args.test_range)
+	# 			for starid in target_list:
+	# 				task = tm.get_task(starid=int(starid))
+	# 				corr = f(starid=int(starid), **task)
+	# 	# TODO: another unimplemented case, where test_range is not None (or a list from a file) but no camera or ccd given
+
+	# # Write out the results?
+	# if not args.quiet:
+	# 	print("=======================")
+	# 	#print("STATUS: {0}".format(corr.status.name))

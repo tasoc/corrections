@@ -9,6 +9,7 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 
 .. codeauthor:: Lindsey Carboneau
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+.. codeauthor:: Filipe Pereira
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
