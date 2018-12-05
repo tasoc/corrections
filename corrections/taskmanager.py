@@ -55,6 +55,21 @@ class TaskManager(object):
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
 
+		self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
+		self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
+		self.conn.commit()
+
+		# Create table for diagnostics:
+		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
+			priority INT PRIMARY KEY NOT NULL,
+			lightcurve TEXT,
+			elaptime REAL NOT NULL,
+			variance DOUBLE PRECISION,
+			rms_hour DOUBLE PRECISION,
+			ptp DOUBLE PRECISION,
+			errors TEXT
+		);""")
+
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL")
 		self.conn.commit()
 
@@ -83,6 +98,8 @@ class TaskManager(object):
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
+		else:
+			constraints = ''
 
 		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % constraints)
 		task = self.cursor.fetchone()
@@ -90,12 +107,31 @@ class TaskManager(object):
 		return task
 
 	def save_results(self, result):
-		# Update the status in the TODO list:
-		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
-			result['corr_status'].value,
-			result['priority']
-		))
-		self.conn.commit()
+
+		details = result.get('details', {})
+
+		try:
+			# Update the status in the TODO list:
+			self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
+				result['status_corr'].value,
+				result['priority']
+			))
+
+			# Save additional diagnostics:
+			self.cursor.execute("INSERT INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
+				result['priority'],
+				result['lightcurve_corr'],
+				result['elaptime_corr'],
+				details.get('variance', None),
+				details.get('rms_hour', None),
+				details.get('ptp', None),
+				details.get('errors', None)
+			))
+			self.conn.commit()
+		except:
+			self.conn.rollback()
+			raise
+
 
 	def start_task(self, taskid):
 		"""

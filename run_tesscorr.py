@@ -18,7 +18,6 @@ from __future__ import with_statement, print_function
 import os
 import argparse
 import logging
-from timeit import default_timer
 import corrections
 
 #------------------------------------------------------------------------------
@@ -89,16 +88,9 @@ if __name__ == '__main__':
 					task = tm.get_random_task()
 
 				# Run the correction:
-				t1 = default_timer()
-				status = corr.correct(task)
-				t2 = default_timer()
+				result = corr.correct(task)
 
 				# Construct results to return to TaskManager:
-				result = task.copy()
-				result.update({
-					'corr_status': status,
-					'corr_elaptime': t2-t1
-				})
 				tm.save_results(result)
 
 				if not args.all:

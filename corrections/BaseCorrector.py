@@ -12,15 +12,20 @@ Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/phot
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
+import six
 import os.path
 import shutil
 import enum
 import logging
 import sqlite3
+import traceback
 import numpy as np
+from timeit import default_timer
+from bottleneck import nanmedian, nanvar
 from astropy.io import fits
 from lightkurve import TessLightCurve
 from .version import get_version
+from .utilities import rms_timescale
 
 __version__ = get_version()
 
@@ -140,11 +145,16 @@ class BaseCorrector(object):
 
 		logger = logging.getLogger(__name__)
 
-		# Load the lightcurve
-		lc = self.load_lightcurve(task)
+		t1 = default_timer()
 
-		# Run the correction on this lightcurve:
+		error_msg = None
+		save_file = None
+		result = task.copy()
 		try:
+			# Load the lightcurve
+			lc = self.load_lightcurve(task)
+
+			# Run the correction on this lightcurve:
 			lc, status = self.do_correction(lc)
 
 		except (KeyboardInterrupt, SystemExit):
@@ -153,26 +163,48 @@ class BaseCorrector(object):
 
 		except:
 			status = STATUS.ERROR
+			error_msg = traceback.format_exc().strip()
 			logger.exception("Correction failed.")
 
 		# Check that the status has been changed:
 		if status == STATUS.UNKNOWN:
 			raise Exception("STATUS was not set by do_correction")
 
+		# Calculate diagnostics:
+		details = {}
+
 		if status in (STATUS.OK, STATUS.WARNING):
+			# Calculate diagnostics:
+			details['variance'] = nanvar(lc.flux, ddof=1)
+			details['rms_hour'] = rms_timescale(lc.time, lc.flux, timescale=3600/86400)
+			details['ptp'] = nanmedian(np.abs(np.diff(lc.flux)))
+
 			# TODO: set outputs; self._details = self.lightcurve, etc.
-			self.save_lightcurve(lc)
+			save_file = self.save_lightcurve(lc)
 
-		return status
+			# Construct result dictionary from the original task
+			result = lc.meta['task'].copy()
+
+		# Update results:
+		t2 = default_timer()
+		details['errors'] = error_msg
+		result.update({
+			'status_corr': status,
+			'elaptime_corr': t2-t1,
+			'lightcurve_corr': save_file,
+			'details': details
+		})
+
+		return result
 
 
-	def search_lightcurves(self, select=None, search=None, order_by=None, limit=None):
+	def search_database(self, select=None, search=None, order_by=None, limit=None):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
 		Parameters:
 			search (list of strings or None): Conditions to apply to the selection of stars from the database
-			order_by (string or None): Column to order the database output by
+			order_by (list, string or None): Column to order the database output by.
 			limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved
 
 		Returns:
@@ -186,14 +218,20 @@ class BaseCorrector(object):
 		if select is None:
 			select = '*'
 		elif isinstance(select, (list, tuple)):
-			select = ", ".join(select)
+			select = ",".join(select)
 
 		if search is None:
 			search = ''
 		elif isinstance(search, (list, tuple)):
 			search = " AND ".join(search)
 
-		order_by = '' if order_by is None else " ORDER BY " + order_by
+		if order_by is None:
+			order_by = ''
+		elif isinstance(order_by, (list, tuple)):
+			order_by = " ORDER BY " + ",".join(order_by)
+		elif isinstance(order_by, six.string_types):
+			order_by = " ORDER BY " + order_by
+
 		limit = '' if limit is None else " LIMIT %d" % limit
 
 		query = "SELECT {select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND {search:s}{order_by:s}{limit:s};".format(
@@ -358,7 +396,7 @@ class BaseCorrector(object):
 				fid.write("# Correction Version: %s\n" % __version__)
 				if lc.meta['additional_headers']:
 					for key, value in lc.meta['additional_headers'].items():
-						fid.write("# %18s: %s\n" % (key, value))
+						fid.write("# %-18s: %s\n" % (key, value))
 				fid.write("#\n")
 				fid.write("# Column 1: Time (days)\n")
 				fid.write("# Column 2: Corrected flux (ppm)\n")
@@ -366,12 +404,15 @@ class BaseCorrector(object):
 				fid.write("# Column 4: Quality flags\n")
 				fid.write("#-------------------------------------------------\n")
 				for k in range(len(lc.time)):
-					fid.write("%f  %e  %e  %d\n" % (
+					fid.write("%f  %.16e  %.16e  %d\n" % (
 						lc.time[k],
 						lc.flux[k],
 						lc.flux_err[k],
 						lc.quality[k]
 					))
 				fid.write("#-------------------------------------------------\n")
+
+		# Store the output file in the details object for future reference:
+		save_file = os.path.relpath(save_file, output_folder).replace('\\', '/')
 
 		return save_file
