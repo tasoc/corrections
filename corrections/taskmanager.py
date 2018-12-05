@@ -106,6 +106,17 @@ class TaskManager(object):
 		self.cursor.execute("UPDATE todolist SET corr_status=6 WHERE priority=?;", (taskid,))
 		self.conn.commit()
 
+	def get_random_task(self):
+		"""
+		Get random task to be processed.
+		Returns:
+			dict or None: Dictionary of settings for task.
+		"""
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL ORDER BY RANDOM() LIMIT 1;")
+		task = self.cursor.fetchone()
+		if task: return dict(task)
+		return None
+
 	def get_all(self, camera=None, ccd=None, limit=None):
 		"""
 		Get all tasks to be processed on camera { } ccd { }.
@@ -135,4 +146,3 @@ class TaskManager(object):
 		tasks = self.cursor.fetchall()
 		if tasks:
 			return [dict(task) for task in tasks]
-			
