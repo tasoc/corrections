@@ -11,6 +11,7 @@ from __future__ import division, with_statement, print_function, absolute_import
 import os.path
 import sqlite3
 import logging
+from . import STATUS
 
 class TaskManager(object):
 	"""
@@ -101,7 +102,11 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % constraints)
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % (
+			STATUS.OK.value,
+			STATUS.WARNING.value,
+			constraints
+		))
 		task = self.cursor.fetchone()
 		if task is not None: task = dict(task)
 		return task
@@ -137,7 +142,7 @@ class TaskManager(object):
 		"""
 		Mark a task as STARTED in the TODO-list.
 		"""
-		self.cursor.execute("UPDATE todolist SET corr_status=6 WHERE priority=?;", (taskid,))
+		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (STATUS.STARTED.value, taskid))
 		self.conn.commit()
 
 	def get_random_task(self):
