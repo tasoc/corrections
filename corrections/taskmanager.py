@@ -18,12 +18,14 @@ class TaskManager(object):
 	A TaskManager which keeps track of which targets to process.
 	"""
 
-	def __init__(self, todo_file):
+	def __init__(self, todo_file, cleanup=False):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
 		Parameters:
-			todo_file: Path to the TODO-file.
+			todo_file (string): Path to the TODO-file.
+			cleanup (boolean): Perform cleanup/optimization of TODO-file before
+				during initialization. Default=False.
 
 		Raises:
 			IOError: If TODO-file could not be found.
@@ -56,6 +58,8 @@ class TaskManager(object):
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
 
+		# Reset the status of everything for a new run:
+		# TODO: This should obviously be removed once we start running for real
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
 		self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
 		self.conn.commit()
@@ -70,10 +74,24 @@ class TaskManager(object):
 			ptp DOUBLE PRECISION,
 			errors TEXT
 		);""")
-
-		self.cursor.execute("UPDATE todolist SET corr_status=NULL")
 		self.conn.commit()
 
+		# Reset calculations with status STARTED or ABORT:
+		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value)
+		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
+		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
+		self.conn.commit()
+
+		# Run a cleanup/optimization of the database before we get started:
+		if cleanup:
+			self.logger.info("Cleaning TODOLIST before run...")
+			try:
+				self.conn.isolation_level = None
+				self.cursor.execute("VACUUM;")
+			except:
+				raise
+			finally:
+				self.conn.isolation_level = ''
 
 	def __enter__(self):
 		return self
@@ -113,6 +131,7 @@ class TaskManager(object):
 
 	def save_results(self, result):
 
+		# Extract details dictionary:
 		details = result.get('details', {})
 
 		try:

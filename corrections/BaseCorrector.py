@@ -294,7 +294,7 @@ class BaseCorrector(object):
 				sector=2,
 				#ra=0,
 				#dec=0,
-				quality_bitmask=2+8+256 # lightkurve.utils.TessQualityFlags.DEFAULT_BITMASK
+				quality_bitmask=2+8+256
 			)
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
@@ -347,8 +347,8 @@ class BaseCorrector(object):
 
 		# Find the name of the correction method based on the class name:
 		CorrMethod = {
-			'EnsembleCorrector': 'ensemble',
-			'CBVCorrector': 'cbv',
+			'EnsembleCorrector': 'Ensemble',
+			'CBVCorrector': 'CBV',
 			'KASOCFilterCorrector': 'KASOC Filter'
 		}.get(self.__class__.__name__)
 
