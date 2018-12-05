@@ -3,9 +3,6 @@
 """
 The basic correction class for the TASOC Photomety pipeline.
 All other specific correction classes will inherit from BaseCorrector.
-Structure from `BasePhotometry by Rasmus Handberg <https://github.com/tasoc/photometry/blob/devel/photometry/BasePhotometry.py>`_
-
-- :py:class:`STATUS`: Status flags for pipeline performance logging
 
 .. codeauthor:: Lindsey Carboneau
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
