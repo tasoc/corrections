@@ -7,7 +7,6 @@
 from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
-import sqlite3
 import matplotlib.pyplot as plt
 import os
 from sklearn.decomposition import PCA
@@ -26,8 +25,8 @@ import dill
 import json
 from tqdm import tqdm
 import time as TIME
-from cbv_util import compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
-from cbv_weights import compute_weight_interpolations
+from .cbv_util import compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
+#from .cbv_weights import compute_weight_interpolations
 plt.ioff()
 
 import logging

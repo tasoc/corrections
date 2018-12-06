@@ -29,7 +29,7 @@ warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") 
 from scipy.spatial import distance
 from tqdm import tqdm
 import math
-from cbv_util import compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
+from .cbv_util import compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
 plt.ioff()
 import corner
 import dill

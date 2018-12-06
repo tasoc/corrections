@@ -10,23 +10,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from sklearn.decomposition import PCA
-from sklearn.model_selection import cross_val_score
-from bottleneck import allnan, nansum, move_median, nanmedian, nanstd, nanmean
-from scipy.optimize import minimize
-from scipy.stats import pearsonr, entropy
+
+from bottleneck import allnan, nanmedian
 from scipy.interpolate import pchip_interpolate
-from scipy.signal import correlate
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
-from scipy.special import xlogy
-import scipy.linalg as slin
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from tqdm import tqdm
-import time as TIME
-from cbv_util import compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
-from cbv_weights import compute_weight_interpolations
 
-from cbv_main import CBV, cbv_snr_reject, clean_cbv
+
+from .cbv_main import CBV, cbv_snr_reject, clean_cbv
+from .cbv_util import compute_scores
 
 from .. import BaseCorrector, STATUS
 import logging
@@ -40,9 +34,12 @@ plt.ioff()
 
 class CBVCorrector(BaseCorrector):
 	
-	def __init__(self, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-2, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
-			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, *args, **kwargs):	
+	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-2, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
+			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):	
 		
+		# Call the parent initializing:
+		# This will set several default settings
+		super(self.__class__, self).__init__(*args, **kwargs)
 		
 		self.Numcbvs = Numcbvs
 		self.use_bic = use_bic
@@ -60,7 +57,7 @@ class CBVCorrector(BaseCorrector):
 		
 		self.compute_cbvs()
 		self.cotrend_ini() 
-		self.compute_weight_interpolations()
+#		self.compute_weight_interpolations()
 
 	#-------------------------------------------------------------------------
 
@@ -75,7 +72,7 @@ class CBVCorrector(BaseCorrector):
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
 	
 	
-		tmpfile = os.path.join(self.data_path, 'mat-%d.npz' %cbv_area)
+		tmpfile = os.path.join(self.data_folder, 'mat-%d.npz' %cbv_area)
 		if os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
@@ -84,7 +81,7 @@ class CBVCorrector(BaseCorrector):
 	
 		else:
 			# Find the median of the variabilities:		
-			variability = np.array([row['variability'] for row in self.search_database(search=['ffi', 'cbv_area=%i' %cbv_area], select='variability')], dtype='float64')
+			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area], select='variability')], dtype='float64')
 			median_variability = nanmedian(variability)
 	
 			# Plot the distribution of variability for all stars:
@@ -94,12 +91,11 @@ class CBVCorrector(BaseCorrector):
 			ax.axvline(self.threshold_variability, color='r')
 			ax.set_xscale('log')
 			ax.set_xlabel('Variability')
-			fig.savefig(os.path.join(self.data_path, 'variability-area%d.png' %cbv_area))
+			fig.savefig(os.path.join(self.data_folder, 'variability-area%d.png' %cbv_area))
 			plt.close(fig)
 	
-		
 			# Get the list of star that we are going to load in the lightcurves for:
-			stars = self.search_database(search=['ffi', 'cbv_area=%i' %cbv_area, 'variability < %d' %self.threshold_variability*median_variability], select=['mean_flux', 'variance'])
+			stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area, 'variability < %f' %(self.threshold_variability*median_variability)], select=['mean_flux', 'variance'])
 	
 			# Number of stars returned:
 			Nstars = len(stars)
@@ -128,7 +124,7 @@ class CBVCorrector(BaseCorrector):
 	
 			# Only start calculating correlations if we are actually filtering using them:
 			if self.threshold_correlation < 1.0:
-				file_correlations = os.path.join(self.data_path, 'correlations-%d.npy' %cbv_area)
+				file_correlations = os.path.join(self.data_folder, 'correlations-%d.npy' %cbv_area)
 				if os.path.exists(file_correlations):
 					correlations = np.load(file_correlations)
 				else:
@@ -163,7 +159,7 @@ class CBVCorrector(BaseCorrector):
 		logger=logging.getLogger(__name__)
 		
 		logger.info('Running matrix clean')
-		tmpfile = os.path.join(self.data_path, 'mat-%d_clean.npz' %cbv_area)
+		tmpfile = os.path.join(self.data_folder, 'mat-%d_clean.npz' %cbv_area)
 		if os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
@@ -248,7 +244,7 @@ class CBVCorrector(BaseCorrector):
 			cbv, indx_lowsnr = cbv_snr_reject(cbv0, self.threshold_snrtest)
 		
 			# Save the CBV to file:
-			np.save(os.path.join(self.data_path, 'cbv-%d.npy' % (cbv_area)), cbv)
+			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)), cbv)
 			
 			
 			# Plot the "effectiveness" of each CBV:
@@ -269,7 +265,7 @@ class CBVCorrector(BaseCorrector):
 			ax02.set_xlabel('CBV number')
 			ax02.set_ylabel('Variance explained ratio')
 			
-			fig0.savefig(os.path.join(self.data_path, 'cbv-perf-area%d.png' %cbv_area))
+			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
 		
 
@@ -293,8 +289,8 @@ class CBVCorrector(BaseCorrector):
 				ax.plot(-np.abs(U0[:, k]), 'r-')
 				ax.plot(np.abs(U[:, k]), 'k-')
 				ax.set_title('Basis Vector %d' % (k+1))
-			fig.savefig(os.path.join(self.data_path, 'cbvs-area%d.png' %cbv_area))
-			fig2.savefig(os.path.join(self.data_path, 'U_cbvs-area%d.png' %cbv_area))
+			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' %cbv_area))
+			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' %cbv_area))
 			plt.close('all')
 			
 	#---------------------------------------------------------------------------------
@@ -322,7 +318,7 @@ class CBVCorrector(BaseCorrector):
 			logger.info("CORRECTING STARS...")
 
 			# Load stars from data base			
-			stars = self.search_database(search=['ffi', 'cbv_area=%i' %cbv_area])#, select='cbv_area')
+			stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area])#, select='cbv_area')
 			
 		
 			# Load the cbv from file:
