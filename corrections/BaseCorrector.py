@@ -202,14 +202,15 @@ class BaseCorrector(object):
 		return result
 
 
-	def search_database(self, select=None, search=None, order_by=None, limit=None):
+	def search_database(self, select=None, search=None, order_by=None, limit=None, distinct=False):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
 		Parameters:
 			search (list of strings or None): Conditions to apply to the selection of stars from the database
 			order_by (list, string or None): Column to order the database output by.
-			limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved
+			limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved.
+			distinct (boolean): Boolean indicating if the query should return unique elements only.
 
 		Returns:
 			list of dicts: Returns all stars retrieved by the call to the database as dicts/tasks that can be consumed directly by load_lightcurve
@@ -227,7 +228,9 @@ class BaseCorrector(object):
 		if search is None:
 			search = ''
 		elif isinstance(search, (list, tuple)):
-			search = " AND ".join(search)
+			search = "AND " + " AND ".join(search)
+		else:
+			search = 'AND ' + search
 
 		if order_by is None:
 			order_by = ''
@@ -238,7 +241,8 @@ class BaseCorrector(object):
 
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT {select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 AND {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {distinct:s}{select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 {search:s}{order_by:s}{limit:s};".format(
+			distinct='DISTINCT ' if distinct else '',
 			select=select,
 			search=search,
 			order_by=order_by,
