@@ -47,7 +47,9 @@ class BaseCorrector(object):
 	All other specific correction classes will inherit from BaseCorrector.
 
 	Attributes:
-		# TODO
+		plot (boolean): Boolean indicating if plotting is enabled.
+		data_folder (string): Path to directory where auxillary data for the corrector
+			should be stored.
 
 	.. codeauthor:: Lindsey Carboneau
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -72,6 +74,7 @@ class BaseCorrector(object):
 
 		# Save inputs:
 		self.input_folder = input_folder
+		self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		self.plot = plot
 
 		# The path to the TODO list:
@@ -123,7 +126,7 @@ class BaseCorrector(object):
 			lightcurve (``lightkurve.TessLightCurve`` object): Lightcurve of the target star to be corrected.
 
 		Returns:
-			The status of the corrections.
+			The status of the corrections and the corrected lightcurve object.
 
 		Raises:
 			NotImplementedError
@@ -138,6 +141,10 @@ class BaseCorrector(object):
 		Parameters:
 			task (dict): Dictionary defining a task/lightcurve to process.
 
+		Returns:
+			dict: Result dictionary containing information about the processing.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
