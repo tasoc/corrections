@@ -37,6 +37,7 @@ scipy.factorial = scipy.misc.factorial
 import statsmodels.api as sm
 lowess = sm.nonparametric.lowess
 from .utilities import moving_nanmedian, moving_nanmedian_cyclic, smooth, smooth_cyclic, BIC, theil_sen, gap_fill
+from ..quality import TESSQualityFlags
 import warnings
 
 #==============================================================================
@@ -308,7 +309,7 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 
 
 #==============================================================================
-def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, return_flags=False):
+def filter_flags(t, x, quality, quality_remove=TESSQualityFlags.DEFAULT_BITMASK, return_flags=False):
 	"""
 	Filter out flagged data from Kepler quality column.
 
@@ -363,7 +364,7 @@ def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, retur
 	# Attitude tweaks:
 	# These often have times set as undefined in the files
 	# so we need to find the next defined timestamp
-	indx = np.where(quality & 1 != 0)[0]
+	indx = np.where(quality & TESSQualityFlags.AttitudeTweak != 0)[0]
 	for k in indx:
 		# Find the first valid timestamp after jump:
 		k_next = k
@@ -374,7 +375,7 @@ def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, retur
 			k_next += 1
 
 	# Detected jumps:
-	indx = (quality & 1024 != 0)
+	indx = (quality & TESSQualityFlags.SensitivityDropout != 0)
 	if indx.any():
 		# Move detected indicies one to the right
 		# as we need the first timestamp after the jump:

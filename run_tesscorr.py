@@ -66,7 +66,9 @@ if __name__ == '__main__':
 			input_folder = test_folder
 		else:
 			input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
+
+	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
 
