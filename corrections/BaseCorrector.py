@@ -289,11 +289,29 @@ class BaseCorrector(object):
 		# Load lightcurve file and create a TessLightCurve object:
 		if fname.endswith('.noisy') or fname.endswith('.sysnoise'):
 			data = np.loadtxt(fname)
+
+			# Quality flags from the pixels:
+			pixel_quality = np.asarray(data[:,3], dtype='int32')
+
+			# Change the Manual Exclude flag, since the simulated data
+			# and the real TESS quality flags differ in the definition:
+			indx = (pixel_quality & 256 != 0)
+			pixel_quality[indx] -= 256
+			pixel_quality[indx] |= TESSQualityFlags.ManualExclude
+
+			# Create the QUALITY column and fill it with flags of bad data points:
+			quality = np.zeros(data.shape[0], dtype='int32')
+			bad_data = ~np.isfinite(data[:,1])
+			bad_data |= (pixel_quality & TESSQualityFlags.DEFAULT_BITMASK != 0)
+			quality[bad_data] |= CorrectorQualityFlags.FlaggedBadData
+
+			# Create lightkurve object:
 			lc = TessLightCurve(
 				time=data[:,0],
 				flux=data[:,1],
 				flux_err=data[:,2],
-				quality=np.asarray(data[:,3], dtype='int32'),
+				quality=quality,
+				cadenceno=np.arange(1, data.shape[0]+1, dtype='int32'),
 				time_format='jd',
 				time_scale='tdb',
 				targetid=task['starid'],
@@ -303,7 +321,7 @@ class BaseCorrector(object):
 				sector=2,
 				#ra=0,
 				#dec=0,
-				quality_bitmask=2+8+256
+				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
 			)
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
@@ -338,11 +356,11 @@ class BaseCorrector(object):
 					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
 				)
 
-				# Add additional attributes to lightcurve object:
-				lc.pixel_quality = pixel_quality
-
 		else:
 			raise ValueError("Invalid file format")
+
+		# Add additional attributes to lightcurve object:
+		lc.pixel_quality = pixel_quality
 
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
