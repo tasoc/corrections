@@ -59,7 +59,7 @@ def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
 	U, _, _ = pca._fit(Matrix)
 	
 	Ent = compute_entopy(U)
-	logger.info('Entropy start:', Ent)
+	logger.info('Entropy start: ' + str(Ent))
 	
 	targets_removed = 0
 	components = np.arange(n_components)
@@ -89,8 +89,8 @@ def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
 			
 			Ent = compute_entopy(U)
 		
-	logger.info('Entropy end:', Ent)
-	logger.info('Targets removed ', targets_removed)
+	logger.info('Entropy end:'  + str(Ent))
+	logger.info('Targets removed ', str(int(targets_removed)))
 	return Matrix
 
 #------------------------------------------------------------------------------
@@ -192,20 +192,20 @@ class CBV(object):
 		m = 1 + coeff * self.cbv[:, ncbv]
 		return m
 	
-	def _lhood(self, coeffs, flux):
-		return 0.5*nansum((flux - self.mdl(coeffs))**2)
+	def _lhood(self, coeffs, flux, err):
+		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2) 
 	
 	def _lhood_off(self, coeffs, flux, fitted):
 		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted))**2)
 
 	def _lhood_off_2(self, coeffs, flux, err, fitted):
-		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err)
+		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err**2)
 
 	def _lhood1d(self, coeff, flux, ncbv):
 		return 0.5*nansum((flux - self.mdl1d(coeff, ncbv))**2)
 	
 	def _lhood1d_2(self, coeff, flux, err, ncbv):
-		return 0.5*nansum(((flux - self.mdl1d(coeff, ncbv))/err)**2) + 0.5*np.log(err)
+		return 0.5*nansum(((flux - self.mdl1d(coeff, ncbv))/err)**2) + 0.5*np.log(err**2)
 	
 	def _posterior1d(self, coeff, flux, ncbv, cbv_area, Pdict, pos, wscale=5):
 		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(Pdict, coeff, pos, cbv_area, ncbv, wscale)
@@ -312,17 +312,18 @@ class CBV(object):
 			bic = np.empty(Numcbvs+1, dtype='float64')
 			solutions = []
 			
-			# Test a range of CBVs from 0 to Numcbvs
-			Nstart = 0 
+			# Test a range of CBVs from 1 to Numcbvs
+			# Fitting at least 1 CBV and an offset
+			Nstart = 1
 		else:
 			# Test only fit with Numcbvs
 			Nstart = Numcbvs
 	
 	
 		for Ncbvs in range(Nstart, Numcbvs+1):
-			
+
 			iters = 0
-			fluxi = np.copy(flux) / median_flux 
+			fluxi = np.copy(flux) / median_flux
 			while iters <= maxiter:
 				iters += 1
 				
@@ -358,7 +359,8 @@ class CBV(object):
 
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
-				bic[Ncbvs] = np.log(np.sum(np.isfinite(fluxi)))*len(res) + self._lhood(res, fluxi)
+				filt = self.mdl(res)  * median_flux
+				bic[Ncbvs] = np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( ((flux - filt)/err)**2 )
 				solutions.append(res)
 			
 							
@@ -380,13 +382,13 @@ class CBV(object):
 	#--------------------------------------------------------------------------
 
 	def cotrend_single(self, lc, n_components, data_path, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='powell'):
-		cbv_area = lc.meta['task'].cbv_area
+
+		cbv_area = lc.meta['task']['cbv_area']
 
 
 		# Fit the CBV to the flux:
 		if ini:
 			flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=False, method='llsq', func='lh')
-			
 			return flux_filter, res
 			
 		else:	
@@ -394,7 +396,7 @@ class CBV(object):
 			Prior_dict = self._prior_load(cbv_area, data_path, ncbvs=n_components)
 			
 			#TODO: add option to use other coordinates
-			pos = np.array([lc.centroid_row, lc.centroid_col])
+			pos = np.array([lc.meta['task']['pos_row'], lc.meta['task']['pos_column']])
 			
 			# Prior curve
 			pc = self._priorcurve(Prior_dict, pos, cbv_area, n_components) * np.nanmedian(lc.flux)
@@ -407,6 +409,7 @@ class CBV(object):
 			
 			lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio') 
 			lc.meta['additional_headers']['var_new'] = (residual, 'new variability') 
+			
 
 			if WS>WS_lim:
 				flux_filter, res = self.fit(lc.flux, Numcbvs=np.min([n_components, 3]), use_bic=False, method=method, func='lh')

@@ -7,25 +7,18 @@
 from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
-import sqlite3
 import matplotlib.pyplot as plt
-import os
-import sys
-import glob
 from sklearn.decomposition import PCA
 from sklearn.model_selection import cross_val_score
-from bottleneck import allnan, nansum, move_median, nanmedian, nanstd
-from scipy.optimize import minimize
-from scipy.stats import pearsonr, entropy
-from scipy.interpolate import pchip_interpolate
-import itertools
+from bottleneck import nansum, move_median, nanmedian
+from scipy.stats import pearsonr
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
 from scipy.special import xlogy
 
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 
-from tqdm import tqdm
+from scipy.spatial import distance
 plt.ioff()
 
 
@@ -103,3 +96,69 @@ def compute_entopy(U):
 		H[iBasisVector] = HVMatrix - HGauss	
 		
 	return H
+#------------------------------------------------------------------------------
+def reduce_std(x):
+	return np.median(np.abs(x-np.median(x)))
+	
+#------------------------------------------------------------------------------
+def reduce_mode(x):
+	kde = KDE(x)
+	kde.fit(gridsize=2000)
+	
+	pdf = kde.density
+	x = kde.support
+	return x[np.argmax(pdf)]
+
+#------------------------------------------------------------------------------
+def ndim_med_filt(v, x, n, dist='euclidean', mad_frac=2):
+	
+	d = distance.cdist(x, x, dist)
+	
+	
+	idx = np.zeros_like(v, dtype=bool)
+	for i in range(v.shape[0]):
+		idx_sort = np.argsort(d[i,:])
+#		xx = x[idx_sort, :][1:n+1, :]
+		vv= v[idx_sort][1:n+1] # sort values according to distance from point
+		
+		vm = np.median(vv) # median value of n nearest points
+		mad = MAD_model(vv-vm)
+		
+#		if i==10:
+#			plt.figure()
+#			plt.scatter(xx[:,0], xx[:,1])
+#			plt.scatter(x[i,0], x[i,1], color='r')
+#			
+#			plt.figure()
+#			plt.scatter(xx[:,0],vv)
+#			plt.scatter(x[i,0], v[i], color='r')
+#			plt.axhline(y=vm)
+#			plt.axhline(y=vm+3*mad)
+#			plt.axhline(y=vm-3*mad)
+#			plt.axhline(y=vm+2*mad)
+#			plt.axhline(y=vm-2*mad)			
+#			plt.axhline(y=vm+mad)
+#			plt.axhline(y=vm-mad)
+#			plt.show()
+#			sys.exit()
+			
+		if (v[i]<vm+mad_frac*mad) & (v[i]>vm-mad_frac*mad):
+			idx[i] = True
+	return idx		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
