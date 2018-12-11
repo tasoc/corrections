@@ -7,6 +7,7 @@ Handling of TESS data quality flags.
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
+import numpy as np
 
 #------------------------------------------------------------------------------
 class QualityFlagsBase(object):
@@ -48,6 +49,23 @@ class QualityFlagsBase(object):
 		"""
 		if flags is None: flags = cls.DEFAULT_BITMASK
 		return (quality & flags == 0)
+
+	@staticmethod
+	def binary_repr(quality):
+		"""
+		Binary representation of the quality flag.
+
+		Parameters:
+			quality (int or ndarray): Quality flag.
+
+		Returns:
+			string: Binary representation of quality flag. String will be 32 characters long.
+
+		"""
+		if isinstance(quality, (np.ndarray, list, tuple)):
+			return np.array([np.binary_repr(q, width=32) for q in quality])
+		else:
+			return np.binary_repr(quality, width=32)
 
 #------------------------------------------------------------------------------
 class CorrectorQualityFlags(QualityFlagsBase):
@@ -105,7 +123,7 @@ class TESSQualityFlags(QualityFlagsBase):
 	HARD_BITMASK = (DEFAULT_BITMASK | SensitivityDropout | CollateralCosmic)
 
 	# Using this bitmask only QUALITY == 0 cadences will remain
-	HARDEST_BITMASK = 2^32-1
+	HARDEST_BITMASK = 2**32-1
 
 	# Pretty string descriptions for each flag
 	STRINGS = {
