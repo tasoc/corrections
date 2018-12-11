@@ -9,11 +9,56 @@ the corrections package.
 
 from __future__ import division, with_statement, print_function, absolute_import
 import numpy as np
+import six.moves.cPickle as pickle
+import gzip
 from bottleneck import nanmedian, nanmean
 from scipy.stats import binned_statistic
 
 # Constants:
 mad_to_sigma = 1.482602218505602 # Constant is 1/norm.ppf(3/4)
+
+PICKLE_DEFAULT_PROTOCOL = 2 #: Default protocol to use for saving pickle files.
+
+#------------------------------------------------------------------------------
+def savePickle(fname, obj):
+	"""
+	Save an object to file using pickle.
+
+	Parameters:
+		fname (string): File name to save to. If the name ends in '.gz' the file
+			will be automatically gzipped.
+		obj (object): Any pickalble object to be saved to file.
+	"""
+
+	if fname.endswith('.gz'):
+		o = gzip.open
+	else:
+		o = open
+
+	with o(fname, 'wb') as fid:
+		pickle.dump(obj, fid, protocol=PICKLE_DEFAULT_PROTOCOL)
+
+#------------------------------------------------------------------------------
+def loadPickle(fname):
+	"""
+	Load an object from file using pickle.
+
+	Parameters:
+		fname (string): File name to save to. If the name ends in '.gz' the file
+			will be automatically unzipped.
+		obj (object): Any pickalble object to be saved to file.
+
+	Returns:
+		object: The unpickled object from the file.
+	"""
+
+	if fname.endswith('.gz'):
+		o = gzip.open
+	else:
+		o = open
+
+	with o(fname, 'rb') as fid:
+		return pickle.load(fid)
 
 #------------------------------------------------------------------------------
 def sphere_distance(ra1, dec1, ra2, dec2):
