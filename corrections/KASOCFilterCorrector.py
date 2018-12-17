@@ -13,6 +13,7 @@ import psycopg2 as psql
 import getpass
 from . import kasoc_filter as kf
 from . import BaseCorrector, STATUS
+from .quality import CorrectorQualityFlags
 
 class KASOCFilterCorrector(BaseCorrector):
 
@@ -34,7 +35,7 @@ class KASOCFilterCorrector(BaseCorrector):
 		passwd = getpass.getpass('Password: ')
 
 		# Contact TASOC database for list of TOIs:
-		with psql.connect(host='trinity.phys.au.dk', user='rasmush', password=passwd, database='db_aadc') as conn:
+		with psql.connect(host='trinity.phys.au.dk', user=username, password=passwd, database='db_aadc') as conn:
 			with conn.cursor() as cursor:
 				cursor.execute("SELECT starid,period FROM tasoc.toi WHERE NOT period IS NULL;")
 				for row in cursor.fetchall():
@@ -53,7 +54,7 @@ class KASOCFilterCorrector(BaseCorrector):
 		#position = np.column_stack((lc.centroid_col, lc.centroid_row))
 		position = None
 
-		periods = np.array(self.tois_periods[lc.targetid])
+		periods = np.array(self.tois_periods.get(lc.targetid, []))
 		if len(periods) == 0:
 			periods = None
 		else:
@@ -82,7 +83,7 @@ class KASOCFilterCorrector(BaseCorrector):
 		time2, lc.flux, lc.flux_err, kasoc_quality, filt, turnover, xlong, xpos, xtransit, xshort = kf.filter(
 			lc.time,
 			lc.flux,
-			quality=lc.quality,
+			quality=lc.pixel_quality,
 			P=periods,
 			jumps=jumps,
 			position=position,
@@ -93,6 +94,11 @@ class KASOCFilterCorrector(BaseCorrector):
 			scale_clip=filter_turnover_clip,
 			scale_width=filter_turnover_width
 		)
+
+		# Translate the quality flags from the KASOC filter to the real ones:
+		lc.quality[kasoc_quality & 2 != 0] |= CorrectorQualityFlags.JumpAdditiveConstant # FIXME: Actually it could be multiplicative
+		lc.quality[kasoc_quality & 4 != 0] |= CorrectorQualityFlags.JumpAdditiveLinear # FIXME: Actually it could be multiplicative
+		lc.quality[kasoc_quality & 8+128 != 0] |= CorrectorQualityFlags.SigmaClip
 
 		# Set headers that will be saved to the FITS file:
 		#lc.meta['additional_headers']['KF_MODE'] = (filter_operation_mode, 'KASOC filter: operation mode')
