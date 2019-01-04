@@ -396,7 +396,10 @@ class CBV(object):
 			Prior_dict = self._prior_load(cbv_area, data_path, ncbvs=n_components)
 			
 			#TODO: add option to use other coordinates
-			pos = np.array([lc.meta['task']['pos_row'], lc.meta['task']['pos_column']])
+			row = lc.meta['task']['pos_row']+(lc.meta['task']['ccd']>2)*2048
+			col = lc.meta['task']['pos_column']+(lc.meta['task']['ccd']%2==0)*2048
+			pos = np.array([row, col])
+#			pos = np.array([lc.centroid_row, lc.centroid_col])
 			
 			# Prior curve
 			pc = self._priorcurve(Prior_dict, pos, cbv_area, n_components) * np.nanmedian(lc.flux)

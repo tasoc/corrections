@@ -33,6 +33,8 @@ if __name__ == '__main__':
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
 	parser.add_argument('--all', help='Run correction on all targets.', action='store_true')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
+	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
+	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
 
@@ -79,13 +81,13 @@ if __name__ == '__main__':
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder) as tm:
 			while True:
-				if args.all:
-					task = tm.get_task()
-					if task is None: break
-				elif args.starid is not None:
-					task = tm.get_task(starid=args.starid)
-				elif args.random:
+				
+				if args.random:
 					task = tm.get_random_task()
+				else:
+					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd)
+
+				if task is None: break
 
 				# Run the correction:
 				result = corr.correct(task)

@@ -103,7 +103,7 @@ class TaskManager(object):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
 
-	def get_task(self, starid=None):
+	def get_task(self, starid=None, camera=None, ccd=None):
 		"""
 		Get next task to be processed.
 
@@ -114,6 +114,10 @@ class TaskManager(object):
 		constraints = []
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
+		if camera is not None:
+			constraints.append('todolist.camera=%d' % camera)
+		if ccd is not None:
+			constraints.append('todolist.ccd=%d' % ccd)	
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)

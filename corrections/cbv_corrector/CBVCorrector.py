@@ -36,9 +36,36 @@ plt.ioff()
 # TODO: Move plots to dedicated module
 
 class CBVCorrector(BaseCorrector):
+	"""
+	The CBV (Co-trending Basis Vectors) correction method for the TASOC
+	photometry pipeline
+	
+	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+	
+	"""
+	
 	
 	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-2, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):	
+		
+		
+		"""
+		Initialise the corrector
+		
+		The CBV init inherets init  and functionality of :py:class:`BaseCorrector`
+		
+		The CBV init has three import steps run in addition to defining
+		various high-level variables:
+			1: The CBVs for the specific todo list are computed using the :py:func:`CBVCorrector.compute_cbv` function.
+			2: An initial fitting are performed for all targets using linear least squares using the :py:func:`CBVCorrector.cotrend_ini` function.
+			This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
+			3: Prior from step 2 are constructed using the :py:func:`CBVCorrector.compute_weight_interpolations` function. This
+			function saves interpolation functions for each of the CBV coefficient priors.
+		
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
+		
 		
 		# Call the parent initializing:
 		# This will set several default settings
@@ -47,7 +74,7 @@ class CBVCorrector(BaseCorrector):
 		self.Numcbvs = Numcbvs
 		self.use_bic = use_bic
 		self.method = method
-		self.do_ini_plots = True#do_ini_plots
+		self.do_ini_plots = do_ini_plots
 		self.single_area = single_area
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_correlation = threshold_correlation
@@ -65,6 +92,25 @@ class CBVCorrector(BaseCorrector):
 	#-------------------------------------------------------------------------
 
 	def lc_matrix(self, cbv_area):
+		
+		"""
+		Computes correlation matrix for light curves in a given cbv-area. 
+		
+		Only targets with a variability below a user-defined threshold are included
+		in the calculation.
+		
+		Returns matrix of the *self.threshold_correlation*% most correlated light curves; the threshold is defined in the class init function.
+		
+		Parameters:
+            cbv_area: the cbv area to calculate matrix for
+			
+			additional parameters are contained in *self* and defined in the init function
+        Returns:
+            mat: matrix of *self.threshold_correlation*% most correlated light curves, to be used in CBV calculation
+			stds: standard deviations of light curves in "mat"
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
 		
 		logger=logging.getLogger(__name__)
 		
@@ -159,6 +205,22 @@ class CBVCorrector(BaseCorrector):
 	
 	def lc_matrix_clean(self, cbv_area):
 		
+		"""
+		Performs gap-filling of light curves returned by :py:func:`CBVCorrector.lc_matrix`, and
+		removes time stamps where all flux values are nan
+		
+		Parameters:
+			cbv_area: the cbv area to calculate light curve matrix for
+			
+		Returns:
+			mat: matrix from :py:func:`CBVCorrector.lc_matrix` that has been gap-filled and with nans removed, to be used in CBV calculation
+			stds: standard deviations of light curves in "mat"
+			indx_nancol: the indices for the timestamps with nans in all light curves 
+			Ntimes: Number of timestamps in light curves contained in mat before removing nans
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
+		
 		logger=logging.getLogger(__name__)
 		
 		logger.info('Running matrix clean')
@@ -201,6 +263,25 @@ class CBVCorrector(BaseCorrector):
 	#-------------------------------------------------------------------------
 	
 	def compute_cbvs(self):
+		
+		"""
+		Main function for computing CBVs.
+		
+		The steps taken in the function are:
+			1: run :py:func:`CBVCorrector.lc_matrix_clean` to obtain matrix with gap-filled, nan-removed light curves
+			for the most correlated stars in a given cbv-area
+			2: compute principal components and remove significant single-star contributers based on entropy
+			3: reun SNR test on CBVs, and only retain CBVs that pass the test
+			4: save CBVs and make diagnostics plots
+		
+		Parameters:
+			*self*: all parameters defined in class init
+			
+		Returns:
+			Saves CBVs per cbv-area in ".npy" files
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
 		
 		logger=logging.getLogger(__name__)
 		
@@ -308,6 +389,24 @@ class CBVCorrector(BaseCorrector):
 
 	def cotrend_ini(self): 
 		
+		"""
+		Function for running the initial co-trending to obtain CBV coefficients for the construction of priors.
+		
+		The steps taken in the function are:
+			1: for each cbv-area load calculated CBVs
+			2: co-trend all light curves in area using fit of all CBVs using linear least squares
+			3: save CBV coefficients
+		
+		Parameters:
+			*self*: all parameters defined in class init
+			
+		Returns:
+			Saves CBV coefficients per cbv-area in ".npz" files
+			adds loaded CBVs to *self*
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
+		
 		logger=logging.getLogger(__name__)
 		
 		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
@@ -315,7 +414,6 @@ class CBVCorrector(BaseCorrector):
 	
 	
 		# Loop through the CBV areas:
-		# - or run them in parallel - whatever you like!
 		for ii, cbv_area in enumerate(cbv_areas):
 			
 			if not self.single_area is None:
@@ -430,21 +528,6 @@ class CBVCorrector(BaseCorrector):
 		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
 		n_cbvs_max = self.ncomponents
 		n_cbvs_max_new = 0
-		
-#		# Open the TODO file for that sector:
-#		conn = sqlite3.connect(filepath_todo)
-#		conn.row_factory = sqlite3.Row
-#		cursor = conn.cursor()
-#		
-#		# Get list of CBV areas:
-#		cursor.execute("SELECT DISTINCT cbv_area FROM todolist ORDER BY cbv_area;")
-#		cbv_areas = [int(row[0]) for row in cursor.fetchall()]
-#		print(cbv_areas)
-#			
-#		
-#		#Just to know number of computed cbvs
-#		results0 = np.load('mat-%d_free_weights.npz' % (cbv_areas[0]))['res']
-#		n_cbvs = results0.shape[1]-2 #results also include star name and offset
 		
 		figures1 = [];
 		figures2 = [];
@@ -623,7 +706,7 @@ class CBVCorrector(BaseCorrector):
 		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, self.data_folder, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
 		
 		#corrected light curve in ppm
-		lc_corr = (lc.flux/flux_filter-1)*1e6
+		lc_corr = (lc.flux/flux_filter-1)
 				
 		res = np.array([res,]).flatten()
 		
@@ -648,7 +731,7 @@ class CBVCorrector(BaseCorrector):
 			ax1.set_ylabel('Flux (counts)')
 			ax1.set_xticks([])
 			ax2 = fig.add_subplot(212)
-			ax2.plot(lc.time, lc_corr)
+			ax2.plot(lc.time, lc_corr*1e6)
 			ax2.set_xlabel('Time (BJD)')
 			ax2.set_ylabel('Relative flux (ppm)')
 			plt.tight_layout()
@@ -660,4 +743,5 @@ class CBVCorrector(BaseCorrector):
 
 		#TODO: update status
 		lc.flux = lc_corr
+		lc *= 1e6
 		return lc, STATUS.OK
