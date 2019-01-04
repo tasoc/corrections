@@ -45,7 +45,7 @@ class CBVCorrector(BaseCorrector):
 	"""
 	
 	
-	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-2, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
+	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-0.7, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):	
 		
 		
@@ -167,9 +167,19 @@ class CBVCorrector(BaseCorrector):
 				# Load lightkurve object
 				lc = self.load_lightcurve(star)	
 				
+				# Remove bad data based on quality
+				quality_remove = 32 #+...
+				flag_removed = (lc.pixel_quality & quality_remove != 0)
+				lc.flux[flag_removed] = np.nan
+				
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
-				stds0[k] = np.sqrt(star['variance'])
+				
+				try:
+					stds0[k] = np.sqrt(star['variance'])
+				except Exception as e:
+					stds0[k] = np.nan
+					print(e)
 	
 			# Only start calculating correlations if we are actually filtering using them:
 			if self.threshold_correlation < 1.0:
@@ -178,7 +188,7 @@ class CBVCorrector(BaseCorrector):
 					correlations = np.load(file_correlations)
 				else:
 					# Calculate the correlation matrix between all lightcurves:
-					correlations = lc_matrix_calc(Nstars, mat0, stds0)
+					correlations = lc_matrix_calc(Nstars, mat0)#, stds0)
 					np.save(file_correlations, correlations)
 	
 				# Find the median absolute correlation between each lightcurve and all other lightcurves:

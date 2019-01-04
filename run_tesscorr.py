@@ -36,7 +36,16 @@ if __name__ == '__main__':
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
+#	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
+	
+	
+	args.camera = 2
+	args.ccd = 1
+	args.method = 'cbv'
+	args.all = True
+	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves'
+
 
 	# Make sure at least one setting is given:
 	if not args.all and args.starid is None and not args.random:

@@ -90,7 +90,7 @@ def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
 			Ent = compute_entopy(U)
 		
 	logger.info('Entropy end:'  + str(Ent))
-	logger.info('Targets removed ', str(int(targets_removed)))
+	logger.info('Targets removed ' + str(int(targets_removed)))
 	return Matrix
 
 #------------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def AlmightyCorrcoefEinsumOptimized(O, P):
 
 
 #------------------------------------------------------------------------------
-def lc_matrix_calc(Nstars, mat0, stds):
+def lc_matrix_calc(Nstars, mat0):#, stds):
 	logger=logging.getLogger(__name__)
 	
 	logger.info("Calculating correlations...")
