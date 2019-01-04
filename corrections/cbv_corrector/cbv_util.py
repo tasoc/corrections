@@ -26,9 +26,9 @@ plt.ioff()
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def MAD_model(x):
+def MAD_model(x, **kwargs):
 	# x: difference between input
-	return 1.4826*np.nanmedian(np.abs(x))
+	return 1.4826*np.nanmedian(np.abs(x), **kwargs)
 
 #------------------------------------------------------------------------------
 def _move_median_central_1d(x, width_points):
