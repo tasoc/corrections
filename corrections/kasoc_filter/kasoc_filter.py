@@ -37,6 +37,7 @@ scipy.factorial = scipy.misc.factorial
 import statsmodels.api as sm
 lowess = sm.nonparametric.lowess
 from .utilities import moving_nanmedian, moving_nanmedian_cyclic, smooth, smooth_cyclic, BIC, theil_sen, gap_fill
+from ..quality import TESSQualityFlags
 import warnings
 
 #==============================================================================
@@ -308,7 +309,7 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 
 
 #==============================================================================
-def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, return_flags=False):
+def filter_flags(t, x, quality, quality_remove=TESSQualityFlags.DEFAULT_BITMASK, return_flags=False):
 	"""
 	Filter out flagged data from Kepler quality column.
 
@@ -363,7 +364,7 @@ def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, retur
 	# Attitude tweaks:
 	# These often have times set as undefined in the files
 	# so we need to find the next defined timestamp
-	indx = np.where(quality & 1 != 0)[0]
+	indx = np.where(quality & TESSQualityFlags.AttitudeTweak != 0)[0]
 	for k in indx:
 		# Find the first valid timestamp after jump:
 		k_next = k
@@ -374,7 +375,7 @@ def filter_flags(t, x, quality, quality_remove=1+32+256+4096+65536+262144, retur
 			k_next += 1
 
 	# Detected jumps:
-	indx = (quality & 1024 != 0)
+	indx = (quality & TESSQualityFlags.SensitivityDropout != 0)
 	if indx.any():
 		# Move detected indicies one to the right
 		# as we need the first timestamp after the jump:
@@ -587,8 +588,8 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 	plt.yticks(fontsize=10)
 	fig1ax1.axis('equal')
 	fig1ax2 = fig1.add_subplot(122)
-	fig1ax2.set_xlabel('$x^\prime$ (pixels)', fontsize=10)
-	fig1ax2.set_ylabel('$y^\prime$ (pixels)', fontsize=10)
+	fig1ax2.set_xlabel(r'$x^\prime$ (pixels)', fontsize=10)
+	fig1ax2.set_ylabel(r'$y^\prime$ (pixels)', fontsize=10)
 	plt.xticks(fontsize=10)
 	plt.yticks(fontsize=10)
 	fig1ax2.axis('equal')
@@ -726,14 +727,14 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 		fig4ax1 = fig4.add_subplot(Nchunks-1, 2, 2*chk+1)
 		fig4ax1.scatter(pos2[indx_good,0], pos2[indx_good,1], color='k', s=1, alpha=0.3)
 		fig4ax1.scatter(poscurve1[indx_good,0], poscurve1[indx_good,1], color='r', s=2)
-		fig4ax1.set_title("$\chi^2 = %f$" % chi2_1, fontsize=12)
+		fig4ax1.set_title(r"$\chi^2 = %f$" % chi2_1, fontsize=12)
 		plt.xticks(fontsize=10)
 		plt.yticks(fontsize=10)
 		fig4ax1.axis('equal')
 		fig4ax2 = fig4.add_subplot(Nchunks-1, 2, 2*chk+2)
 		fig4ax2.scatter(pos2[indx_good,1], pos2[indx_good,0], color='k', s=1, alpha=0.3)
 		fig4ax2.scatter(poscurve2[indx_good,0], poscurve2[indx_good,1], color='g', s=2)
-		fig4ax2.set_title("$\chi^2 = %f$" % chi2_2, fontsize=12)
+		fig4ax2.set_title(r"$\chi^2 = %f$" % chi2_2, fontsize=12)
 		plt.xticks(fontsize=10)
 		plt.yticks(fontsize=10)
 		fig4ax2.axis('equal')
@@ -1040,10 +1041,10 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		ax1.plot(tg, xlong, 'g-')
 		ax1.set_xlim(tg[0], tg[-1])
 		ax1.set_ylim(flux_ylim)
-		ax1.set_ylabel('Flux (e$^-$/s)')
+		ax1.set_ylabel(r'Flux (e$^-$/s)')
 		plt.yticks(fontsize=10)
 		ax1.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter(useOffset=False))
-		if i==0: ax1.set_title('$x_\mathrm{long}$')
+		if i==0: ax1.set_title(r'$x_\mathrm{long}$')
 		if i == it-1:
 			ax1.set_xlabel('Time (days)', fontsize=10)
 			plt.xticks(fontsize=10)
@@ -1080,7 +1081,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 			ax3.set_xlim(tg[0], tg[-1])
 			plt.yticks(fontsize=10)
 			ax3.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter(useOffset=False))
-			if i == 0: ax3.set_title('$x_\mathrm{pos}$')
+			if i == 0: ax3.set_title(r'$x_\mathrm{pos}$')
 			if i == it-1:
 				ax3.set_xlabel('Time (days)', fontsize=10)
 				plt.xticks(fontsize=10)
@@ -1157,7 +1158,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 			ax1 = plt.subplot(211)
 			ax1.axhspan(scale_clip-scale_width, scale_clip+scale_width, facecolor='0.5', edgecolor=None, alpha=0.5)
 			ax1.plot(tg, snr, 'b-')
-			ax1.set_ylabel('$\sigma_w$', fontsize=10)
+			ax1.set_ylabel(r'$\sigma_w$', fontsize=10)
 			ax1.set_title('Filter turnover function', fontsize=12)
 			ax1.set_xlim(t[0], t[-1])
 			ax1.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter(useOffset=False))
@@ -1288,7 +1289,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	#ax.plot(t, sigma, 'b-')
 	#ax.axhline(0.01*nms, color='k', ls='--')
 	#ax.axhline(0.05*nms, color='k', ls='--')
-	#ax.set_ylabel('$\sigma$ (ppm)', fontsize=10)
+	#ax.set_ylabel(r'$\sigma$ (ppm)', fontsize=10)
 	#ax.set_xlabel('Time', fontsize=10)
 	#plt.close(fig)
 	if np.any(indx_invalid_sigma):
@@ -1320,7 +1321,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		plt.yticks(fontsize=10)
 		ax2 = plt.subplot(212, sharex=ax1)
 		ax2.plot(t, sigma, 'b-')
-		ax2.set_ylabel('$\sigma$ (ppm)', fontsize=10)
+		ax2.set_ylabel(r'$\sigma$ (ppm)', fontsize=10)
 		ax2.set_xlabel('Time', fontsize=10)
 		ax2.set_xlim(t[0], t[-1])
 		plt.xticks(fontsize=10)

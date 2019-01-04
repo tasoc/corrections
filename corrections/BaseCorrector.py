@@ -22,6 +22,7 @@ from bottleneck import nanmedian, nanvar
 from astropy.io import fits
 from lightkurve import TessLightCurve
 from .version import get_version
+from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
 
 __version__ = get_version()
@@ -288,11 +289,29 @@ class BaseCorrector(object):
 		# Load lightcurve file and create a TessLightCurve object:
 		if fname.endswith('.noisy') or fname.endswith('.sysnoise'):
 			data = np.loadtxt(fname)
+
+			# Quality flags from the pixels:
+			pixel_quality = np.asarray(data[:,3], dtype='int32')
+
+			# Change the Manual Exclude flag, since the simulated data
+			# and the real TESS quality flags differ in the definition:
+			indx = (pixel_quality & 256 != 0)
+			pixel_quality[indx] -= 256
+			pixel_quality[indx] |= TESSQualityFlags.ManualExclude
+
+			# Create the QUALITY column and fill it with flags of bad data points:
+			quality = np.zeros(data.shape[0], dtype='int32')
+			bad_data = ~np.isfinite(data[:,1])
+			bad_data |= (pixel_quality & TESSQualityFlags.DEFAULT_BITMASK != 0)
+			quality[bad_data] |= CorrectorQualityFlags.FlaggedBadData
+
+			# Create lightkurve object:
 			lc = TessLightCurve(
 				time=data[:,0],
 				flux=data[:,1],
 				flux_err=data[:,2],
-				quality=np.asarray(data[:,3], dtype='int32'),
+				quality=quality,
+				cadenceno=np.arange(1, data.shape[0]+1, dtype='int32'),
 				time_format='jd',
 				time_scale='tdb',
 				targetid=task['starid'],
@@ -302,18 +321,28 @@ class BaseCorrector(object):
 				sector=2,
 				#ra=0,
 				#dec=0,
-				quality_bitmask=2+8+256
+				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
 			)
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
 			with fits.open(fname, mode='readonly', memmap=True) as hdu:
+				# Quality flags from the pixels:
+				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
+
+				# Create the QUALITY column and fill it with flags of bad data points:
+				quality = np.zeros_like(hdu['LIGHTCURVE'].data['TIME'], dtype='int32')
+				bad_data = ~np.isfinite(hdu['LIGHTCURVE'].data['FLUX_RAW'])
+				bad_data |= (pixel_quality & TESSQualityFlags.DEFAULT_BITMASK != 0)
+				quality[bad_data] |= CorrectorQualityFlags.FlaggedBadData
+
+				# Create lightkurve object:
 				lc = TessLightCurve(
 					time=hdu['LIGHTCURVE'].data['TIME'],
 					flux=hdu['LIGHTCURVE'].data['FLUX_RAW'],
 					flux_err=hdu['LIGHTCURVE'].data['FLUX_RAW_ERR'],
 					centroid_col=hdu['LIGHTCURVE'].data['MOM_CENTR1'],
 					centroid_row=hdu['LIGHTCURVE'].data['MOM_CENTR2'],
-					quality=np.asarray(hdu['LIGHTCURVE'].data['QUALITY'], dtype='int32'),
+					quality=quality,
 					cadenceno=np.asarray(hdu['LIGHTCURVE'].data['CADENCENO'], dtype='int32'),
 					time_format='btjd',
 					time_scale='tdb',
@@ -324,11 +353,14 @@ class BaseCorrector(object):
 					sector=hdu[0].header.get('SECTOR'),
 					ra=hdu[0].header.get('RA_OBJ'),
 					dec=hdu[0].header.get('DEC_OBJ'),
-					quality_bitmask=2+8+256 # lightkurve.utils.TessQualityFlags.DEFAULT_BITMASK
+					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
 				)
 
 		else:
 			raise ValueError("Invalid file format")
+
+		# Add additional attributes to lightcurve object:
+		lc.pixel_quality = pixel_quality
 
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
@@ -377,6 +409,7 @@ class BaseCorrector(object):
 				# Overwrite the corrected flux columns:
 				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
 				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
+				hdu['LIGHTCURVE'].data['QUALITY'] = lc.quality
 
 				# Set headers about the correction:
 				hdu['LIGHTCURVE'].header['CORRMET'] = (CorrMethod, 'Lightcurve correction method')
