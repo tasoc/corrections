@@ -36,9 +36,15 @@ import logging
 def cbv_snr_reject(cbv_ini, threshold_snrtest=5.0):
 	logger=logging.getLogger(__name__)
 	
-	A_signal = rms(cbv_ini, axis=0)
-	A_noise = rms(np.diff(cbv_ini, axis=0), axis=0)
+#	A_signal = rms(cbv_ini, axis=0)
+#	A_noise = rms(np.diff(cbv_ini, axis=0), axis=0)
+	
+	A_signal = MAD_model(cbv_ini, axis=0)
+	A_noise = MAD_model(np.diff(cbv_ini, axis=0), axis=0)
+	
 	snr = 10 * np.log10( A_signal**2 / A_noise**2 )
+	logger.info("SNR of CBVs %s", snr)
+	
 	indx_lowsnr = (snr < threshold_snrtest)
 	if np.any(indx_lowsnr):
 		logger.info("Rejecting %d CBVs based on SNR test" % np.sum(indx_lowsnr))
@@ -350,7 +356,8 @@ class CBV(object):
 				# Do robust sigma clipping:
 				absdev = np.abs(fluxi - flux_filter)
 				mad = MAD_model(absdev)
-				indx = np.greater(absdev, sigma_clip*mad, where=np.isfinite(fluxi))
+#				print(sigma_clip*mad, absdev, flux_filter)
+				indx = np.greater(absdev, sigma_clip*mad, where=np.isfinite(absdev))
 								
 				if np.any(indx):
 					fluxi[indx] = np.nan
@@ -384,6 +391,11 @@ class CBV(object):
 	def cotrend_single(self, lc, n_components, data_path, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='powell'):
 
 		cbv_area = lc.meta['task']['cbv_area']
+		
+		# Remove bad data based on quality
+		quality_remove = 1 #+...
+		flag_removed = (lc.quality & quality_remove != 0)
+		lc.flux[flag_removed] = np.nan
 
 
 		# Fit the CBV to the flux:
