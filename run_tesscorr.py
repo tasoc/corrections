@@ -63,10 +63,12 @@ if __name__ == '__main__':
 	console = logging.StreamHandler()
 	console.setFormatter(formatter)
 	logger = logging.getLogger(__name__)
-	logger.addHandler(console)
+	if not logger.hasHandlers():
+		logger.addHandler(console)
 	logger.setLevel(logging_level)
 	logger_parent = logging.getLogger('corrections')
-	logger_parent.addHandler(console)
+	if not logger_parent.hasHandlers():
+		logger_parent.addHandler(console)
 	logger_parent.setLevel(logging_level)
 
 	# Get input and output folder from environment variables:
