@@ -45,7 +45,7 @@ class CBVCorrector(BaseCorrector):
 	"""
 	
 	
-	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-0.7, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
+	def __init__(self, *args, do_ini_plots=True, Numcbvs='all', ncomponents=8, ent_limit=-0.7, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):	
 		
 		
@@ -168,8 +168,8 @@ class CBVCorrector(BaseCorrector):
 				lc = self.load_lightcurve(star)	
 				
 				# Remove bad data based on quality
-				quality_remove = 32 #+...
-				flag_removed = (lc.pixel_quality & quality_remove != 0)
+				quality_remove = 1 #+...
+				flag_removed = (lc.quality & quality_remove != 0)
 				lc.flux[flag_removed] = np.nan
 				
 				# Normalize the data and store it in the rows of the matrix:
@@ -378,9 +378,12 @@ class CBVCorrector(BaseCorrector):
 				fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
 	
 				for k, ax in enumerate(axes.flatten()):
-					ax.plot(cbv0[:, k]+0.1, 'r-')		
-					if indx_lowsnr[k]:
-						col = 'c'
+					ax.plot(cbv0[:, k]+0.1, 'r-')	
+					if not indx_lowsnr is None:
+						if indx_lowsnr[k]:
+							col = 'c'
+						else:
+							col = 'k'
 					else:
 						col = 'k'
 					ax.plot(cbv00[:, k], ls='-', color=col)	
@@ -471,7 +474,11 @@ class CBVCorrector(BaseCorrector):
 			# Loop through stars
 			for kk, star in tqdm(enumerate(stars), total=len(stars), disable=logger.isEnabledFor(logging.INFO)):
 				
+				
+				
 				lc = self.load_lightcurve(star)
+				
+				logger.info("Correcting star %d" %lc.targetid)
 
 				flux_filter, res = cbv.cotrend_single(lc, n_components, self.data_folder, ini=True)
 				lc_corr = (lc.flux/flux_filter-1)*1e6
