@@ -186,11 +186,11 @@ class TaskManager(object):
 		
 		constraints = []
 		if camera is not None:
-			constraints.append(f'camera={camera:d}')
+			constraints.append('camera={:d}'.format(camera))
 		if ccd is not None:
-			constraints.append(f'ccd={ccd:d}')
+			constraints.append('ccd={:d}'.format(ccd))
 		# Still necessary?
-		constraints.append(f'mean_flux>0')
+		constraints.append('mean_flux>0')
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
 
