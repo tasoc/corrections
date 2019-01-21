@@ -71,7 +71,7 @@ class EnsembleCorrector(BaseCorrector):
         # StarID, pixel positions and lightcurve filenames are retrieved from the database
         select_params = ["todolist.starid", "pos_row", "pos_column"]
         search_params = [f"camera={lc.camera:d}", f"ccd={lc.ccd:d}", "mean_flux>0"]
-        db_raw = self.search_lightcurves(select=select_params, search=search_params)
+        db_raw = self.search_database(select=select_params, search=search_params)
         starid = np.array([row['starid'] for row in db_raw])
         pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
 
@@ -116,7 +116,7 @@ class EnsembleCorrector(BaseCorrector):
                 # NOTE: This seems needlesly complicated. Probably can just change load_lightcurve
                 next_star_index = distance_index[i]
                 search_loop.append(f"todolist.starid={starid[next_star_index]:}")
-                next_star_task = self.search_lightcurves(search=search_loop, select=select_loop)[0]
+                next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
                 next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
                 search_loop.pop(-1)
                 
