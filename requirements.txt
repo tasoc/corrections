@@ -1,7 +1,7 @@
 six
 numpy
 scipy
-astropy >= 2.0, < 3.0
+astropy
 Bottleneck >= 1.2
 lightkurve
 matplotlib >= 2.0, < 3.0
@@ -9,3 +9,4 @@ seaborn
 psycopg2-binary
 scikit-learn
 statsmodels
+patsy

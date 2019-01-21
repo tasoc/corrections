@@ -10,7 +10,7 @@ Structure from `tessphot by Rasmus Handberg <https://github.com/tasoc/photometry
 """
 
 from __future__ import absolute_import
-from . import STATUS, KASOCFilterCorrector, EnsembleCorrector#, CBVCorrector
+from . import KASOCFilterCorrector, EnsembleCorrector #, CBVCorrector
 
 #------------------------------------------------------------------------------
 def corrclass(method=None):

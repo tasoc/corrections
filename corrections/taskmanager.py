@@ -12,19 +12,21 @@ from __future__ import division, with_statement, print_function, absolute_import
 import os.path
 import sqlite3
 import logging
-import numpy as np
+from . import STATUS
 
 class TaskManager(object):
 	"""
 	A TaskManager which keeps track of which targets to process.
 	"""
 
-	def __init__(self, todo_file):
+	def __init__(self, todo_file, cleanup=False):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
 		Parameters:
-			todo_file: Path to the TODO-file.
+			todo_file (string): Path to the TODO-file.
+			cleanup (boolean): Perform cleanup/optimization of TODO-file before
+				during initialization. Default=False.
 
 		Raises:
 			IOError: If TODO-file could not be found.
@@ -57,9 +59,40 @@ class TaskManager(object):
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
 
-		self.cursor.execute("UPDATE todolist SET corr_status=NULL")
+		# Reset the status of everything for a new run:
+		# TODO: This should obviously be removed once we start running for real
+		self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
+		self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
 		self.conn.commit()
 
+		# Create table for diagnostics:
+		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
+			priority INT PRIMARY KEY NOT NULL,
+			lightcurve TEXT,
+			elaptime REAL NOT NULL,
+			variance DOUBLE PRECISION,
+			rms_hour DOUBLE PRECISION,
+			ptp DOUBLE PRECISION,
+			errors TEXT
+		);""")
+		self.conn.commit()
+
+		# Reset calculations with status STARTED or ABORT:
+		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value)
+		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
+		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
+		self.conn.commit()
+
+		# Run a cleanup/optimization of the database before we get started:
+		if cleanup:
+			self.logger.info("Cleaning TODOLIST before run...")
+			try:
+				self.conn.isolation_level = None
+				self.cursor.execute("VACUUM;")
+			except:
+				raise
+			finally:
+				self.conn.isolation_level = ''
 
 	def __enter__(self):
 		return self
@@ -85,25 +118,51 @@ class TaskManager(object):
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
+		else:
+			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % constraints)
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % (
+			STATUS.OK.value,
+			STATUS.WARNING.value,
+			constraints
+		))
 		task = self.cursor.fetchone()
 		if task: return dict(task)
 		return None
 
 	def save_results(self, result):
-		# Update the status in the TODO list:
-		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
-			result['corr_status'].value,
-			result['priority']
-		))
-		self.conn.commit()
+
+		# Extract details dictionary:
+		details = result.get('details', {})
+
+		try:
+			# Update the status in the TODO list:
+			self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
+				result['status_corr'].value,
+				result['priority']
+			))
+
+			# Save additional diagnostics:
+			self.cursor.execute("INSERT INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
+				result['priority'],
+				result['lightcurve_corr'],
+				result['elaptime_corr'],
+				details.get('variance', None),
+				details.get('rms_hour', None),
+				details.get('ptp', None),
+				details.get('errors', None)
+			))
+			self.conn.commit()
+		except:
+			self.conn.rollback()
+			raise
+
 
 	def start_task(self, taskid):
 		"""
 		Mark a task as STARTED in the TODO-list.
 		"""
-		self.cursor.execute("UPDATE todolist SET corr_status=6 WHERE priority=?;", (taskid,))
+		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (STATUS.STARTED.value, taskid))
 		self.conn.commit()
 
 	def get_random_task(self):

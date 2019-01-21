@@ -1,0 +1,1 @@
+This directory will contain axillary files used by the different correctors

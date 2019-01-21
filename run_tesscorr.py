@@ -18,7 +18,6 @@ from __future__ import with_statement, print_function
 import os
 import argparse
 import logging
-from timeit import default_timer
 import corrections
 
 #------------------------------------------------------------------------------
@@ -69,7 +68,9 @@ if __name__ == '__main__':
 			input_folder = test_folder
 		else:
 			input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.abspath('.'))
+
+	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
 
@@ -91,16 +92,9 @@ if __name__ == '__main__':
 					task = tm.get_random_task()
 
 				# Run the correction:
-				t1 = default_timer()
-				status = corr.correct(task)
-				t2 = default_timer()
+				result = corr.correct(task)
 
 				# Construct results to return to TaskManager:
-				result = task.copy()
-				result.update({
-					'corr_status': status,
-					'corr_elaptime': t2-t1
-				})
 				tm.save_results(result)
 
 				if not args.all:
