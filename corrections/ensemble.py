@@ -64,7 +64,7 @@ class EnsembleCorrector(BaseCorrector):
 
         # StarID, pixel positions and lightcurve filenames are retrieved from the database
         select_params = ["todolist.starid", "pos_row", "pos_column"]
-        search_params = [f"camera={lc.camera:d}", f"ccd={lc.ccd:d}", "mean_flux>0"]
+        search_params = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0"]
         db_raw = self.search_database(select=select_params, search=search_params)
         starid = np.array([row['starid'] for row in db_raw])
         pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
@@ -99,7 +99,7 @@ class EnsembleCorrector(BaseCorrector):
         i = 1
         # Setup search and select params to use in loop
         select_loop = ["todolist.starid", "camera", "ccd", "lightcurve"]
-        search_loop = [f"camera={lc.camera:d}", f"ccd={lc.ccd:d}", "mean_flux>0"]
+        search_loop = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0"]
         # Start loop to build ensemble
         while True:
 
@@ -109,7 +109,7 @@ class EnsembleCorrector(BaseCorrector):
                 # Get lightkurve for next star closest to target
                 # NOTE: This seems needlesly complicated. Probably can just change load_lightcurve
                 next_star_index = distance_index[i]
-                search_loop.append(f"todolist.starid={starid[next_star_index]:}")
+                search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
                 next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
                 next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
                 search_loop.pop(-1)
@@ -288,7 +288,7 @@ class EnsembleCorrector(BaseCorrector):
             bin_size = bin_size/2
 
         # TODO: Remove in final version. Used to test execution time
-        logger.info(f"Spline Fit, Time: {time.time()-start_time}")
+        logger.info("Spline Fit, Time: {}".format(time.time()-start_time))
 
         #Correct the lightcurve
         lc_corr = deepcopy(lc)
@@ -296,7 +296,7 @@ class EnsembleCorrector(BaseCorrector):
         lc_corr /= scale*pp(lc.time)
 
         # TODO: Remove in final version. Used to test execution time
-        logger.info(f"Full correction function, Time: {time.time()-fstart_time}")
+        logger.info("Full correction function, Time: {}".format(time.time()-fstart_time))
 
         if self.plot:
             ax = lc.plot(marker='o', label="Original LC")
