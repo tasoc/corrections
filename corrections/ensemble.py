@@ -14,19 +14,12 @@ Created on Thu Mar 29 09:58:55 2018
 """
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import scipy.interpolate
 import scipy.optimize as sciopt
-import sqlite3
-import sys
-from tqdm import tqdm
 from copy import deepcopy
 import time
-import pandas
 import lightkurve
-
-import pickle
-from pathlib import Path
+import logging
 
 from . import BaseCorrector, STATUS
 
@@ -55,6 +48,7 @@ class EnsembleCorrector(BaseCorrector):
             lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
             The status of the correction.
         """
+        logger = logging.getLogger(__name__)
         # TODO: Remove in final version. Used to test execution time
         fstart_time = time.time()
 
@@ -294,7 +288,7 @@ class EnsembleCorrector(BaseCorrector):
             bin_size = bin_size/2
 
         # TODO: Remove in final version. Used to test execution time
-        print(f"Spline Fit, Time: {time.time()-start_time}")
+        logger.info(f"Spline Fit, Time: {time.time()-start_time}")
 
         #Correct the lightcurve
         lc_corr = deepcopy(lc)
@@ -302,10 +296,11 @@ class EnsembleCorrector(BaseCorrector):
         lc_corr /= scale*pp(lc.time)
 
         # TODO: Remove in final version. Used to test execution time
-        print(f"\nFull correction function, Time: {time.time()-fstart_time}")
+        logger.info(f"Full correction function, Time: {time.time()-fstart_time}")
 
-        ax = lc.plot(marker='o', label="Original LC")
-        lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-        plt.show()
+        if self.plot:
+            ax = lc.plot(marker='o', label="Original LC")
+            lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
+            plt.show()
 
         return lc_corr, STATUS.OK
