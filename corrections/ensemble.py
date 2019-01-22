@@ -3,9 +3,7 @@
 # -*- coding: utf-8 -*-
 """
 Initial code structure for the ensemble photometry detrending program.
-Global Parameters:
-    __data_folder__ (str): Location of the data
-    __sector__ (str): Sector to look at
+
 Created on Thu Mar 29 09:58:55 2018
 .. codeauthor:: Derek Buzasi
 .. codeauthor:: Oliver J. Hall

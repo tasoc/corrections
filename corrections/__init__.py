@@ -3,7 +3,6 @@
 
 from __future__ import absolute_import
 from .BaseCorrector import BaseCorrector, STATUS
-from .ensemble import EnsembleCorrector
 from .KASOCFilterCorrector import KASOCFilterCorrector
 from .ensemble import EnsembleCorrector
 from .tesscorr import corrclass
