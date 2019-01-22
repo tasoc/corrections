@@ -104,7 +104,7 @@ class TaskManager(object):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
 
-	def get_task(self, starid=None):
+	def get_task(self, starid=None, camera=None, ccd=None):
 		"""
 		Get next task to be processed.
 
@@ -115,6 +115,10 @@ class TaskManager(object):
 		constraints = []
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
+		if camera is not None:
+			constraints.append('todolist.camera=%d' % camera)
+		if ccd is not None:
+			constraints.append('todolist.ccd=%d' % ccd)
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
@@ -175,33 +179,3 @@ class TaskManager(object):
 		task = self.cursor.fetchone()
 		if task: return dict(task)
 		return None
-
-	def get_all(self, camera=None, ccd=None, limit=None):
-		"""
-		Get all tasks to be processed on camera { } ccd { }.
-
-		Returns:
-			List of target starids that can now be fed into get_task() by the caller
-		"""
-		
-		constraints = []
-		if camera is not None:
-			constraints.append('camera={:d}'.format(camera))
-		if ccd is not None:
-			constraints.append('ccd={:d}'.format(ccd))
-		# Still necessary?
-		constraints.append('mean_flux>0')
-		if constraints:
-			constraints = ' AND ' + " AND ".join(constraints)
-
-		limit = '' if limit is None else " LIMIT %d" % limit
-
-		query = "SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL {constraints:s} ORDER BY priority {limit:s};".format(
-			search=search,
-			limit=limit
-		)
-		self.cursor.execute(query)
-
-		tasks = self.cursor.fetchall()
-		if tasks:
-			return [dict(task) for task in tasks]

@@ -32,8 +32,8 @@ if __name__ == '__main__':
 	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
 	parser.add_argument('-a', '--all', help='Run correction on all targets.', action='store_true')
-	parser.add_argument('--camera', type=int, help='The numerical identifier of the TESS camera, primarily for testing.')
-	parser.add_argument('--ccd', type=int, help='The numerical identifier of the TESS camera CCD, primarily for testing.')
+	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
+	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
@@ -54,10 +54,12 @@ if __name__ == '__main__':
 	console = logging.StreamHandler()
 	console.setFormatter(formatter)
 	logger = logging.getLogger(__name__)
-	logger.addHandler(console)
+	if not logger.hasHandlers():
+		logger.addHandler(console)
 	logger.setLevel(logging_level)
 	logger_parent = logging.getLogger('corrections')
-	logger_parent.addHandler(console)
+	if not logger_parent.hasHandlers():
+		logger_parent.addHandler(console)
 	logger_parent.setLevel(logging_level)
 
 	# Get input and output folder from environment variables:
@@ -83,14 +85,13 @@ if __name__ == '__main__':
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder) as tm:
 			while True:
-				if args.all:
-					task = tm.get_task()
-					if task is None: break
-				elif args.starid is not None:
-					task = tm.get_task(starid=args.starid)
-				elif args.random:
+				
+				if args.random:
 					task = tm.get_random_task()
-
+				else:
+					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd)
+				
+				if task is None: break
 				# Run the correction:
 				result = corr.correct(task)
 
@@ -99,33 +100,3 @@ if __name__ == '__main__':
 
 				if not args.all:
 					break
-	
-	
-	# ------------------------------------------------------------------------------------
-	# Lindsey's code
-
-	# import functools
-
-	# # Create partial function of tesscorr, setting the common keywords:
-	# f = functools.partial(tesscorr, input_folder=input_folder, output_folder=output_folder, plot=args.plot)
-
-	# # Run the program:
-	# with TaskManager(input_folder) as tm:
-	# 	if args.starid is not None:
-	# 		task = tm.get_task(starid=args.starid)
-	# 		corr = f(starid=args.starid, **task)
-
-	# 	elif args.all:	
-	# 		#TODO: there is an unimplemented case, which is "run everything"; but that should really only be done by an MPI scheduler?
-	# 		if args.camera and args.ccd:
-	# 			# unset int in python resolve to 0, so should be False if not set
-	# 			target_list = tm.get_all(args.camera, args.ccd, args.test_range)
-	# 			for starid in target_list:
-	# 				task = tm.get_task(starid=int(starid))
-	# 				corr = f(starid=int(starid), **task)
-	# 	# TODO: another unimplemented case, where test_range is not None (or a list from a file) but no camera or ccd given
-
-	# # Write out the results?
-	# if not args.quiet:
-	# 	print("=======================")
-	# 	#print("STATUS: {0}".format(corr.status.name))
