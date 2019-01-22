@@ -3,8 +3,8 @@
 TESS Correction - tesscorr.py
 Structure from `tessphot by Rasmus Handberg <https://github.com/tasoc/photometry/blob/devel/photometry/tessphot.py>`_
 
-
 .. codeauthor:: Lindsey Carboneau
+.. codeauthor:: Filipe Pereira
 
 """
 
