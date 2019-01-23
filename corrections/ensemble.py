@@ -363,7 +363,7 @@ class EnsembleCorrector(BaseCorrector):
         if self.plot:
             ax = lc.plot(marker='o', label="Original LC")
             lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-            plt.show(block=True)
+            plt.show() #block=True)
             #plt.savefig("./random_test/" + str(lc.targetid) + "_testrun.png")
             logger.info(np.nanstd(lc.flux))
             logger.info(np.nanstd(lc_corr.flux))
