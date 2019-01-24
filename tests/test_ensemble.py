@@ -39,4 +39,26 @@ def test_ensemble_correction():
 		outlc, status = corr.do_correction(inlc)
 	return inlc, outlc, status
 
+def test_ensemble_return_values():
+	""" Check that the ensemble returns values that are reasonable and within expected bounds """
+	CorrClass = corrections.corrclass('ensemble')
+	#Initiate the class
+	with CorrClass(INPUT_DIR, plot=False) as corr:
+		#Create a task
+		with corrections.TaskManager(INPUT_DIR) as tm:
+			task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
+		#Read in the data
+		inlc = corr.load_lightcurve(task)
+
+		outlc, status = corr.do_correction(inlc)
+
+		assert status == STATUS.OK, "STATUS was not set appropriately"		
+		assert outlc.meta[]
+		assert outlc.meta[]
+		assert outlc.meta[]
+		assert outlc.meta[]
+	
+
 #----------------------------------------------------------------------
+if if __name__ == "__main__":
+	pass # placeholder
