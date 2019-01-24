@@ -96,7 +96,7 @@ if __name__ == '__main__':
 				result = corr.correct(task)
 
 				# Construct results to return to TaskManager:
-				tm.save_results(result)
+				tm.save_results(result, task)
 
 				if not args.all:
 					break
