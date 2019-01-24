@@ -76,12 +76,19 @@ class EnsembleCorrector(BaseCorrector):
         full_start = time.time()
 
         # Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
+<<<<<<< HEAD
         og_time = lc.time.copy()
         lc = lc.remove_nans()
         lc_quality_mask = (lc.quality == 0)
         # lc.time = lc.time[lc_quality_mask]
         # lc.flux = lc.flux[lc_quality_mask]
         # lc.flux_err = lc.flux_err[lc_quality_mask]
+=======
+        lc = lc.remove_nans()
+        # lc_quality_mask = (lc.quality == 0)
+        # lc.flux = lc.flux[lc_quality_mask]
+        # lc.time = lc.time[lc_quality_mask]
+>>>>>>> Catch out of range access to ensemble_array and throw exception
 
         # Set up basic statistical parameters for the light curves. 
         # frange is the light curve range from the 5th to the 95th percentile,
