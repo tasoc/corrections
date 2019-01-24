@@ -461,7 +461,7 @@ class BaseCorrector(object):
 						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
 
 				# Save the updated FITS file:
-#				hdu.flush()
+				# hdu.flush()
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
