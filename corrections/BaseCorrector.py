@@ -177,7 +177,7 @@ class BaseCorrector(object):
 			lc = self.load_lightcurve(task)
 
 			# Run the correction on this lightcurve:
-			lc_corr, status = self.do_correction(lc)
+			lc_corr, status = self.do_correction(lc.copy())
 
 		except (KeyboardInterrupt, SystemExit):
 			status = STATUS.ABORT
