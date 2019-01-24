@@ -49,7 +49,7 @@ class EnsembleCorrector(BaseCorrector):
         logger = logging.getLogger(__name__)
         
         # TODO: Remove in final version. Used to test execution time
-        fstart_time = time.time()
+        full_start = time.time()
 
         # Calculate extra data for the target lightcurve
         lc = lc.remove_nans()
@@ -104,6 +104,7 @@ class EnsembleCorrector(BaseCorrector):
         select_loop = ["todolist.starid", "camera", "ccd", "lightcurve"]
         search_loop = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0", "datasource='{:s}'".format(lc.meta["task"]["datasource"])]
         # Start loop to build ensemble
+        ensemble_start = time.time()
         while True:
 
             # First get a list of indexes of a specified number of stars to build the ensemble
@@ -170,6 +171,7 @@ class EnsembleCorrector(BaseCorrector):
             else:
                     break
 
+        logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
         
         # Ensemble is now built. Clean up ensemble points by removing NaNs
         not_nan_idx = ~np.isnan(full_flux) # Since index is same for all arrays save it first to use cached version
@@ -195,7 +197,7 @@ class EnsembleCorrector(BaseCorrector):
         temp_weight = full_weight
 
         # TODO: Remove in final version. Used to test execution time
-        start_time = time.time()
+        spline_start = time.time()
         # Initialize bin size in days. We will fit the ensemble with splines
         # The idea here is to remove any sharp features that might have made it into the ensemble. The way this is done is to fit and remove a
         # spline and sigma clip the data. This is performed iteratively, with the first sigma-clipping done with a spline fit to 4-day binned data
@@ -300,7 +302,7 @@ class EnsembleCorrector(BaseCorrector):
             bin_size = bin_size/2
 
         # TODO: Remove in final version. Used to test execution time
-        logger.info("Spline Fit, Time: {}".format(time.time()-start_time))
+        logger.info("Fit spline, Time: {}".format(time.time()-spline_start))
 
         # Correct the lightcurve
         # Scale isn't used so can remove l 305 and simplify l 306
@@ -309,7 +311,7 @@ class EnsembleCorrector(BaseCorrector):
         lc_corr /= pp(lc.time)
 
         # TODO: Remove in final version. Used to test execution time
-        logger.info("Full correction function, Time: {}".format(time.time()-fstart_time))
+        logger.info("Full do_correction, Time: {}".format(time.time()-full_start))
 
         if self.plot:
             ax = lc.plot(marker='o', label="Original LC")
