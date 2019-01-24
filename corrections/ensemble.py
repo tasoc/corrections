@@ -70,12 +70,8 @@ class EnsembleCorrector(BaseCorrector):
             The status of the correction.
         """
         logger = logging.getLogger(__name__)
-<<<<<<< HEAD
         logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
 
-=======
-        
->>>>>>> Fix comment indentation in ensemble
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
 
@@ -87,10 +83,6 @@ class EnsembleCorrector(BaseCorrector):
         # lc.flux = lc.flux[lc_quality_mask]
         # lc.flux_err = lc.flux_err[lc_quality_mask]
 
-<<<<<<< HEAD
-
-=======
->>>>>>> Fix comment indentation in ensemble
         # Set up basic statistical parameters for the light curves. 
         # frange is the light curve range from the 5th to the 95th percentile,
         # drange is the relative standard deviation of the differenced light curve (to whiten the noise)
@@ -296,6 +288,7 @@ class EnsembleCorrector(BaseCorrector):
                     logger.info(np.asarray(lc_ensemble).shape[0])
                     break
 
+        logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
         
         logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
         

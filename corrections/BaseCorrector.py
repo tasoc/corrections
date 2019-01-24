@@ -201,11 +201,7 @@ class BaseCorrector(object):
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
-<<<<<<< HEAD
-			#details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
-=======
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
->>>>>>> Pass copy of lc to do_correction instead of reference to fix errors
 			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
