@@ -47,14 +47,16 @@ class EnsembleCorrector(BaseCorrector):
             The status of the correction.
         """
         logger = logging.getLogger(__name__)
+        
         # TODO: Remove in final version. Used to test execution time
         fstart_time = time.time()
 
         # Calculate extra data for the target lightcurve
         lc = lc.remove_nans()
 
-        #Set up basic statistical parameters for the light curves. frange is the light curve range from the 5th to the 95th percentile,
-        #while drange is the relative standard deviation of the differenced light curve (to whiten the noise)
+        # Set up basic statistical parameters for the light curves. 
+        # frange is the light curve range from the 5th to the 95th percentile,
+        # drange is the relative standard deviation of the differenced light curve (to whiten the noise)
         frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) )/ np.mean(lc.flux)
         drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
         lc.meta.update({ 'fmean' : np.mean(lc.flux),
@@ -248,63 +250,62 @@ class EnsembleCorrector(BaseCorrector):
             # NOTE Currently not used for anything. tscale is ignored
             # This entire section is not used (from here down to line 300)
             # Calculates the scale for the lightcurve
-       #     break_locs = np.where(np.diff(lc.time)>0.1) #find places where there is a break in time
-       #     break_locs = np.array(break_locs)
-       #     if break_locs.size>0: #set up boundaries to correspond with breaks
-       #         break_locs = np.array(break_locs)+1
-       #         break_locs.astype(int)
-       #         if (np.max(break_locs) < len(lc.time)):
-       #             break_locs = np.append(break_locs, len(lc.time)-1)
-       #         digit_bounds = lc.time
-       #         digit_bounds = np.array(digit_bounds)
-       #         digit_bounds = digit_bounds[break_locs]
-       #         if digit_bounds[0] > np.min(full_time):
-       #             digit_bounds = np.append(np.min(full_time)-1e-5, digit_bounds)
-       #         if digit_bounds[-1] < np.max(full_time):
-       #             digit_bounds = np.append(digit_bounds,np.max(full_time)+1e-5)
-       #         if digit_bounds[0] > np.min(lc.time):
-       #             digit_bounds = np.append(np.min(lc.time)-1e-5, digit_bounds)
-       #         if digit_bounds[-1] < np.max(lc.time):
-       #             digit_bounds = np.append(digit_bounds,np.max(lc.time)+1e-5)
+            # break_locs = np.where(np.diff(lc.time)>0.1) #find places where there is a break in time
+            # break_locs = np.array(break_locs)
+            # if break_locs.size>0: #set up boundaries to correspond with breaks
+            #     break_locs = np.array(break_locs)+1
+            #     break_locs.astype(int)
+            #     if (np.max(break_locs) < len(lc.time)):
+            #         break_locs = np.append(break_locs, len(lc.time)-1)
+            #     digit_bounds = lc.time
+            #     digit_bounds = np.array(digit_bounds)
+            #     digit_bounds = digit_bounds[break_locs]
+            #     if digit_bounds[0] > np.min(full_time):
+            #         digit_bounds = np.append(np.min(full_time)-1e-5, digit_bounds)
+            #     if digit_bounds[-1] < np.max(full_time):
+            #         digit_bounds = np.append(digit_bounds,np.max(full_time)+1e-5)
+            #     if digit_bounds[0] > np.min(lc.time):
+            #         digit_bounds = np.append(np.min(lc.time)-1e-5, digit_bounds)
+            #     if digit_bounds[-1] < np.max(lc.time):
+            #         digit_bounds = np.append(digit_bounds,np.max(lc.time)+1e-5)
 
-       #         bincts, edges = np.histogram(lc.time,digit_bounds)
-       #         bidx = np.digitize(lc.time, digit_bounds) #binning for star
-       #         bidx = bidx-1
-       #         bincts2, edges = np.histogram(full_time,full_time[break_locs])
-       #         bidx2 = np.digitize(full_time, full_time[break_locs]) #binning for ensemble
-       #         bidx2 = bidx2-1
-       #         num_segs = len(break_locs)
-       #     else:
-       #         bincts, edges = np.histogram(lc.time,[lc.time[0],lc.time[-1]])
-       #         bidx = np.digitize(lc.time, [lc.time[0],lc.time[-1]]) #binning for star
-       #         bidx = bidx-1
-       #         bincts2, edges = np.histogram(full_time,[full_time[0],full_time[-1]])
-       #         bidx2 = np.digitize(full_time, [full_time[0],full_time[-1]]) #binning for ensemble
-       #         bidx2 = bidx2-1
-       #         num_segs = 1
+            #     bincts, edges = np.histogram(lc.time,digit_bounds)
+            #     bidx = np.digitize(lc.time, digit_bounds) #binning for star
+            #     bidx = bidx-1
+            #     bincts2, edges = np.histogram(full_time,full_time[break_locs])
+            #     bidx2 = np.digitize(full_time, full_time[break_locs]) #binning for ensemble
+            #     bidx2 = bidx2-1
+            #     num_segs = len(break_locs)
+            # else:
+            #     bincts, edges = np.histogram(lc.time,[lc.time[0],lc.time[-1]])
+            #     bidx = np.digitize(lc.time, [lc.time[0],lc.time[-1]]) #binning for star
+            #     bidx = bidx-1
+            #     bincts2, edges = np.histogram(full_time,[full_time[0],full_time[-1]])
+            #     bidx2 = np.digitize(full_time, [full_time[0],full_time[-1]]) #binning for ensemble
+            #     bidx2 = bidx2-1
+            #     num_segs = 1
 
-       #     tscale = []
-       #     for iseg in range(num_segs):
-       #         influx = np.array(lc.flux)
-       #         intime = np.array(lc.time)
-       #         influx = influx[bidx==iseg]
-       #         intime = intime[bidx==iseg]
+            # tscale = []
+            # for iseg in range(num_segs):
+            #     influx = np.array(lc.flux)
+            #     intime = np.array(lc.time)
+            #     influx = influx[bidx==iseg]
+            #     intime = intime[bidx==iseg]
 
-                #fun = lambda x: np.sum(np.square(np.divide(influx,np.median(influx))-x*scipy.interpolate.splev(intime,pp)))
-       #         fun = lambda x: np.sum(np.square(np.divide(influx,np.median(influx))-x*pp(intime)))
-       #         tscale = np.append(tscale,sciopt.fminbound(fun,0.9,1.5)) #this is a last fix to scaling, not currently used
-       #         tbidx = deepcopy(bidx)
+            #     fun = lambda x: np.sum(np.square(np.divide(influx,np.median(influx))-x*scipy.interpolate.splev(intime,pp)))
+            #     fun = lambda x: np.sum(np.square(np.divide(influx,np.median(influx))-x*pp(intime)))
+            #     tscale = np.append(tscale,sciopt.fminbound(fun,0.9,1.5)) #this is a last fix to scaling, not currently used
+            #     tbidx = deepcopy(bidx)
 
             bin_size = bin_size/2
 
         # TODO: Remove in final version. Used to test execution time
         logger.info("Spline Fit, Time: {}".format(time.time()-start_time))
 
-        #Correct the lightcurve
-        #scale isn't used so can remove l 305 and simplify l 306
-        lc_corr = deepcopy(lc)
-        #scale = 1.0
-        #lc_corr /= scale*pp(lc.time)
+        # Correct the lightcurve
+        # Scale isn't used so can remove l 305 and simplify l 306
+        lc_corr = lc.copy()
+        # lc_corr /= tscale*pp(lc.time)
         lc_corr /= pp(lc.time)
 
         # TODO: Remove in final version. Used to test execution time
@@ -315,6 +316,6 @@ class EnsembleCorrector(BaseCorrector):
             lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
             plt.show()
             
-        #We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well. 
+        # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well. 
 
         return lc_corr, STATUS.OK
