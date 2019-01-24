@@ -134,7 +134,7 @@ class TaskManager(object):
 		if task: return dict(task)
 		return None
 
-	def save_results(self, result, task):
+	def save_results(self, result):
 
 		# Extract details dictionary:
 		details = result.get('details', {})
@@ -143,12 +143,12 @@ class TaskManager(object):
 			# Update the status in the TODO list:
 			self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
 				result['status_corr'].value,
-				task['priority']
+				result['priority']
 			))
 
 			# Save additional diagnostics:
 			self.cursor.execute("INSERT INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
-				task['priority'],
+				result['priority'],
 				result['lightcurve_corr'],
 				result['elaptime_corr'],
 				details.get('variance', None),
