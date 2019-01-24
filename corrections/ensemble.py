@@ -47,12 +47,16 @@ class EnsembleCorrector(BaseCorrector):
             The status of the correction.
         """
         logger = logging.getLogger(__name__)
-        
+        logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
+
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
 
-        # Calculate extra data for the target lightcurve
+        # Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
         lc = lc.remove_nans()
+        # lc_quality_mask = (lc.quality == 0)
+        # lc.flux = lc.flux[lc_quality_mask]
+        # lc.time = lc.time[lc_quality_mask]
 
         # Set up basic statistical parameters for the light curves. 
         # frange is the light curve range from the 5th to the 95th percentile,
@@ -112,7 +116,10 @@ class EnsembleCorrector(BaseCorrector):
                 
                 # Get lightkurve for next star closest to target
                 # NOTE: This seems needlessly complicated. Probably can just change load_lightcurve
-                next_star_index = distance_index[i]
+                try:
+                    next_star_index = distance_index[i]
+                except IndexError:
+                    return None, STATUS.SKIPPED
                 search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
                 next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
                 next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
