@@ -48,6 +48,8 @@ class EnsembleCorrector(BaseCorrector):
         """
         logger = logging.getLogger(__name__)
         logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
+        # Flag added to plot some data for debugging purposes
+        debug = False
 
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
