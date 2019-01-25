@@ -4,6 +4,9 @@
 Tests of Ensemble.
 
 .. codeauthor:: Oliver James Hall <ojh251@student.bham.ac.uk>
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+.. codeauthor:: Lindsey Carboneau <lmcarboneau@gmail.com>
+
 """
 
 from __future__ import division, print_function, with_statement, absolute_import
