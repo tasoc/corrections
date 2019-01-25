@@ -9,8 +9,11 @@ Tests of Ensemble.
 from __future__ import division, print_function, with_statement, absolute_import
 import sys
 import os
+import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
+import lightkurve
+import numpy as np
 
 # INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 INPUT_DIR = '../../TESS_data/lightcurves-2127753/'
@@ -29,7 +32,6 @@ def test_ensemble_basics():
 		assert ec.input_folder == INPUT_DIR, "Incorrect input folder"
 		assert ec.plot == True, "Plot parameter passed appropriately"
 
-
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
 	tm = corrections.TaskManager(INPUT_DIR)
@@ -40,6 +42,11 @@ def test_ensemble_returned_values():
 	corr = CorrClass(INPUT_DIR, plot=False)
 	inlc = corr.load_lightcurve(task)
 	outlc, status = corr.do_correction(inlc.copy())
+
+	#Check input validation
+	with pytest.raises(ValueError) as err:
+		outlc, status = corr.do_correction('hello world')
+		assert('The input to `do_correction` is not a TessLightCurve object!' in err.value.args[0])
 
 	#Check contents
 	assert len(outlc.flux) == len(inlc.flux), "Input flux ix different length to output flux"
@@ -80,8 +87,19 @@ def test_ensemble_metadata():
 	inlc = corr.load_lightcurve(task)
 	outlc, status = corr.do_correction(inlc.copy())
 
-def test_ensemble_cbv_comparison():
-	pass
+	#Check ensemble specific metadata
+	ensemble = outlc.meta['ensemble']
+	assert ensemble['star_count'] > 20, "Fewer than 20 stars in ensemble"
+
+	assert 'ensemble_list' in ensemble, "Ensemble list is not output"
+	assert ensemble['star_count'] == len(ensemble['ensemble_list']), "Star counts and length of ensemble list are different"
+	assert isinstance(ensemble['ensemble_list'][15][1], lightkurve.lightcurve.TessLightCurve), "Stored object in ensemble_list is not a lightkurve object"
+
+	assert 'ensemble_spline' in ensemble, "Ensemble Spline not output"
+	assert len(ensemble['ensemble_spline']) == len(outlc.flux), "Spline and flux are different lenghts"
+	assert np.isclose(outlc.flux, inlc.flux/ensemble['ensemble_spline'], 1e-3), "Output flux is not equal to input divided by spline"
+
+	assert 'search radius' in ensemble, "Search radius not included in ensemble"
 
 if __name__ == "__main__":
 	tm = corrections.TaskManager(INPUT_DIR)

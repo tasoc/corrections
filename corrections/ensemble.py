@@ -46,6 +46,10 @@ class EnsembleCorrector(BaseCorrector):
             lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
             The status of the correction.
         """
+        #First things first let validate the input
+        if not isinstance(lc, lightkurve.lightcurve.TessLightCurve):
+            raise ValueError("The input to `do_correction` is not a TessLightCurve object!")
+
         logger = logging.getLogger(__name__)
         logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
         # Flag added to plot some data for debugging purposes
@@ -354,5 +358,10 @@ class EnsembleCorrector(BaseCorrector):
             plt.show()
 
         # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
+        # Returning ensemble metadata: `starcount`, `starlist`, `spline`
+        lc_corr.meta.update({'ensemble':{ 'star_count' : star_count,
+                            'ensemble_list' : ensemble_list,
+                            'ensemble_spline' : pp(lc.time),
+                            'search_radius' : search_radius}})
 
         return lc_corr, STATUS.OK
