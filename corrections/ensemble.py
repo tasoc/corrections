@@ -47,12 +47,19 @@ class EnsembleCorrector(BaseCorrector):
             The status of the correction.
         """
         logger = logging.getLogger(__name__)
-        
+        logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
+        # Flag added to plot some data for debugging purposes
+        debug = True
+
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
 
-        # Calculate extra data for the target lightcurve
+        # Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
         lc = lc.remove_nans()
+        lc_quality_mask = (lc.quality == 0)
+        lc.time = lc.time[lc_quality_mask]
+        lc.flux = lc.flux[lc_quality_mask]
+        lc.flux_err = lc.flux_err[lc_quality_mask]
 
         # Set up basic statistical parameters for the light curves. 
         # frange is the light curve range from the 5th to the 95th percentile,
@@ -63,6 +70,9 @@ class EnsembleCorrector(BaseCorrector):
                         'fstd' : np.std(np.diff(lc.flux)),
                         'frange' : frange,
                         'drange' : drange})
+
+        logger.info(lc.meta.get("drange"))
+        logger.info(" ")
 
         # StarID, pixel positions and lightcurve filenames are retrieved from the database
         select_params = ["todolist.starid", "pos_row", "pos_column"]
@@ -93,7 +103,7 @@ class EnsembleCorrector(BaseCorrector):
         # List of star indexes to be included in the ensemble
         temp_list = []
         # Initial number of closest stars to consider and variable to increase number
-        initial_num_stars = 20
+        initial_num_stars = 10
         star_count = initial_num_stars
         # (Alternate param) Initial distance at which to consider stars around the target
         # initial_search_radius = -1
@@ -112,12 +122,20 @@ class EnsembleCorrector(BaseCorrector):
                 
                 # Get lightkurve for next star closest to target
                 # NOTE: This seems needlessly complicated. Probably can just change load_lightcurve
-                next_star_index = distance_index[i]
+                try:
+                    next_star_index = distance_index[i]
+                except IndexError:
+                    return None, STATUS.SKIPPED
                 search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
                 next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
                 next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
                 search_loop.pop(-1)
                 
+                next_star_lc_quality_mask = (next_star_lc.quality == 0)
+                next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
+                next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
+                next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
+
                 # Compute the rest of the statistical parameters for the next star to be added to the ensemble.
                 frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) )/ np.mean(next_star_lc.flux)
                 drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
@@ -126,6 +144,7 @@ class EnsembleCorrector(BaseCorrector):
                                             'frange' : frange,
                                             'drange' : drange})
 
+                logger.info(next_star_lc.meta.get("drange"))
                 # Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the 
                 # drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
                 if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange'] and next_star_lc.meta['frange'] < 0.03):
@@ -133,6 +152,7 @@ class EnsembleCorrector(BaseCorrector):
                 i += 1
 
             ensemble_list = np.array(temp_list)
+            logger.info(ensemble_list[:,1].size)
             # Now populate the arrays of data with the stars in the ensemble
             full_time = np.concatenate([temp_lc.time for temp_lc in ensemble_list[:,1]]).ravel()
             tflux = np.concatenate(np.array([temp_lc.flux / temp_lc.meta['fmean'] for temp_lc in ensemble_list[:,1]])).ravel()
@@ -167,8 +187,12 @@ class EnsembleCorrector(BaseCorrector):
 
                 # if search_radius > 400 pixels then give up trying to improve because we are too far away (400 pixels is probably too far!)
                 if search_radius > 400:
+                    logger.info(search_radius)
+                    logger.info(ensemble_list[:,1].size)
                     break
             else:
+                    logger.info(search_radius)
+                    logger.info(ensemble_list[:,1].size)
                     break
 
         logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
@@ -191,6 +215,10 @@ class EnsembleCorrector(BaseCorrector):
         full_time = full_time[idx]
         full_flux = full_flux[idx]
         full_weight = full_weight[idx]
+
+        if debug:
+            ax = lc.plot(zorder=10, lw=1, ls='--')
+            ax.plot(full_time, np.divide(full_flux, full_weight), '.', ms=1)
 
         temp_time = full_time
         temp_flux = full_flux
@@ -249,6 +277,9 @@ class EnsembleCorrector(BaseCorrector):
                 temp_flux = temp_flux[np.abs(diff1)<sdiff]
                 temp_weight = temp_weight[np.abs(diff1)<sdiff]
 
+            if debug:
+                ax.plot(temp_time, pp(temp_time), lw=1, label="Spline - {}".format(ib))
+
             # NOTE Currently not used for anything. tscale is ignored
             # This entire section is not used (from here down to line 300)
             # Calculates the scale for the lightcurve
@@ -301,6 +332,10 @@ class EnsembleCorrector(BaseCorrector):
 
             bin_size = bin_size/2
 
+        if debug:
+            plt.legend()
+            plt.show()
+
         # TODO: Remove in final version. Used to test execution time
         logger.info("Fit spline, Time: {}".format(time.time()-spline_start))
 
@@ -319,5 +354,7 @@ class EnsembleCorrector(BaseCorrector):
             plt.show()
             
         # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well. 
+
+        sys.exit()
 
         return lc_corr, STATUS.OK

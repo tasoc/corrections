@@ -370,7 +370,7 @@ class BaseCorrector(object):
 		if logger.isEnabledFor(logging.DEBUG):
 			lc.show_properties()
 
-		return lc
+		return lc.copy()
 
 
 	def save_lightcurve(self, lc, output_folder=None):
