@@ -14,10 +14,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
 import lightkurve
 import numpy as np
-
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
-# TODO: Build a dummy structure that we can test failures on
 # TODO: Check the frange and etc algebraically
 starid = 281703991
 camera = 3

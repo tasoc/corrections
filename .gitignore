@@ -105,6 +105,3 @@ Scripts/
 
 # Kate
 .*.kate-swp
-
-tests/input/
-tests/output/
