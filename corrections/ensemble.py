@@ -58,12 +58,14 @@ class EnsembleCorrector(BaseCorrector):
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
 
+        #NOTE: Removing data based on the quality mask isn't possible, as input and output length should be identical
+        #NOTE: Flagged data should be removed by an end user instead.
         # Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
-        lc = lc.remove_nans()
-        lc_quality_mask = (lc.quality == 0)
-        lc.time = lc.time[lc_quality_mask]
-        lc.flux = lc.flux[lc_quality_mask]
-        lc.flux_err = lc.flux_err[lc_quality_mask]
+        # lc = lc.remove_nans()
+        # lc_quality_mask = (lc.quality == 0)
+        # lc.time = lc.time[lc_quality_mask]
+        # lc.flux = lc.flux[lc_quality_mask]
+        # lc.flux_err = lc.flux_err[lc_quality_mask]
 
         # Set up basic statistical parameters for the light curves.
         # frange is the light curve range from the 5th to the 95th percentile,

@@ -97,9 +97,9 @@ def test_ensemble_metadata():
 
 	assert 'ensemble_spline' in ensemble, "Ensemble Spline not output"
 	assert len(ensemble['ensemble_spline']) == len(outlc.flux), "Spline and flux are different lenghts"
-	assert np.isclose(outlc.flux, inlc.flux/ensemble['ensemble_spline'], 1e-3), "Output flux is not equal to input divided by spline"
+	assert all(np.isclose(outlc.flux, inlc.flux/ensemble['ensemble_spline'], 1e-3)), "Output flux is not equal to input divided by spline"
 
-	assert 'search radius' in ensemble, "Search radius not included in ensemble"
+	assert 'search_radius' in ensemble, "Search radius not included in ensemble"
 
 if __name__ == "__main__":
 	tm = corrections.TaskManager(INPUT_DIR)
@@ -110,3 +110,7 @@ if __name__ == "__main__":
 	corr = CorrClass(INPUT_DIR, plot=False)
 	inlc = corr.load_lightcurve(task)
 	outlc, status = corr.do_correction(inlc.copy())
+	import matplotlib.pyplot as plt
+	ax = inlc.plot()
+	outlc.plot(ax=ax)
+	plt.show()
