@@ -15,8 +15,7 @@ import corrections
 import lightkurve
 import numpy as np
 
-# INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-INPUT_DIR = '../../TESS_data/lightcurves-2127753/'
+INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
 # TODO: Build a dummy structure that we can test failures on
 # TODO: Check the frange and etc algebraically
