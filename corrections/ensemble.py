@@ -48,8 +48,6 @@ class EnsembleCorrector(BaseCorrector):
         """
         logger = logging.getLogger(__name__)
         logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
-        # Flag added to plot some data for debugging purposes
-        debug = True
 
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
@@ -61,7 +59,7 @@ class EnsembleCorrector(BaseCorrector):
         lc.flux = lc.flux[lc_quality_mask]
         lc.flux_err = lc.flux_err[lc_quality_mask]
 
-        # Set up basic statistical parameters for the light curves. 
+        # Set up basic statistical parameters for the light curves.
         # frange is the light curve range from the 5th to the 95th percentile,
         # drange is the relative standard deviation of the differenced light curve (to whiten the noise)
         frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) )/ np.mean(lc.flux)
@@ -81,7 +79,7 @@ class EnsembleCorrector(BaseCorrector):
         starid = np.array([row['starid'] for row in db_raw])
         pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
 
-        # TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist 
+        # TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist
         # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance. Pixel distance used
         idx = (starid == lc.targetid)
         dist = np.sqrt((pixel_coords[:,0] - pixel_coords[idx,0])**2 + (pixel_coords[:,1] - pixel_coords[idx,1])**2)
@@ -119,7 +117,7 @@ class EnsembleCorrector(BaseCorrector):
 
             # First get a list of indexes of a specified number of stars to build the ensemble
             while len(temp_list) < star_count:
-                
+
                 # Get lightkurve for next star closest to target
                 # NOTE: This seems needlessly complicated. Probably can just change load_lightcurve
                 try:
@@ -130,7 +128,7 @@ class EnsembleCorrector(BaseCorrector):
                 next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
                 next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
                 search_loop.pop(-1)
-                
+
                 next_star_lc_quality_mask = (next_star_lc.quality == 0)
                 next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
                 next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
@@ -145,7 +143,7 @@ class EnsembleCorrector(BaseCorrector):
                                             'drange' : drange})
 
                 logger.info(next_star_lc.meta.get("drange"))
-                # Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the 
+                # Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the
                 # drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
                 if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange'] and next_star_lc.meta['frange'] < 0.03):
                     temp_list.append([next_star_index, next_star_lc.copy()])
@@ -177,7 +175,7 @@ class EnsembleCorrector(BaseCorrector):
                 if min_range > np.log10(np.max(lc.meta['drange'])):
                     if (search_radius < 100):
                         # search_radius += 10
-                        star_count += 1 
+                        star_count += 1
                         search_radius = distance[i]
                     else:
                         # search_radius *= 1.1
@@ -196,7 +194,7 @@ class EnsembleCorrector(BaseCorrector):
                     break
 
         logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
-        
+
         # Ensemble is now built. Clean up ensemble points by removing NaNs
         not_nan_idx = ~np.isnan(full_flux) # Since index is same for all arrays save it first to use cached version
         full_time = full_time[not_nan_idx]
@@ -352,9 +350,7 @@ class EnsembleCorrector(BaseCorrector):
             ax = lc.plot(marker='o', label="Original LC")
             lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
             plt.show()
-            
-        # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well. 
 
-        sys.exit()
+        # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 
         return lc_corr, STATUS.OK
