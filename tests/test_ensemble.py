@@ -67,7 +67,7 @@ def test_run_metadata():
 	assert 'frange' in outlc.meta, "Metadata is incomplete"
 	assert 'drange' in outlc.meta, "Metadata is incomplete"
 	assert outlc.meta['task']['starid'] == inlc.meta['task']['starid'], "Metadata is incomplete"
-	assert outlc.meta.task == inlc.meta.task, "Metadata is incomplete"
+	assert outlc.meta['task'] == inlc.meta['task'], "Metadata is incomplete"
 
 def test_ensemble_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
