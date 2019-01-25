@@ -23,7 +23,6 @@ from scipy.interpolate import Rbf, SmoothBivariateSpline
 
 from .cbv_main import CBV, cbv_snr_reject, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
-import math
 from .. import BaseCorrector, STATUS
 import dill
 import logging
@@ -32,8 +31,7 @@ plt.ioff()
 
 	
 #------------------------------------------------------------------------------
-
-# TODO: Move plots to dedicated module
+		
 
 class CBVCorrector(BaseCorrector):
 	"""
@@ -45,8 +43,8 @@ class CBVCorrector(BaseCorrector):
 	"""
 	
 	
-	def __init__(self, *args, do_ini_plots=True, Numcbvs='all', ncomponents=8, ent_limit=-0.7, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
-			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):	
+	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-0.7, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
+			  threshold_correlation=0.5, threshold_snrtest=4, threshold_variability=1.3, **kwargs):	
 		
 		
 		"""
@@ -84,10 +82,10 @@ class CBVCorrector(BaseCorrector):
 		self.targ_limit = targ_limit
 		self.alpha = alpha
 		self.WS_lim = WS_lim
-		
-		self.compute_cbvs()
-		self.cotrend_ini() 
-		self.compute_weight_interpolations()
+	
+#		self.compute_cbvs()
+#		self.cotrend_ini() 
+#		self.compute_weight_interpolations()
 
 	#-------------------------------------------------------------------------
 
@@ -272,39 +270,39 @@ class CBVCorrector(BaseCorrector):
 		
 	#-------------------------------------------------------------------------
 	
-	def compute_cbvs(self):
+#	def compute_cbvs(self):
+	def compute_cbvs(self, cbv_area):
 		
-		"""
-		Main function for computing CBVs.
-		
-		The steps taken in the function are:
-			1: run :py:func:`CBVCorrector.lc_matrix_clean` to obtain matrix with gap-filled, nan-removed light curves
-			for the most correlated stars in a given cbv-area
-			2: compute principal components and remove significant single-star contributers based on entropy
-			3: reun SNR test on CBVs, and only retain CBVs that pass the test
-			4: save CBVs and make diagnostics plots
-		
-		Parameters:
-			*self*: all parameters defined in class init
+			"""
+			Main function for computing CBVs.
 			
-		Returns:
-			Saves CBVs per cbv-area in ".npy" files
-		
-		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
-		"""
-		
-		logger=logging.getLogger(__name__)
-		
-		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
-		
-
-		# Loop through the CBV areas:
-		# - or run them in parallel - whatever you like!
-		for ii, cbv_area in enumerate(cbv_areas):
+			The steps taken in the function are:
+				1: run :py:func:`CBVCorrector.lc_matrix_clean` to obtain matrix with gap-filled, nan-removed light curves
+				for the most correlated stars in a given cbv-area
+				2: compute principal components and remove significant single-star contributers based on entropy
+				3: reun SNR test on CBVs, and only retain CBVs that pass the test
+				4: save CBVs and make diagnostics plots
 			
-			if not self.single_area is None:
-				if not cbv_area == self.single_area:
-					continue
+			Parameters:
+				*self*: all parameters defined in class init
+				
+			Returns:
+				Saves CBVs per cbv-area in ".npy" files
+			
+			.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+			"""
+		
+			logger=logging.getLogger(__name__)		
+			logger.info('running CBV')
+#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
+#		
+#		# Loop through the CBV areas:
+#		# - or run them in parallel - whatever you like!
+#		for ii, cbv_area in enumerate(cbv_areas):
+#			
+#			if not self.single_area is None:
+#				if not cbv_area == self.single_area:
+#					continue
 				
 				
 			logger.info('------------------------------------')
@@ -312,12 +310,15 @@ class CBVCorrector(BaseCorrector):
 			
 			if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area))):
 				logger.info('CBV for area%d already calculated' %cbv_area)
-				continue
+#				continue
+				return
 			
 			else:
 				logger.info('Computing CBV for area%d' %cbv_area)
+				
 				# Extract or compute cleaned and gapfilled light curve matrix
 				mat0, stds, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
+				
 				# Calculate initial CBVs
 				pca0 = PCA(self.ncomponents)
 				U0, _, _ = pca0._fit(mat0)
@@ -326,17 +327,15 @@ class CBVCorrector(BaseCorrector):
 				cbv0.fill(np.nan)
 				cbv0[~indx_nancol, :] = np.transpose(pca0.components_)
 				
-				
 				logger.info('Cleaning matrix for CBV - remove single dominant contributions')
+				
 				# Clean away targets that contribute significantly as a single star to a given CBV (based on entropy)
 				mat = clean_cbv(mat0, self.ncomponents, self.ent_limit, self.targ_limit)
 				
-		
 				# Calculate the principle components of cleaned matrix
 				logger.info("Doing Principle Component Analysis...")
 				pca = PCA(self.ncomponents)
 				U, _, _ = pca._fit(mat)
-				
 				
 				cbv00 = np.empty((Ntimes, self.ncomponents), dtype='float64')
 				cbv00.fill(np.nan)
@@ -400,38 +399,38 @@ class CBVCorrector(BaseCorrector):
 			
 	#---------------------------------------------------------------------------------
 
-	def cotrend_ini(self): 
+	def cotrend_ini(self, cbv_area): 
 		
-		"""
-		Function for running the initial co-trending to obtain CBV coefficients for the construction of priors.
-		
-		The steps taken in the function are:
-			1: for each cbv-area load calculated CBVs
-			2: co-trend all light curves in area using fit of all CBVs using linear least squares
-			3: save CBV coefficients
-		
-		Parameters:
-			*self*: all parameters defined in class init
+			"""
+			Function for running the initial co-trending to obtain CBV coefficients for the construction of priors.
 			
-		Returns:
-			Saves CBV coefficients per cbv-area in ".npz" files
-			adds loaded CBVs to *self*
-		
-		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
-		"""
-		
-		logger=logging.getLogger(__name__)
-		
-		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
-		self.cbvs = {}
-	
-	
-		# Loop through the CBV areas:
-		for ii, cbv_area in enumerate(cbv_areas):
+			The steps taken in the function are:
+				1: for each cbv-area load calculated CBVs
+				2: co-trend all light curves in area using fit of all CBVs using linear least squares
+				3: save CBV coefficients
 			
-			if not self.single_area is None:
-				if not cbv_area==self.single_area:
-					continue
+			Parameters:
+				*self*: all parameters defined in class init
+				
+			Returns:
+				Saves CBV coefficients per cbv-area in ".npz" files
+				adds loaded CBVs to *self*
+			
+			.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+			"""
+			
+			logger=logging.getLogger(__name__)
+		
+#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
+#		self.cbvs = {}
+#	
+#	
+#		# Loop through the CBV areas:
+#		for ii, cbv_area in enumerate(cbv_areas):
+#			
+#			if not self.single_area is None:
+#				if not cbv_area==self.single_area:
+#					continue
 				
 			#---------------------------------------------------------------------------------------------------------
 			# CORRECTING STARS
@@ -441,10 +440,9 @@ class CBVCorrector(BaseCorrector):
 				logger.info("Initial co-trending for light curves in CBV area%d already done" %cbv_area)
 				
 				# Load the cbv from file:
-				cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
-				self.cbvs[cbv_area] = cbv
-				
-				continue
+#				cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
+#				self.cbvs[cbv_area] = cbv
+				return
 			else:
 				logger.info("Initial co-trending for light curves in CBV area%d" %cbv_area)
 
@@ -454,7 +452,7 @@ class CBVCorrector(BaseCorrector):
 		
 			# Load the cbv from file:
 			cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
-			self.cbvs[cbv_area] = cbv
+#			self.cbvs[cbv_area] = cbv
 	
 			# Update maximum number of components	
 			n_components0 = cbv.cbv.shape[1]
@@ -540,43 +538,43 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	
-	def compute_weight_interpolations(self, dimensions=['row', 'col', 'tmag']):
-	
-		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
-		n_cbvs_max = self.ncomponents
-		n_cbvs_max_new = 0
+	def compute_weight_interpolations(self, cbv_area, dimensions=['tmag', 'col', 'tmag']):
 		
-		figures1 = {};
-		figures2 = {};
-		for i in range(n_cbvs_max):
-			figures1['cbv%i' %i] = {}
-			figures2['cbv%i' %i] = {}
-			for j in range(4):
-#				figures1['cbv%i' %i]['cam%i' %j]
-				fig, ax = plt.subplots(2,2, num='cbv%i_cam%i' %(i,j+1), figsize=(15,15), )
-				figures1['cbv%i' %i]['cam%i' %(j+1)] = fig
-				figures2['cbv%i' %i]['cam%i' %(j+1)] = ax
-#				figures1.append(fig)
-#				figures2.append(ax)
-	
+	#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
+			n_cbvs_max = self.ncomponents
+			n_cbvs_max_new = 0
 			
-		colormap = plt.cm.PuOr #or any other colormap
-		min_max_vals = np.zeros([n_cbvs_max, 4, 4])
+			figures1 = {};
+			figures2 = {};
+			for i in range(n_cbvs_max):
+				figures1['cbv%i' %i] = {}
+				figures2['cbv%i' %i] = {}
+				for j in range(4):
+	#				figures1['cbv%i' %i]['cam%i' %j]
+					fig, ax = plt.subplots(2,2, num='cbv%i_cam%i' %(i,j+1), figsize=(15,15), )
+					figures1['cbv%i' %i]['cam%i' %(j+1)] = fig
+					figures2['cbv%i' %i]['cam%i' %(j+1)] = ax
+	#				figures1.append(fig)
+	#				figures2.append(ax)
+		
+				
+			colormap = plt.cm.PuOr #or any other colormap
+			min_max_vals = np.zeros([n_cbvs_max, 4, 4])
+				
+			#TODO: obtain from sector information
+	#		midx = 40.54 # Something wrong! field is 27 deg wide, not 24
+	#		midy = 18
 			
-		#TODO: obtain from sector information
-#		midx = 40.54 # Something wrong! field is 27 deg wide, not 24
-#		midy = 18
-		
-		
-		pos_mag={}
+			
+			pos_mag={}
 		
 		# Loop through the CBV areas:
 		# - or run them in parallel - whatever you like!
-		for ii, cbv_area in enumerate(cbv_areas):	
+#		for ii, cbv_area in enumerate(cbv_areas):	
 			
 			if os.path.exists(os.path.join(self.data_folder, 'Rbf_area%d_cbv1.pkl' %cbv_area)):
 				print('Weights for area%d already done' %cbv_area)
-				continue
+				return
 			
 			print('Computing weights for area%d' %cbv_area)
 			results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
@@ -737,11 +735,11 @@ class CBVCorrector(BaseCorrector):
 #				f+=1
 				
 				
-		for i in range(n_cbvs_max_new):
-			for j in range(4):
-				figs = figures1['cbv%i' %i]['cam%i' %(j+1)]
-				filename = 'cbv%i_cam%i.png' %(i,j+1)
-				figs.savefig(os.path.join(self.data_folder, filename))
+#		for i in range(n_cbvs_max_new):
+#			for j in range(4):
+#				figs = figures1['cbv%i' %i]['cam%i' %(j+1)]
+#				filename = 'cbv%i_cam%i.png' %(i,j+1)
+#		figs.savefig(os.path.join(self.data_folder, filename))
 				
 #		for k, figs in enumerate(figures1):
 #			if k>=n_cbvs_max_new:

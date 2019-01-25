@@ -46,6 +46,10 @@ def cbv_snr_reject(cbv_ini, threshold_snrtest=5.0):
 	logger.info("SNR of CBVs %s", snr)
 	
 	indx_lowsnr = (snr < threshold_snrtest)
+	
+	# Never throw away first CBV
+	indx_lowsnr[0] = False
+	
 	if np.any(indx_lowsnr):
 		logger.info("Rejecting %d CBVs based on SNR test" % np.sum(indx_lowsnr))
 		cbv = cbv_ini[:, ~indx_lowsnr]

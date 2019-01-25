@@ -44,7 +44,8 @@ if __name__ == '__main__':
 	args.ccd = 1
 	args.method = 'cbv'
 	args.all = True
-	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves'
+	args.plot = False
+	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-2127753'
 
 
 	# Make sure at least one setting is given:

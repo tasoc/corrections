@@ -10,3 +10,4 @@ KASOC Asteroseismic Data Preparation
 
 #from .kasoc_filter import *
 #from .utilities import *
+#from .CBVCorrector import CBVCorrector
