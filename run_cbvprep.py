@@ -1,136 +1,44 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
+Run preparation of CBVs for single or several CBV-areas.
+
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
-from six.moves import range
-import numpy as np
-import matplotlib.pyplot as plt
-import os, sys
-from sklearn.decomposition import PCA
-import matplotlib.colors as colors
 import argparse
+import os
 import logging
-from bottleneck import allnan, nanmedian
-from scipy.interpolate import pchip_interpolate
-from statsmodels.nonparametric.kde import KDEUnivariate as KDE
-import warnings
-warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
-from tqdm import tqdm
-
-from scipy.interpolate import Rbf, SmoothBivariateSpline
-
 from functools import partial
+import multiprocessing
+from corrections import CBVCorrector, BaseCorrector
 
-from corrections import CBVCorrector
-import dill
-import six
-plt.ioff()
-import sqlite3
-
-
-from multiprocessing import Pool
-
-	
 #------------------------------------------------------------------------------
-
-def search_database(cursor, select=None, search=None, order_by=None, limit=None, distinct=False):
-	"""
-	Search list of lightcurves and return a list of tasks/stars matching the given criteria.
-
-	Parameters:
-		search (list of strings or None): Conditions to apply to the selection of stars from the database
-		order_by (list, string or None): Column to order the database output by.
-		limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved.
-		distinct (boolean): Boolean indicating if the query should return unique elements only.
-
-	Returns:
-		list of dicts: Returns all stars retrieved by the call to the database as dicts/tasks that can be consumed directly by load_lightcurve
-
-	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
-	"""
-
-	logger = logging.getLogger(__name__)
-
-	if select is None:
-		select = '*'
-	elif isinstance(select, (list, tuple)):
-		select = ",".join(select)
-
-	if search is None:
-		search = ''
-	elif isinstance(search, (list, tuple)):
-		search = "WHERE " + " AND ".join(search)
-	else:
-		search = 'WHERE ' + search
-
-	if order_by is None:
-		order_by = ''
-	elif isinstance(order_by, (list, tuple)):
-		order_by = " ORDER BY " + ",".join(order_by)
-	elif isinstance(order_by, six.string_types):
-		order_by = " ORDER BY " + order_by
-
-	limit = '' if limit is None else " LIMIT %d" % limit
-
-	query = "SELECT {distinct:s}{select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority {search:s}{order_by:s}{limit:s};".format(
-		distinct='DISTINCT ' if distinct else '',
-		select=select,
-		search=search,
-		order_by=order_by,
-		limit=limit
-	)
-	logger.debug("Running query: %s", query)
-
-	# Ask the database: status=1 
-	cursor.execute(query)
-	return [dict(row) for row in cursor.fetchall()]
-
-
-
 def prepare_cbv(cbv_area, input_folder=None):
 
-	logger=logging.getLogger(__name__)		
+	logger = logging.getLogger(__name__)
 	logger.info('running CBV for area %s', str(cbv_area))
-	
+
 	with CBVCorrector(input_folder) as C:
 		C.compute_cbvs(cbv_area)
-		C.cotrend_ini(cbv_area)	
-		
+		C.cotrend_ini(cbv_area)
 
-#def prepare_wei(cbv_area):
-#
-#	logger=logging.getLogger(__name__)		
-#	logger.info('running CBV')
-#	
-#	with CBVCorrector as C:
-#		C.compute_weight_interpolations(cbv_area)	
-		
-		
-# =============================================================================
-#
-# =============================================================================
-
+#------------------------------------------------------------------------------
 if __name__ == '__main__':
 
 	# Parse command line arguments:
-	parser = argparse.ArgumentParser(description='Run preparation of CBVs for single or several CBV-areas')
-	parser.add_argument('-e', '--ext', help='Extension of plots.', default='png', choices=('png', 'eps'))
-	parser.add_argument('-s', '--show', help='Show plots.', default=False, choices=('True', 'False'))
+	parser = argparse.ArgumentParser(description='Run preparation of CBVs for single or several CBV-areas.')
+	#parser.add_argument('-e', '--ext', help='Extension of plots.', default='png', choices=('png', 'eps'))
+	#parser.add_argument('-s', '--show', help='Show plots.', action='store_true')
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
-	parser.add_argument('-a', '--area', help='Single CBV_area for which to prepare photometry.', nargs='?', default=None)
+	parser.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
+	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
+	parser.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
-	parser.add_argument('output_folder', type=str, help='Directory in which to place output if several input folders are given.', nargs='?', default=None)
 	args = parser.parse_args()
-
-
-	args.show = 'True'
-	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-2127753/'
-	todo_file = os.path.join(args.input_folder, 'todo.sqlite')
-#	args.area='111'
 
 	# Set logging level:
 	logging_level = logging.INFO
@@ -150,28 +58,52 @@ if __name__ == '__main__':
 	logger_parent.addHandler(console)
 	logger_parent.setLevel(logging_level)
 
+	# Parse the input folder:
+	input_folder = args.input_folder
+	if input_folder is None:
+		input_folder = os.environ.get('TESSCORR_INPUT')
+	if input_folder is None or not os.path.isdir(input_folder):
+		parser.error("Invalid input folder")
+	logger.info("Loading input data from '%s'", input_folder)
 
-	logger.info("Loading input data from '%s'", args.input_folder)
-	logger.info("Putting output data in '%s'", args.output_folder)
+	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
+	with BaseCorrector(input_folder) as bc:
+		# Build list of constraints:
+		constraints = []
+		if args.camera:
+			constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
+		if args.ccd:
+			constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
+		if args.area:
+			constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
+		if not constraints:
+			constraints = None
 
-	# Load the SQLite file:
-	print(todo_file)
-	conn = sqlite3.connect(todo_file)
-	conn.row_factory = sqlite3.Row
-	cursor = conn.cursor()
-		
-		
-	if args.area is None:
-		cbv_areas = [int(row['cbv_area']) for row in search_database(cursor, select='cbv_area', distinct=True)]
+		# Search for valid areas:
+		cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
+		logger.debug("CBV areas: %s", cbv_areas)
 
-		p = Pool(8)
-		wrap=partial(prepare_cbv, input_folder=args.input_folder)
-		p.map(wrap, cbv_areas)
-		
+	# Number of threads to run in parallel:
+	threads = int(os.environ.get('SLURM_CPUS_PER_TASK', multiprocessing.cpu_count()))
+	threads = min(threads, len(cbv_areas))
+	logger.info("Using %d processes.", threads)
+
+	# Create wrapper function which only takes a single cbv_area as input:
+	prepare_cbv_wrapper = partial(prepare_cbv, input_folder=input_folder)
+
+	# Run the preparation:
+	if threads > 1:
+		# There is more than one area to process, so let's start
+		# a process pool and process them in parallel:
+		pool = multiprocessing.Pool(threads)
+		pool.map(prepare_cbv_wrapper, cbv_areas)
+		pool.close()
+		pool.join()
+
+	elif threads == 1:
+		# Only a single area to process, so let's not bother with
+		# starting subprocesses, but simply run it directly:
+		prepare_cbv_wrapper(cbv_areas[0])
+
 	else:
-		prepare_cbv(args.input_folder, int(args.area))
-	
-	
-	
-	
-	
+		logger.info("No cbv-areas found to be processed.")
