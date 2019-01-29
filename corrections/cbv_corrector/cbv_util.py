@@ -113,35 +113,15 @@ def reduce_mode(x):
 def ndim_med_filt(v, x, n, dist='euclidean', mad_frac=2):
 	
 	d = distance.cdist(x, x, dist)
-	
-	
+
 	idx = np.zeros_like(v, dtype=bool)
 	for i in range(v.shape[0]):
 		idx_sort = np.argsort(d[i,:])
-#		xx = x[idx_sort, :][1:n+1, :]
 		vv= v[idx_sort][1:n+1] # sort values according to distance from point
 		
 		vm = np.median(vv) # median value of n nearest points
 		mad = MAD_model(vv-vm)
-		
-#		if i==10:
-#			plt.figure()
-#			plt.scatter(xx[:,0], xx[:,1])
-#			plt.scatter(x[i,0], x[i,1], color='r')
-#			
-#			plt.figure()
-#			plt.scatter(xx[:,0],vv)
-#			plt.scatter(x[i,0], v[i], color='r')
-#			plt.axhline(y=vm)
-#			plt.axhline(y=vm+3*mad)
-#			plt.axhline(y=vm-3*mad)
-#			plt.axhline(y=vm+2*mad)
-#			plt.axhline(y=vm-2*mad)			
-#			plt.axhline(y=vm+mad)
-#			plt.axhline(y=vm-mad)
-#			plt.show()
-#			sys.exit()
-			
+					
 		if (v[i]<vm+mad_frac*mad) & (v[i]>vm-mad_frac*mad):
 			idx[i] = True
 	return idx		
