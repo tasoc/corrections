@@ -365,8 +365,8 @@ class CBVCorrector(BaseCorrector):
 
 
 				# Plot all the CBVs:
-				fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(16, 8))
-				fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(16, 8))
+				fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
+				fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
 				fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
 				fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
 	
