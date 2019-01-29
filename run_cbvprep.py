@@ -40,7 +40,7 @@ if __name__ == '__main__':
 	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots', action='store_false', default=True)
 	parser.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
-	parser.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=[111])
+	parser.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
 

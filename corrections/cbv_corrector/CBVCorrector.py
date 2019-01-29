@@ -29,22 +29,16 @@ plt.ioff()
 
 
 #------------------------------------------------------------------------------
-
-
 class CBVCorrector(BaseCorrector):
 	"""
 	The CBV (Co-trending Basis Vectors) correction method for the TASOC
 	photometry pipeline
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
-
 	"""
-	
-	
+
 	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=None, ent_limit=None, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
-			  threshold_correlation=0.5, threshold_snrtest=None, threshold_variability=1.3, **kwargs):	
-		
-		
+			  threshold_correlation=0.5, threshold_snrtest=None, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
 
@@ -80,11 +74,9 @@ class CBVCorrector(BaseCorrector):
 		self.targ_limit = targ_limit
 		self.alpha = alpha
 		self.WS_lim = WS_lim
-	
-	#-------------------------------------------------------------------------
 
+	#--------------------------------------------------------------------------
 	def lc_matrix(self, cbv_area):
-
 		"""
 		Computes correlation matrix for light curves in a given cbv-area.
 
@@ -95,8 +87,8 @@ class CBVCorrector(BaseCorrector):
 
 		Parameters:
             cbv_area: the cbv area to calculate matrix for
+				additional parameters are contained in *self* and defined in the init function.
 
-			additional parameters are contained in *self* and defined in the init function
         Returns:
             mat: matrix of *self.threshold_correlation*% most correlated light curves, to be used in CBV calculation
 			stds: standard deviations of light curves in "mat"
@@ -104,14 +96,13 @@ class CBVCorrector(BaseCorrector):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
-		logger=logging.getLogger(__name__)
+		logger = logging.getLogger(__name__)
 
-		#---------------------------------------------------------------------
+		#----------------------------------------------------------------------
 		# CALCULATE LIGHT CURVE CORRELATIONS
-		#---------------------------------------------------------------------
+		#----------------------------------------------------------------------
 
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
-
 
 		tmpfile = os.path.join(self.data_folder, 'mat-%d.npz' %cbv_area)
 		if os.path.exists(tmpfile):
@@ -163,7 +154,7 @@ class CBVCorrector(BaseCorrector):
 				quality_remove = 1 #+...
 				flag_removed = (lc.quality & quality_remove != 0)
 				lc.flux[flag_removed] = np.nan
-				
+
 				# Remove a point on both sides of momentum dump
 #				idx_remove = np.where(flag_removed)[0]
 #				idx_removem = idx_remove - 1
@@ -174,7 +165,7 @@ class CBVCorrector(BaseCorrector):
 #				lc.flux[idx_removemt[(idx_removemt>0)]] = np.nan
 #				lc.flux[idx_removep[(idx_removep<len(flag_removed))]] = np.nan
 #				lc.flux[idx_removept[(idx_removept<len(flag_removed))]] = np.nan
-				
+
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
 
@@ -214,10 +205,8 @@ class CBVCorrector(BaseCorrector):
 
 		return mat, stds
 
-	#-------------------------------------------------------------------------
-
+	#--------------------------------------------------------------------------
 	def lc_matrix_clean(self, cbv_area):
-
 		"""
 		Performs gap-filling of light curves returned by :py:func:`CBVCorrector.lc_matrix`, and
 		removes time stamps where all flux values are nan
@@ -273,257 +262,251 @@ class CBVCorrector(BaseCorrector):
 
 		return mat, stds, indx_nancol, Ntimes
 
-	#-------------------------------------------------------------------------
-	
+	#--------------------------------------------------------------------------
 	def compute_cbvs(self, cbv_area):
+		"""
+		Main function for computing CBVs.
 
-			"""
-			Main function for computing CBVs.
+		The steps taken in the function are:
+			1: run :py:func:`CBVCorrector.lc_matrix_clean` to obtain matrix with gap-filled, nan-removed light curves
+			for the most correlated stars in a given cbv-area
+			2: compute principal components and remove significant single-star contributers based on entropy
+			3: reun SNR test on CBVs, and only retain CBVs that pass the test
+			4: save CBVs and make diagnostics plots
 
-			The steps taken in the function are:
-				1: run :py:func:`CBVCorrector.lc_matrix_clean` to obtain matrix with gap-filled, nan-removed light curves
-				for the most correlated stars in a given cbv-area
-				2: compute principal components and remove significant single-star contributers based on entropy
-				3: reun SNR test on CBVs, and only retain CBVs that pass the test
-				4: save CBVs and make diagnostics plots
+		Parameters:
+			*self*: all parameters defined in class init
 
-			Parameters:
-				*self*: all parameters defined in class init
+		Returns:
+			Saves CBVs per cbv-area in ".npy" files
 
-			Returns:
-				Saves CBVs per cbv-area in ".npy" files
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
 
-			.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
-			"""
-		
-			logger=logging.getLogger(__name__)		
-			logger.info('running CBV')			
-			logger.info('------------------------------------')
-
-
-			if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area))):
-				logger.info('CBV for area%d already calculated' %cbv_area)
-				return
-
-			else:
-				logger.info('Computing CBV for area%d' %cbv_area)
-
-				# Extract or compute cleaned and gapfilled light curve matrix
-				mat0, stds, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
-
-				# Calculate initial CBVs
-				logger.info('Computing %d CBVs' %self.ncomponents)
-				pca0 = PCA(self.ncomponents)
-				U0, _, _ = pca0._fit(mat0)
-
-				cbv0 = np.empty((Ntimes, self.ncomponents), dtype='float64')
-				cbv0.fill(np.nan)
-				cbv0[~indx_nancol, :] = np.transpose(pca0.components_)
-
-				logger.info('Cleaning matrix for CBV - remove single dominant contributions')
-
-				# Clean away targets that contribute significantly as a single star to a given CBV (based on entropy)
-				mat = clean_cbv(mat0, self.ncomponents, self.ent_limit, self.targ_limit)
-
-				# Calculate the principle components of cleaned matrix
-				logger.info("Doing Principle Component Analysis...")
-				pca = PCA(self.ncomponents)
-				U, _, _ = pca._fit(mat)
-				
-				cbv = np.empty((Ntimes, self.ncomponents), dtype='float64')
-				cbv.fill(np.nan)
-				cbv[~indx_nancol, :] = np.transpose(pca.components_)
-				
-				# Signal-to-Noise test:
-				indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
-			
-				# Save the CBV to file:
-				np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)), cbv)
-				
-				
-				####################### PLOTS #################################
-				# Plot the "effectiveness" of each CBV:
-				max_components=20
-				n_cbv_components = np.arange(max_components, dtype=int)
-				pca_scores = compute_scores(mat, n_cbv_components)
-
-				fig0 = plt.figure(figsize=(12,8))
-				ax0 = fig0.add_subplot(121)
-				ax02 = fig0.add_subplot(122)
-				ax0.plot(n_cbv_components, pca_scores, 'b', label='PCA scores')
-				ax0.set_xlabel('nb of components')
-				ax0.set_ylabel('CV scores')
-				ax0.legend(loc='lower right')
-
-				ax02.plot(np.arange(1, cbv0.shape[1]+1), pca.explained_variance_ratio_, '.-')
-				ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
-				ax02.set_xlabel('CBV number')
-				ax02.set_ylabel('Variance explained ratio')
-
-				fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
-				plt.close(fig0)
+		logger=logging.getLogger(__name__)
+		logger.info('running CBV')
+		logger.info('------------------------------------')
 
 
-				# Plot all the CBVs:
-				fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
-				fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
-				fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
-				fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
-	
-				for k, ax in enumerate(axes.flatten()):
-					try:
-						ax.plot(cbv0[:, k]+0.1, 'r-')	
-						if not indx_lowsnr is None:
-							if indx_lowsnr[k]:
-								col = 'c'
-							else:
-								col = 'k'
+		if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area))):
+			logger.info('CBV for area%d already calculated' %cbv_area)
+			return
+
+		else:
+			logger.info('Computing CBV for area%d' %cbv_area)
+
+			# Extract or compute cleaned and gapfilled light curve matrix
+			mat0, stds, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
+
+			# Calculate initial CBVs
+			logger.info('Computing %d CBVs' %self.ncomponents)
+			pca0 = PCA(self.ncomponents)
+			U0, _, _ = pca0._fit(mat0)
+
+			cbv0 = np.empty((Ntimes, self.ncomponents), dtype='float64')
+			cbv0.fill(np.nan)
+			cbv0[~indx_nancol, :] = np.transpose(pca0.components_)
+
+			logger.info('Cleaning matrix for CBV - remove single dominant contributions')
+
+			# Clean away targets that contribute significantly as a single star to a given CBV (based on entropy)
+			mat = clean_cbv(mat0, self.ncomponents, self.ent_limit, self.targ_limit)
+
+			# Calculate the principle components of cleaned matrix
+			logger.info("Doing Principle Component Analysis...")
+			pca = PCA(self.ncomponents)
+			U, _, _ = pca._fit(mat)
+
+			cbv = np.empty((Ntimes, self.ncomponents), dtype='float64')
+			cbv.fill(np.nan)
+			cbv[~indx_nancol, :] = np.transpose(pca.components_)
+
+			# Signal-to-Noise test:
+			indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
+
+			# Save the CBV to file:
+			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)), cbv)
+
+
+			####################### PLOTS #################################
+			# Plot the "effectiveness" of each CBV:
+			max_components=20
+			n_cbv_components = np.arange(max_components, dtype=int)
+			pca_scores = compute_scores(mat, n_cbv_components)
+
+			fig0 = plt.figure(figsize=(12,8))
+			ax0 = fig0.add_subplot(121)
+			ax02 = fig0.add_subplot(122)
+			ax0.plot(n_cbv_components, pca_scores, 'b', label='PCA scores')
+			ax0.set_xlabel('nb of components')
+			ax0.set_ylabel('CV scores')
+			ax0.legend(loc='lower right')
+
+			ax02.plot(np.arange(1, cbv0.shape[1]+1), pca.explained_variance_ratio_, '.-')
+			ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
+			ax02.set_xlabel('CBV number')
+			ax02.set_ylabel('Variance explained ratio')
+
+			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
+			plt.close(fig0)
+
+
+			# Plot all the CBVs:
+			fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
+			fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
+			fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
+			fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
+
+			for k, ax in enumerate(axes.flatten()):
+				try:
+					ax.plot(cbv0[:, k]+0.1, 'r-')
+					if not indx_lowsnr is None:
+						if indx_lowsnr[k]:
+							col = 'c'
 						else:
 							col = 'k'
-						ax.plot(cbv[:, k], ls='-', color=col)	
-						ax.set_title('Basis Vector %d' % (k+1))
-					except:
-						pass
-					
-				for k, ax in enumerate(axes2.flatten()):	
-					try:
-						ax.plot(-np.abs(U0[:, k]), 'r-')
-						ax.plot(np.abs(U[:, k]), 'k-')
-						ax.set_title('Basis Vector %d' % (k+1))
-					except:
-						pass
-				fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' %cbv_area))
-				fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' %cbv_area))
-				plt.close('all')
+					else:
+						col = 'k'
+					ax.plot(cbv[:, k], ls='-', color=col)
+					ax.set_title('Basis Vector %d' % (k+1))
+				except:
+					pass
 
-	#---------------------------------------------------------------------------------
+			for k, ax in enumerate(axes2.flatten()):
+				try:
+					ax.plot(-np.abs(U0[:, k]), 'r-')
+					ax.plot(np.abs(U[:, k]), 'k-')
+					ax.set_title('Basis Vector %d' % (k+1))
+				except:
+					pass
+			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' %cbv_area))
+			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' %cbv_area))
+			plt.close('all')
 
+	#--------------------------------------------------------------------------
 	def cotrend_ini(self, cbv_area):
+		"""
+		Function for running the initial co-trending to obtain CBV coefficients for the construction of priors.
 
-			"""
-			Function for running the initial co-trending to obtain CBV coefficients for the construction of priors.
+		The steps taken in the function are:
+			1: for each cbv-area load calculated CBVs
+			2: co-trend all light curves in area using fit of all CBVs using linear least squares
+			3: save CBV coefficients
 
-			The steps taken in the function are:
-				1: for each cbv-area load calculated CBVs
-				2: co-trend all light curves in area using fit of all CBVs using linear least squares
-				3: save CBV coefficients
+		Parameters:
+			*self*: all parameters defined in class init
 
-			Parameters:
-				*self*: all parameters defined in class init
+		Returns:
+			Saves CBV coefficients per cbv-area in ".npz" files
+			adds loaded CBVs to *self*
 
-			Returns:
-				Saves CBV coefficients per cbv-area in ".npz" files
-				adds loaded CBVs to *self*
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
 
-			.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
-			"""
+		logger=logging.getLogger(__name__)
 
-			logger=logging.getLogger(__name__)
-		
-			#---------------------------------------------------------------------------------------------------------
-			# CORRECTING STARS
-			#---------------------------------------------------------------------------------------------------------
-			
-			logger.info("--------------------------------------------------------------")
-			if os.path.exists(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area)):
-				logger.info("Initial co-trending for light curves in CBV area%d already done" %cbv_area)
-				return
-			else:
-				logger.info("Initial co-trending for light curves in CBV area%d" %cbv_area)
+		#------------------------------------------------------------------
+		# CORRECTING STARS
+		#------------------------------------------------------------------
 
-			# Load stars from data base			
-			stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area])
-			
-		
-			# Load the cbv from file:
-			cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
-			
-			
-			# Signal-to-Noise test (without actually removing any CBVs):
-			indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
-			cbv.remove_cols(indx_lowsnr)
-			
-			# Update maximum number of components	
-			n_components0 = cbv.cbv.shape[1]
+		logger.info("--------------------------------------------------------------")
+		if os.path.exists(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area)):
+			logger.info("Initial co-trending for light curves in CBV area%d already done" %cbv_area)
+			return
+		else:
+			logger.info("Initial co-trending for light curves in CBV area%d" %cbv_area)
+
+		# Load stars from data base
+		stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area])
 
 
-			logger.info('New max number of components: %i' %int(n_components0))
+		# Load the cbv from file:
+		cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
 
-			if self.Numcbvs=='all':
-				n_components = n_components0
-			else:
-				n_components = np.min([self.Numcbvs, n_components0])
 
-			logger.info('Fitting using number of components: %i' %int(n_components))
-			results = np.zeros([len(stars), n_components+2])
-			
-			# Loop through stars
-			for kk, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
-				
-				lc = self.load_lightcurve(star)
+		# Signal-to-Noise test (without actually removing any CBVs):
+		indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
+		cbv.remove_cols(indx_lowsnr)
 
-				logger.info("Correcting star %d" %lc.targetid)
+		# Update maximum number of components
+		n_components0 = cbv.cbv.shape[1]
 
-				flux_filter, res = cbv.cotrend_single(lc, n_components, self.data_folder, ini=True)
-				lc_corr = (lc.flux/flux_filter-1)*1e6
+
+		logger.info('New max number of components: %i' %int(n_components0))
+
+		if self.Numcbvs=='all':
+			n_components = n_components0
+		else:
+			n_components = np.min([self.Numcbvs, n_components0])
+
+		logger.info('Fitting using number of components: %i' %int(n_components))
+		results = np.zeros([len(stars), n_components+2])
+
+		# Loop through stars
+		for kk, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
+
+			lc = self.load_lightcurve(star)
+
+			logger.debug("Correcting star %d", lc.targetid)
+
+			flux_filter, res = cbv.cotrend_single(lc, n_components, self.data_folder, ini=True)
+			lc_corr = (lc.flux/flux_filter-1)*1e6
 
 #				# SAVE TO DIAGNOSTICS FILE::
 #				wn_ratio = GOC_wn(flux, flux-flux_filter)
 
-				res = np.array([res,]).flatten()
-				results[kk, 0] = lc.targetid
-				results[kk, 1:len(res)+1] = res
+			res = np.array([res,]).flatten()
+			results[kk, 0] = lc.targetid
+			results[kk, 1:len(res)+1] = res
 
 
-				if self.do_ini_plots:
-					fig = plt.figure()
-					ax1 = fig.add_subplot(211)
-					ax1.plot(lc.time, lc.flux)
-					ax1.plot(lc.time, flux_filter)
-					ax1.set_xlabel('Time (BJD)')
-					ax1.set_ylabel('Flux (counts)')
-					ax1.set_xticks([])
-					ax2 = fig.add_subplot(212)
-					ax2.plot(lc.time, lc_corr)
-					ax2.set_xlabel('Time (BJD)')
-					ax2.set_ylabel('Relative flux (ppm)')
-					filename = 'lc_corr_ini_TIC%d.png' %lc.targetid
+			if self.do_ini_plots:
+				fig = plt.figure()
+				ax1 = fig.add_subplot(211)
+				ax1.plot(lc.time, lc.flux)
+				ax1.plot(lc.time, flux_filter)
+				ax1.set_xlabel('Time (BJD)')
+				ax1.set_ylabel('Flux (counts)')
+				ax1.set_xticks([])
+				ax2 = fig.add_subplot(212)
+				ax2.plot(lc.time, lc_corr)
+				ax2.set_xlabel('Time (BJD)')
+				ax2.set_ylabel('Relative flux (ppm)')
+				filename = 'lc_corr_ini_TIC%d.png' %lc.targetid
 
-					if not os.path.exists(os.path.join(self.plot_folder(lc))):
-						os.makedirs(os.path.join(self.plot_folder(lc)))
-					fig.savefig(os.path.join(self.plot_folder(lc), filename))
-					plt.close(fig)
-
-
-			# Save weights for priors if it is an initial run
-			np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area), res=results)
+				if not os.path.exists(os.path.join(self.plot_folder(lc))):
+					os.makedirs(os.path.join(self.plot_folder(lc)))
+				fig.savefig(os.path.join(self.plot_folder(lc), filename))
+				plt.close(fig)
 
 
-			# Plot CBV weights
-			fig = plt.figure(figsize=(15,6))
-			ax = fig.add_subplot(121)
-			ax2 = fig.add_subplot(122)
-			for kk in range(1,n_components+1):
-				idx = np.nonzero(results[:, kk])
-				r = results[idx, kk]
-				idx2 = (r>np.percentile(r, 10)) & (r<np.percentile(r, 90))
-				kde = KDE(r[idx2])
-				kde.fit(gridsize=5000)
+		# Save weights for priors if it is an initial run
+		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area), res=results)
 
-				ax.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk))
 
-				err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
-				ax2.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
-			ax.set_xlabel('CBV weight')
-			ax2.set_ylabel('CBV weight')
-			ax2.set_xlabel('CBV')
-			ax.legend()
-			fig.savefig(os.path.join(self.data_folder, 'weights-sector-%d.png' % (cbv_area)))
-			plt.close(fig)
+		# Plot CBV weights
+		fig = plt.figure(figsize=(15,6))
+		ax = fig.add_subplot(121)
+		ax2 = fig.add_subplot(122)
+		for kk in range(1,n_components+1):
+			idx = np.nonzero(results[:, kk])
+			r = results[idx, kk]
+			idx2 = (r>np.percentile(r, 10)) & (r<np.percentile(r, 90))
+			kde = KDE(r[idx2])
+			kde.fit(gridsize=5000)
 
+			ax.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk))
+
+			err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
+			ax2.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
+		ax.set_xlabel('CBV weight')
+		ax2.set_ylabel('CBV weight')
+		ax2.set_xlabel('CBV')
+		ax.legend()
+		fig.savefig(os.path.join(self.data_folder, 'weights-sector-%d.png' % (cbv_area)))
+		plt.close(fig)
 
 	#--------------------------------------------------------------------------
-
 	def compute_weight_interpolations(self, cbv_area, dimensions=['tmag', 'col', 'tmag']):
 
 	#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
@@ -735,10 +718,9 @@ class CBVCorrector(BaseCorrector):
 
 
 	#--------------------------------------------------------------------------
-
 	def do_correction(self, lc):
 
-		logger=logging.getLogger(__name__)
+		logger = logging.getLogger(__name__)
 
 		# Load the cbv from file:
 		cbv = self.cbvs[lc.meta['task']['cbv_area']]
