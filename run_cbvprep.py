@@ -93,6 +93,10 @@ if __name__ == '__main__':
 
 	# Run the preparation:
 	if threads > 1:
+		# Disable printing info messages from the parent function.
+		# It is going to be all jumbled up anyway.
+		logger_parent.setLevel(logging.WARNING)
+
 		# There is more than one area to process, so let's start
 		# a process pool and process them in parallel:
 		pool = multiprocessing.Pool(threads)
