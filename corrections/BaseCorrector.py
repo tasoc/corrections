@@ -75,8 +75,24 @@ class BaseCorrector(object):
 
 		# Save inputs:
 		self.input_folder = input_folder
-		self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		self.plot = plot
+
+		# Find the auxillary data directory based on which corrector is running:
+		if self.__class__.__name__ == 'BaseCorrector':
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
+		else:
+			CorrMethod = {
+				'EnsembleCorrector': 'ensemble',
+				'CBVCorrector': 'cbv',
+				'KASOCFilterCorrector': 'kasoc_filter'
+			}.get(self.__class__.__name__)
+
+			# Create a data folder specific to this corrector:
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
+
+			# Make sure that the folder exists:
+			if not os.path.exists(self.data_folder):
+				os.mkdir(self.data_folder)
 
 		# The path to the TODO list:
 		todo_file = os.path.join(input_folder, 'todo.sqlite')
