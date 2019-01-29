@@ -458,7 +458,7 @@ class CBVCorrector(BaseCorrector):
 			results = np.zeros([len(stars), n_components+2])
 			
 			# Loop through stars
-			for kk, star in tqdm(enumerate(stars), total=len(stars), disable=logger.isEnabledFor(logging.INFO)):
+			for kk, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
 				
 				lc = self.load_lightcurve(star)
 
