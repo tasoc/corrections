@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 from scipy.interpolate import Rbf, SmoothBivariateSpline
 
-from .cbv_main import CBV, cbv_snr_reject, clean_cbv, lc_matrix_calc
+from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
 import dill
@@ -83,10 +83,6 @@ class CBVCorrector(BaseCorrector):
 		self.alpha = alpha
 		self.WS_lim = WS_lim
 	
-#		self.compute_cbvs()
-#		self.cotrend_ini() 
-#		self.compute_weight_interpolations()
-
 	#-------------------------------------------------------------------------
 
 	def lc_matrix(self, cbv_area):
@@ -169,6 +165,13 @@ class CBVCorrector(BaseCorrector):
 				quality_remove = 1 #+...
 				flag_removed = (lc.quality & quality_remove != 0)
 				lc.flux[flag_removed] = np.nan
+				
+				# Remove a point on both sides of momentum dump
+#				idx_remove = np.where(flag_removed)[0]
+#				idx_removem = idx_remove - 1
+#				idx_removep = idx_remove + 1
+#				lc.flux[idx_removem[(idx_removem>0)]] = np.nan
+#				lc.flux[idx_removep[(idx_removep<len(flag_removed))]] = np.nan
 				
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
@@ -270,7 +273,6 @@ class CBVCorrector(BaseCorrector):
 		
 	#-------------------------------------------------------------------------
 	
-#	def compute_cbvs(self):
 	def compute_cbvs(self, cbv_area):
 		
 			"""
@@ -293,24 +295,12 @@ class CBVCorrector(BaseCorrector):
 			"""
 		
 			logger=logging.getLogger(__name__)		
-			logger.info('running CBV')
-#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
-#		
-#		# Loop through the CBV areas:
-#		# - or run them in parallel - whatever you like!
-#		for ii, cbv_area in enumerate(cbv_areas):
-#			
-#			if not self.single_area is None:
-#				if not cbv_area == self.single_area:
-#					continue
-				
-				
+			logger.info('running CBV')			
 			logger.info('------------------------------------')
 			
 			
 			if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area))):
 				logger.info('CBV for area%d already calculated' %cbv_area)
-#				continue
 				return
 			
 			else:
@@ -337,17 +327,18 @@ class CBVCorrector(BaseCorrector):
 				pca = PCA(self.ncomponents)
 				U, _, _ = pca._fit(mat)
 				
-				cbv00 = np.empty((Ntimes, self.ncomponents), dtype='float64')
-				cbv00.fill(np.nan)
-				cbv00[~indx_nancol, :] = np.transpose(pca.components_)
+				cbv = np.empty((Ntimes, self.ncomponents), dtype='float64')
+				cbv.fill(np.nan)
+				cbv[~indx_nancol, :] = np.transpose(pca.components_)
 				
 				# Signal-to-Noise test:
-				cbv, indx_lowsnr = cbv_snr_reject(cbv00, self.threshold_snrtest)
+				indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
 			
 				# Save the CBV to file:
 				np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)), cbv)
 				
 				
+				####################### PLOTS #################################
 				# Plot the "effectiveness" of each CBV:
 				max_components=20
 				n_cbv_components = np.arange(max_components, dtype=int)
@@ -385,7 +376,7 @@ class CBVCorrector(BaseCorrector):
 							col = 'k'
 					else:
 						col = 'k'
-					ax.plot(cbv00[:, k], ls='-', color=col)	
+					ax.plot(cbv[:, k], ls='-', color=col)	
 					ax.set_title('Basis Vector %d' % (k+1))
 					
 					
@@ -421,39 +412,29 @@ class CBVCorrector(BaseCorrector):
 			
 			logger=logging.getLogger(__name__)
 		
-#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
-#		self.cbvs = {}
-#	
-#	
-#		# Loop through the CBV areas:
-#		for ii, cbv_area in enumerate(cbv_areas):
-#			
-#			if not self.single_area is None:
-#				if not cbv_area==self.single_area:
-#					continue
-				
 			#---------------------------------------------------------------------------------------------------------
 			# CORRECTING STARS
 			#---------------------------------------------------------------------------------------------------------
+			
 			logger.info("--------------------------------------------------------------")
 			if os.path.exists(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area)):
 				logger.info("Initial co-trending for light curves in CBV area%d already done" %cbv_area)
-				
-				# Load the cbv from file:
-#				cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
-#				self.cbvs[cbv_area] = cbv
 				return
 			else:
 				logger.info("Initial co-trending for light curves in CBV area%d" %cbv_area)
 
 			# Load stars from data base			
-			stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area])#, select='cbv_area')
+			stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area])
 			
 		
 			# Load the cbv from file:
 			cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
-#			self.cbvs[cbv_area] = cbv
-	
+			
+			
+			# Signal-to-Noise test (without actually removing any CBVs):
+			indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
+			cbv.remove_cols(indx_lowsnr)
+			
 			# Update maximum number of components	
 			n_components0 = cbv.cbv.shape[1]
 				
@@ -468,11 +449,8 @@ class CBVCorrector(BaseCorrector):
 			logger.info('Fitting using number of components: %i' %int(n_components))	
 			results = np.zeros([len(stars), n_components+2])
 			
-	
 			# Loop through stars
 			for kk, star in tqdm(enumerate(stars), total=len(stars), disable=logger.isEnabledFor(logging.INFO)):
-				
-				
 				
 				lc = self.load_lightcurve(star)
 				
