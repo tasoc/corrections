@@ -33,7 +33,7 @@ import logging
 
 	
 #------------------------------------------------------------------------------
-def cbv_snr_reject(cbv_ini, threshold_snrtest=5.0):
+def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 	logger=logging.getLogger(__name__)
 	
 #	A_signal = rms(cbv_ini, axis=0)
@@ -50,12 +50,13 @@ def cbv_snr_reject(cbv_ini, threshold_snrtest=5.0):
 	# Never throw away first CBV
 	indx_lowsnr[0] = False
 	
-	if np.any(indx_lowsnr):
-		logger.info("Rejecting %d CBVs based on SNR test" % np.sum(indx_lowsnr))
-		cbv = cbv_ini[:, ~indx_lowsnr]
-		return cbv, indx_lowsnr	
-	else:
-		return cbv_ini, None
+	return indx_lowsnr
+#	if np.any(indx_lowsnr):
+#		logger.info("Rejecting %d CBVs based on SNR test" % np.sum(indx_lowsnr))
+#		cbv = cbv_ini[:, ~indx_lowsnr]
+#		return cbv, indx_lowsnr	
+#	else:
+#		return cbv_ini, None
 	
 
 #------------------------------------------------------------------------------
@@ -168,7 +169,9 @@ class CBV(object):
 	def __init__(self, filepath):
 		self.cbv = np.load(filepath)
 		
-	
+	def remove_cols(self, indx_lowsnr):
+		self.cbv = self.cbv[:, ~indx_lowsnr]
+
 	def lsfit(self, flux):
 		
 		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(flux)
