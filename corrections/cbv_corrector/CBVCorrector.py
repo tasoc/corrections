@@ -39,12 +39,12 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 
 	"""
-
-
-	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=8, ent_limit=-0.7, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
-			  threshold_correlation=0.5, threshold_snrtest=4, threshold_variability=1.3, **kwargs):
-
-
+	
+	
+	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=None, ent_limit=None, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
+			  threshold_correlation=0.5, threshold_snrtest=None, threshold_variability=1.3, **kwargs):	
+		
+		
 		"""
 		Initialise the corrector
 
@@ -167,9 +167,13 @@ class CBVCorrector(BaseCorrector):
 				# Remove a point on both sides of momentum dump
 #				idx_remove = np.where(flag_removed)[0]
 #				idx_removem = idx_remove - 1
+#				idx_removemt = idx_remove - 2
 #				idx_removep = idx_remove + 1
+#				idx_removept = idx_remove + 2
 #				lc.flux[idx_removem[(idx_removem>0)]] = np.nan
+#				lc.flux[idx_removemt[(idx_removemt>0)]] = np.nan
 #				lc.flux[idx_removep[(idx_removep<len(flag_removed))]] = np.nan
+#				lc.flux[idx_removept[(idx_removept<len(flag_removed))]] = np.nan
 				
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
@@ -308,6 +312,7 @@ class CBVCorrector(BaseCorrector):
 				mat0, stds, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
 
 				# Calculate initial CBVs
+				logger.info('Computing %d CBVs' %self.ncomponents)
 				pca0 = PCA(self.ncomponents)
 				U0, _, _ = pca0._fit(mat0)
 
@@ -360,28 +365,33 @@ class CBVCorrector(BaseCorrector):
 
 
 				# Plot all the CBVs:
-				fig, axes = plt.subplots(4, 2, figsize=(12, 8))
-				fig2, axes2 = plt.subplots(4, 2, figsize=(12, 8))
-				fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
-				fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
-
+				fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(16, 8))
+				fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(16, 8))
+				fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
+				fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)  
+	
 				for k, ax in enumerate(axes.flatten()):
-					ax.plot(cbv0[:, k]+0.1, 'r-')
-					if not indx_lowsnr is None:
-						if indx_lowsnr[k]:
-							col = 'c'
+					try:
+						ax.plot(cbv0[:, k]+0.1, 'r-')	
+						if not indx_lowsnr is None:
+							if indx_lowsnr[k]:
+								col = 'c'
+							else:
+								col = 'k'
 						else:
 							col = 'k'
-					else:
-						col = 'k'
-					ax.plot(cbv[:, k], ls='-', color=col)	
-					ax.set_title('Basis Vector %d' % (k+1))
-
-
-				for k, ax in enumerate(axes2.flatten()):
-					ax.plot(-np.abs(U0[:, k]), 'r-')
-					ax.plot(np.abs(U[:, k]), 'k-')
-					ax.set_title('Basis Vector %d' % (k+1))
+						ax.plot(cbv[:, k], ls='-', color=col)	
+						ax.set_title('Basis Vector %d' % (k+1))
+					except:
+						pass
+					
+				for k, ax in enumerate(axes2.flatten()):	
+					try:
+						ax.plot(-np.abs(U0[:, k]), 'r-')
+						ax.plot(np.abs(U[:, k]), 'k-')
+						ax.set_title('Basis Vector %d' % (k+1))
+					except:
+						pass
 				fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' %cbv_area))
 				fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' %cbv_area))
 				plt.close('all')

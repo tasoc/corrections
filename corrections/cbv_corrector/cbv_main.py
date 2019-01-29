@@ -43,7 +43,8 @@ def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 	A_noise = MAD_model(np.diff(cbv_ini, axis=0), axis=0)
 	
 	snr = 10 * np.log10( A_signal**2 / A_noise**2 )
-	logger.info("SNR of CBVs %s", snr)
+	logger.info("SNR threshold used %s", threshold_snrtest)
+	logger.info("SNR (dB) of CBVs %s", snr)
 	
 	indx_lowsnr = (snr < threshold_snrtest)
 	
