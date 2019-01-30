@@ -37,12 +37,12 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, do_ini_plots=False, Numcbvs='all', ncomponents=None, ent_limit=None, WS_lim=20, alpha=1.3, targ_limit=150, method='powell', single_area=None, use_bic=True, \
+	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=20, alpha=1.3, method='powell', use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=None, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
 
-		The CBV init inherets init  and functionality of :py:class:`BaseCorrector`
+		The CBV init inherets init and functionality of :py:class:`BaseCorrector`
 
 		The CBV init has three import steps run in addition to defining
 		various high-level variables:
@@ -52,10 +52,8 @@ class CBVCorrector(BaseCorrector):
 			3: Prior from step 2 are constructed using the :py:func:`CBVCorrector.compute_weight_interpolations` function. This
 			function saves interpolation functions for each of the CBV coefficient priors.
 
-
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
-
 
 		# Call the parent initializing:
 		# This will set several default settings
@@ -64,14 +62,10 @@ class CBVCorrector(BaseCorrector):
 		self.Numcbvs = Numcbvs
 		self.use_bic = use_bic
 		self.method = method
-		self.do_ini_plots = do_ini_plots
-		self.single_area = single_area
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_correlation = threshold_correlation
 		self.threshold_variability = threshold_variability
 		self.ncomponents = ncomponents
-		self.ent_limit = ent_limit
-		self.targ_limit = targ_limit
 		self.alpha = alpha
 		self.WS_lim = WS_lim
 
@@ -136,7 +130,7 @@ class CBVCorrector(BaseCorrector):
 			lc = self.load_lightcurve(stars[0])
 			Ntimes = len(lc.time)
 
-			logger.info("Matrix size: %d x %d" % (Nstars, Ntimes))
+			logger.info("Matrix size: %d x %d", Nstars, Ntimes)
 
 			# Make the matrix that will hold all the lightcurves:
 			logger.info("Loading in lightcurves...")
@@ -263,7 +257,7 @@ class CBVCorrector(BaseCorrector):
 		return mat, stds, indx_nancol, Ntimes
 
 	#--------------------------------------------------------------------------
-	def compute_cbvs(self, cbv_area):
+	def compute_cbvs(self, cbv_area, ent_limit=-1.5, targ_limit=150):
 		"""
 		Main function for computing CBVs.
 
@@ -310,7 +304,7 @@ class CBVCorrector(BaseCorrector):
 			logger.info('Cleaning matrix for CBV - remove single dominant contributions')
 
 			# Clean away targets that contribute significantly as a single star to a given CBV (based on entropy)
-			mat = clean_cbv(mat0, self.ncomponents, self.ent_limit, self.targ_limit)
+			mat = clean_cbv(mat0, self.ncomponents, ent_limit, targ_limit)
 
 			# Calculate the principle components of cleaned matrix
 			logger.info("Doing Principle Component Analysis...")
@@ -384,7 +378,7 @@ class CBVCorrector(BaseCorrector):
 			plt.close('all')
 
 	#--------------------------------------------------------------------------
-	def cotrend_ini(self, cbv_area):
+	def cotrend_ini(self, cbv_area, do_ini_plots=False):
 		"""
 		Function for running the initial co-trending to obtain CBV coefficients for the construction of priors.
 
@@ -460,7 +454,7 @@ class CBVCorrector(BaseCorrector):
 			results[kk, 1:len(res)+1] = res
 
 
-			if self.do_ini_plots:
+			if do_ini_plots:
 				fig = plt.figure()
 				ax1 = fig.add_subplot(211)
 				ax1.plot(lc.time, lc.flux)

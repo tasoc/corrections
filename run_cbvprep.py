@@ -21,27 +21,33 @@ def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None,
 	logger = logging.getLogger(__name__)
 	logger.info('running CBV for area %s', str(cbv_area))
 
-	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv, ent_limit=el, do_ini_plots=ip) as C:
-		C.compute_cbvs(cbv_area)
-		C.cotrend_ini(cbv_area)
+	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv) as C:
+		C.compute_cbvs(cbv_area, ent_limit=el)
+		C.cotrend_ini(cbv_area, do_ini_plots=ip)
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
 
 	# Parse command line arguments:
-	parser = argparse.ArgumentParser(description='Run preparation of CBVs for single or several CBV-areas.')
+	parser = argparse.ArgumentParser(description='Run preparation of CBVs for single or several CBV-areas.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	#parser.add_argument('-e', '--ext', help='Extension of plots.', default='png', choices=('png', 'eps'))
 	#parser.add_argument('-s', '--show', help='Show plots.', action='store_true')
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
-	parser.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
-	parser.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
-	parser.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
-	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots', action='store_false', default=True)
-	parser.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV')
-	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
-	parser.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
+	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots.', action='store_true')
+
+	group = parser.add_argument_group('Specifying CBVs to calculate')
+	group.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
+	group.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
+	group.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
+
+	group = parser.add_argument_group('Settings')
+	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
+	group.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
+	group.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV')
+
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
+
 	args = parser.parse_args()
 
 	# Set logging level:
