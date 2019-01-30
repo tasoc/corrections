@@ -22,11 +22,10 @@ from scipy.interpolate import Rbf, SmoothBivariateSpline
 from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
-import dill
+from ..utilities import savePickle
 import logging
 
 plt.ioff()
-
 
 #------------------------------------------------------------------------------
 class CBVCorrector(BaseCorrector):
@@ -666,11 +665,8 @@ class CBVCorrector(BaseCorrector):
 				rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=1)
 				rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=1)
 
-				with open(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), 'wb') as file:
-					dill.dump(rbfim, file)
-				with open(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), 'wb') as file:
-					dill.dump(rbfis, file)	
-
+				savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
+				savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
 
 				# Plot resulting interpolation
 #				x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
