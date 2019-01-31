@@ -68,6 +68,9 @@ class CBVCorrector(BaseCorrector):
 		self.alpha = alpha
 		self.WS_lim = WS_lim
 
+		# Dictionary that will hold CBV objects:
+		self.cbvs = {}
+
 	#--------------------------------------------------------------------------
 	def lc_matrix(self, cbv_area):
 		"""
@@ -219,7 +222,7 @@ class CBVCorrector(BaseCorrector):
 		logger=logging.getLogger(__name__)
 
 		logger.info('Running matrix clean')
-		tmpfile = os.path.join(self.data_folder, 'mat-%d_clean.npz' %cbv_area)
+		tmpfile = os.path.join(self.data_folder, 'mat-%d_clean.npz' % cbv_area)
 		if os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
@@ -276,17 +279,16 @@ class CBVCorrector(BaseCorrector):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
-		logger=logging.getLogger(__name__)
+		logger = logging.getLogger(__name__)
 		logger.info('running CBV')
 		logger.info('------------------------------------')
 
-
-		if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area))):
-			logger.info('CBV for area%d already calculated' %cbv_area)
+		if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area)):
+			logger.info('CBV for area %d already calculated' % cbv_area)
 			return
 
 		else:
-			logger.info('Computing CBV for area%d' %cbv_area)
+			logger.info('Computing CBV for area %d' % cbv_area)
 
 			# Extract or compute cleaned and gapfilled light curve matrix
 			mat0, stds, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
@@ -318,7 +320,7 @@ class CBVCorrector(BaseCorrector):
 			indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
 
 			# Save the CBV to file:
-			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)), cbv)
+			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area), cbv)
 
 
 			####################### PLOTS #################################
@@ -396,26 +398,24 @@ class CBVCorrector(BaseCorrector):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
-		logger=logging.getLogger(__name__)
+		logger = logging.getLogger(__name__)
 
 		#------------------------------------------------------------------
 		# CORRECTING STARS
 		#------------------------------------------------------------------
 
 		logger.info("--------------------------------------------------------------")
-		if os.path.exists(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area)):
+		if os.path.exists(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % cbv_area)):
 			logger.info("Initial co-trending for light curves in CBV area%d already done" %cbv_area)
 			return
 		else:
-			logger.info("Initial co-trending for light curves in CBV area%d" %cbv_area)
+			logger.info("Initial co-trending for light curves in CBV area%d" % cbv_area)
 
 		# Load stars from data base
-		stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area])
-
+		stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' % cbv_area])
 
 		# Load the cbv from file:
-		cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % (cbv_area)))
-
+		cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area))
 
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
@@ -427,7 +427,7 @@ class CBVCorrector(BaseCorrector):
 
 		logger.info('New max number of components: %i' %int(n_components0))
 
-		if self.Numcbvs=='all':
+		if self.Numcbvs == 'all':
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
@@ -476,7 +476,6 @@ class CBVCorrector(BaseCorrector):
 		# Save weights for priors if it is an initial run
 		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area), res=results)
 
-
 		# Plot CBV weights
 		fig = plt.figure(figsize=(15,6))
 		ax = fig.add_subplot(121)
@@ -506,8 +505,8 @@ class CBVCorrector(BaseCorrector):
 			n_cbvs_max = self.ncomponents
 			n_cbvs_max_new = 0
 
-			figures1 = {};
-			figures2 = {};
+			figures1 = {}
+			figures2 = {}
 			for i in range(n_cbvs_max):
 				figures1['cbv%i' %i] = {}
 				figures2['cbv%i' %i] = {}
@@ -712,14 +711,20 @@ class CBVCorrector(BaseCorrector):
 
 		logger = logging.getLogger(__name__)
 
-		# Load the cbv from file:
-		cbv = self.cbvs[lc.meta['task']['cbv_area']]
+		# Load the CBV from memory and if it is not already loaded,
+		# load it in from file and keep it in memory for next time:
+		cbv_area = lc.meta['task']['cbv_area']
+		cbv = self.cbvs.get(cbv_area)
+		if cbv is None:
+			logger.debug("Loading CBV for area %d into memory", cbv_area)
+			cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area))
+			self.cbvs[cbv_area] = cbv
 
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1]
 
 		logger.info('New max number of components: %i' %n_components0)
-		if self.Numcbvs=='all':
+		if self.Numcbvs == 'all':
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
@@ -762,9 +767,9 @@ class CBVCorrector(BaseCorrector):
 			if not os.path.exists(os.path.join(self.plot_folder(lc))):
 				os.makedirs(os.path.join(self.plot_folder(lc)))
 			fig.savefig(os.path.join(self.plot_folder(lc), filename))
-			plt.close('all')
+			plt.close(fig)
 
-		#TODO: update status
+		# TODO: update status
 		lc.flux = lc_corr
 		lc *= 1e6
 		return lc, STATUS.OK
