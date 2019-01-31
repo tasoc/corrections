@@ -11,29 +11,26 @@ import matplotlib.pyplot as plt
 import os
 import logging
 from sklearn.decomposition import PCA
-from sklearn.model_selection import cross_val_score
-from bottleneck import allnan, nansum, move_median, nanmedian, nanstd, nanmean
+#from sklearn.model_selection import cross_val_score
+from bottleneck import allnan, nansum, nanmedian # move_median, nanstd, nanmean
 from scipy.optimize import minimize
-from scipy.stats import pearsonr, entropy
-from scipy.interpolate import pchip_interpolate
-from scipy.signal import correlate
-from statsmodels.nonparametric.kde import KDEUnivariate as KDE
-from scipy.special import xlogy
-import scipy.linalg as slin
+#from scipy.stats import pearsonr, entropy
+#from scipy.interpolate import pchip_interpolate
+#from scipy.signal import correlate
+#from statsmodels.nonparametric.kde import KDEUnivariate as KDE
+#from scipy.special import xlogy
+#import scipy.linalg as slin
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
-from tqdm import tqdm
-import time as TIME
 from ..utilities import loadPickle
-from .cbv_util import compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
+from .cbv_util import compute_entopy, MAD_model # compute_scores, _move_median_central_1d, move_median_central, rms,
 #from .cbv_weights import compute_weight_interpolations
 
 plt.ioff()
 
-
 #------------------------------------------------------------------------------
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
-	logger=logging.getLogger(__name__)
+	logger = logging.getLogger(__name__)
 
 #	A_signal = rms(cbv_ini, axis=0)
 #	A_noise = rms(np.diff(cbv_ini, axis=0), axis=0)
@@ -58,10 +55,9 @@ def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 #	else:
 #		return cbv_ini, None
 
-
 #------------------------------------------------------------------------------
 def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
-	logger=logging.getLogger(__name__)
+	logger = logging.getLogger(__name__)
 
 
 	# Calculate the principle components:
@@ -121,7 +117,6 @@ def AlmightyCorrcoefEinsumOptimized(O, P):
 
     return cov / np.sqrt(tmp)
 
-
 #------------------------------------------------------------------------------
 def lc_matrix_calc(Nstars, mat0):#, stds):
 	logger=logging.getLogger(__name__)
@@ -160,22 +155,29 @@ def lc_matrix_calc(Nstars, mat0):#, stds):
 
 	return correlations
 
-
 #------------------------------------------------------------------------------
-
-
 class CBV(object):
+	"""
+	Cotrending Basis Vector.
 
+	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+
+	#--------------------------------------------------------------------------
 	def __init__(self, filepath):
 		self.cbv = np.load(filepath)
 
+	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
 		self.cbv = self.cbv[:, ~indx_lowsnr]
 
+	#--------------------------------------------------------------------------
 	def lsfit(self, flux):
-
+		"""
+		Computes the least-squares solution to a linear matrix equation.
+		"""
 		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(flux)
-		""" Computes the least-squares solution to a linear matrix equation. """
 		A0 = self.cbv[idx,:]
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
 		F = flux[idx]
@@ -186,7 +188,7 @@ class CBV(object):
 #		C = slin.lstsq(X, flux[idx])[0]
 		return C
 
-
+	#--------------------------------------------------------------------------
 	def mdl(self, coeffs):
 		coeffs = np.atleast_1d(coeffs)
 		m = np.ones(self.cbv.shape[0], dtype='float64')
@@ -194,6 +196,7 @@ class CBV(object):
 			m += coeffs[k] * self.cbv[:, k]
 		return m + coeffs[-1]
 
+	#--------------------------------------------------------------------------
 	def mdl_off(self, coeff, fitted):
 		fitted = np.atleast_1d(fitted)
 		m = np.ones(self.cbv.shape[0], dtype='float64')
@@ -201,34 +204,42 @@ class CBV(object):
 			m += fitted[k] * self.cbv[:, k]
 		return m + coeff
 
+	#--------------------------------------------------------------------------
 	def mdl1d(self, coeff, ncbv):
 		m = 1 + coeff * self.cbv[:, ncbv]
 		return m
 
+	#--------------------------------------------------------------------------
 	def _lhood(self, coeffs, flux, err):
 		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
 
+	#--------------------------------------------------------------------------
 	def _lhood_off(self, coeffs, flux, fitted):
 		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted))**2)
 
+	#--------------------------------------------------------------------------
 	def _lhood_off_2(self, coeffs, flux, err, fitted):
 		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err**2)
 
+	#--------------------------------------------------------------------------
 	def _lhood1d(self, coeff, flux, ncbv):
 		return 0.5*nansum((flux - self.mdl1d(coeff, ncbv))**2)
 
+	#--------------------------------------------------------------------------
 	def _lhood1d_2(self, coeff, flux, err, ncbv):
 		return 0.5*nansum(((flux - self.mdl1d(coeff, ncbv))/err)**2) + 0.5*np.log(err**2)
 
+	#--------------------------------------------------------------------------
 	def _posterior1d(self, coeff, flux, ncbv, cbv_area, Pdict, pos, wscale=5):
 		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(Pdict, coeff, pos, cbv_area, ncbv, wscale)
 		return Post
 
+	#--------------------------------------------------------------------------
 	def _posterior1d_2(self, coeff, flux, err, ncbv, cbv_area, Pdict, pos, wscale=5):
 		Post = self._lhood1d_2(coeff, flux, err, ncbv) + self._prior1d(Pdict, coeff, pos, cbv_area, ncbv, wscale)
 		return Post
 
-
+	#--------------------------------------------------------------------------
 	def _prior_load(self, cbv_area, data_path, ncbvs=3):
 		P = {}
 		for jj, ncbv in enumerate(np.arange(1,ncbvs+1)):
@@ -236,6 +247,7 @@ class CBV(object):
 			P['cbv_area%d_cbv%i_std' %(cbv_area, ncbv)] = loadPickle(os.path.join(data_path, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))
 		return P
 
+	#--------------------------------------------------------------------------
 	def _priorcurve(self, P, x, cbv_area, Ncbvs):
 		X = np.array(x)
 		res = np.zeros_like(self.cbv[:, 0], dtype='float64')
@@ -245,6 +257,7 @@ class CBV(object):
 			res += self.mdl1d(mid, ncbv) - 1
 		return res + 1
 
+	#--------------------------------------------------------------------------
 	def _prior1d(self, P, c, x, cbv_area, ncbv, wscale=5):
 		X = np.array(x)
 		I = P['cbv_area%d_cbv%i' %(cbv_area, ncbv+1)]
@@ -256,7 +269,7 @@ class CBV(object):
 		Ptot = 0.5*( (c-mid)/ wid)**2 + 0.5*np.log(wid)
 		return Ptot
 
-
+	#--------------------------------------------------------------------------
 	def fitting_lh(self, flux, Ncbvs, method='powell'):
 		if method=='powell':
 			# Initial guesses for coefficients:
@@ -277,6 +290,7 @@ class CBV(object):
 			res[-1] -= 1
 			return res
 
+	#--------------------------------------------------------------------------
 	def fitting_pos(self, flux, Ncbvs, cbv_area, Prior_dict, pos, method='powell', wscale=5):
 		if method=='powell':
 			# Initial guesses for coefficients:
@@ -292,6 +306,7 @@ class CBV(object):
 			res = np.append(res, offset)
 			return res
 
+	#--------------------------------------------------------------------------
 	def fitting_pos_2(self, flux, err, Ncbvs, cbv_area, Prior_dict, pos, method='powell', wscale=5):
 		if method=='powell':
 			# Initial guesses for coefficients:
@@ -307,7 +322,7 @@ class CBV(object):
 			res = np.append(res, offset)
 			return res
 
-
+	#--------------------------------------------------------------------------
 	def fit(self, flux, err=None, pos=None, cbv_area=None, Prior_dict=None, Numcbvs=3, sigma_clip=4.0, maxiter=3, use_bic=True, method='powel', func='pos', wscale=5):
 
 		# Find the median flux to normalise light curve
@@ -373,8 +388,6 @@ class CBV(object):
 				bic[Ncbvs] = np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( ((flux - filt)/err)**2 )
 				solutions.append(res)
 
-
-
 		if use_bic:
 			# Use the solution which minimizes the BIC:
 			indx = np.argmin(bic)
@@ -388,9 +401,7 @@ class CBV(object):
 
 		return flux_filter, res_final
 
-
 	#--------------------------------------------------------------------------
-
 	def cotrend_single(self, lc, n_components, data_path, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='powell'):
 
 		cbv_area = lc.meta['task']['cbv_area']
@@ -399,7 +410,6 @@ class CBV(object):
 		quality_remove = 1 #+...
 		flag_removed = (lc.quality & quality_remove != 0)
 		lc.flux[flag_removed] = np.nan
-
 
 		# Fit the CBV to the flux:
 		if ini:
@@ -428,46 +438,11 @@ class CBV(object):
 			lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
 			lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
 
-
-			if WS>WS_lim:
+			if WS > WS_lim:
 				flux_filter, res = self.fit(lc.flux, Numcbvs=np.min([n_components, 3]), use_bic=False, method=method, func='lh')
-				lc.meta['additional_headers']['pri_use'] = ('No', 'Was prior used')
+				lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
 			else:
 				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, cbv_area=cbv_area, Prior_dict=Prior_dict, Numcbvs=n_components, use_bic=use_bic, method=method, func='pos', wscale=WS**alpha)
-				lc.meta['additional_headers']['pri_use'] = ('Yes', 'Was prior used')
+				lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
 
 			return flux_filter, res, residual, WS, pc
-
-
-
-
-
-#------------------------------------------------------------------------------
-if __name__ == '__main__':
-
-#	import pandas as pd
-	# Pick a sector, any sector....
-	sector = 0
-	n_components = 8
-
-	# Other settings:
-	threshold_variability = 1.3
-	threshold_correlation = 0.5
-	threshold_snrtest = 5.0
-	do_plots = True
-	filepath_todo = 'todo.sqlite'
-	area = None
-
-#	compute_cbvs(filepath_todo, do_plots, single_area=area)
-
-#	cotrend(filepath_todo, do_plots=False, Numcbvs='all', use_bic=False, ini=True, single_area=None)
-
-#	compute_weight_interpolations(filepath_todo, sector)
-
-#	cotrend(filepath_todo, do_plots, Numcbvs=3, ini=False, use_bic=False, method='powell', single_area=111)
-
-#	GOC_corr(filepath_todo)
-
-#		sys.exit()
-
-
