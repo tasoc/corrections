@@ -8,8 +8,6 @@ from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
 import sqlite3
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import os
 import sys
 import glob
@@ -31,6 +29,8 @@ from tqdm import tqdm
 import math
 import corner
 from scipy import integrate
+from ..plots import plt
+import matplotlib.colors as colors
 from ..utilities import savePickle
 from .cbv_util import *#compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
 plt.ioff()
