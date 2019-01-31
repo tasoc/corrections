@@ -418,11 +418,11 @@ class CBVCorrector(BaseCorrector):
 		stars = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' % cbv_area])
 
 		# Load the cbv from file:
-		cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area))
+		cbv = CBV(self.data_folder, cbv_area, self.threshold_snrtest)
 
-		# Signal-to-Noise test (without actually removing any CBVs):
-		indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
-		cbv.remove_cols(indx_lowsnr)
+#		# Signal-to-Noise test (without actually removing any CBVs):
+#		indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
+#		cbv.remove_cols(indx_lowsnr)
 
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1]
@@ -710,13 +710,13 @@ class CBVCorrector(BaseCorrector):
 
 		logger = logging.getLogger(__name__)
 
-		# Load the CBV from memory and if it is not already loaded,
+		# Load the CBV (and Prior) from memory and if it is not already loaded,
 		# load it in from file and keep it in memory for next time:
 		cbv_area = lc.meta['task']['cbv_area']
 		cbv = self.cbvs.get(cbv_area)
 		if cbv is None:
 			logger.debug("Loading CBV for area %d into memory", cbv_area)
-			cbv = CBV(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area))
+			cbv = CBV(self.data_folder, cbv_area, self.threshold_snrtest)
 			self.cbvs[cbv_area] = cbv
 
 		# Update maximum number of components
@@ -727,19 +727,10 @@ class CBVCorrector(BaseCorrector):
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
-			
-		# Load priors into memory:
-		P = self.priors.get('cbv_area%d_cbv%i' %(cbv_area, 1))
-		if P is None:
-			logger.debug("Loading Priors for area %d into memory", cbv_area)
-			for jj, ncbv in enumerate(np.arange(1,n_components0+1)):
-				self.priors['cbv_area%d_cbv%i' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,ncbv)))
-				self.priors['cbv_area%d_cbv%i_std' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))	
-			
-			
+					
 		logger.info('Fitting using number of components: %i' %n_components)
 
-		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, self.data_folder, Priors=self.priors, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
+		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
 
 		#corrected light curve in ppm
 		lc_corr = (lc.flux/flux_filter-1)
@@ -753,7 +744,6 @@ class CBVCorrector(BaseCorrector):
 		lc.meta['additional_headers']['use_BIC'] = (self.use_bic, 'was BIC used to select no of CBVs')
 		lc.meta['additional_headers']['fit_met'] = (self.method, 'method used to fit CBV')
 		lc.meta['additional_headers']['no_comp'] = (len(res)-1, 'number of fitted CBVs')
-
 
 		logger.debug('New variability', residual)
 

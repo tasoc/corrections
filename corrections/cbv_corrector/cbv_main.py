@@ -123,8 +123,21 @@ class CBV(object):
 	"""
 
 	#--------------------------------------------------------------------------
-	def __init__(self, filepath):
+	def __init__(self, data_folder, cbv_area, threshold_snrtest=5):
+		filepath = os.path.join(data_folder, 'cbv-%d.npy' % cbv_area)
 		self.cbv = np.load(filepath)
+		
+		# Signal-to-Noise test (without actually removing any CBVs):
+		indx_lowsnr = cbv_snr_test(self.cbv, threshold_snrtest)
+		self.remove_cols(indx_lowsnr)
+				
+		self.priors = {}
+		for jj, ncbv in enumerate(np.arange(1,self.cbv.shape[1]+1)):
+			priorpath = os.path.join(data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,ncbv))
+			if os.path.exists(priorpath):
+				self.priors['cbv%i' %ncbv] = loadPickle(priorpath)
+				self.priors['cbv%i_std' %ncbv] = loadPickle(os.path.join(data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))	
+		
 
 	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
@@ -188,38 +201,31 @@ class CBV(object):
 		return 0.5*nansum(((flux - self.mdl1d(coeff, ncbv))/err)**2) + 0.5*np.log(err**2)
 
 	#--------------------------------------------------------------------------
-	def _posterior1d(self, coeff, flux, ncbv, Priors, cbv_area, Pdict, pos, wscale=5):
-		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(Priors, coeff, pos, cbv_area, ncbv, wscale)
+	def _posterior1d(self, coeff, flux, ncbv, pos, wscale=5):
+		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(coeff, pos, ncbv, wscale)
 		return Post
 
 	#--------------------------------------------------------------------------
-	def _posterior1d_2(self, coeff, flux, err, ncbv, Priors, cbv_area, Pdict, pos, wscale=5):
-		Post = self._lhood1d_2(coeff, flux, err, ncbv) + self._prior1d(Priors, coeff, pos, cbv_area, ncbv, wscale)
+	def _posterior1d_2(self, coeff, flux, err, ncbv, pos, wscale=5):
+		Post = self._lhood1d_2(coeff, flux, err, ncbv) + self._prior1d(coeff, pos, ncbv, wscale)
 		return Post
 
-	#--------------------------------------------------------------------------
-#	def _prior_load(self, cbv_area, data_path, ncbvs=3):
-#		P = {}
-#		for jj, ncbv in enumerate(np.arange(1,ncbvs+1)):
-#			P['cbv_area%d_cbv%i' %(cbv_area, ncbv)] = loadPickle(os.path.join(data_path, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,ncbv)))
-#			P['cbv_area%d_cbv%i_std' %(cbv_area, ncbv)] = loadPickle(os.path.join(data_path, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))
-#		return P
 
 	#--------------------------------------------------------------------------
-	def _priorcurve(self, Priors, x, cbv_area, Ncbvs):
+	def _priorcurve(self, x, Ncbvs):
 		X = np.array(x)
 		res = np.zeros_like(self.cbv[:, 0], dtype='float64')
 		for ncbv in range(Ncbvs):
-			I = Priors['cbv_area%d_cbv%i' %(cbv_area, ncbv+1)]
+			I = self.priors['cbv%i' %(ncbv+1)]
 			mid = I(X[0],X[1])
 			res += self.mdl1d(mid, ncbv) - 1
 		return res + 1
 
 	#--------------------------------------------------------------------------
-	def _prior1d(self, Priors, c, x, cbv_area, ncbv, wscale=5):
+	def _prior1d(self, c, x, ncbv, wscale=5):
 		X = np.array(x)
-		I = Priors['cbv_area%d_cbv%i' %(cbv_area, ncbv+1)]
-		Is = Priors['cbv_area%d_cbv%i_std' %(cbv_area, ncbv+1)]
+		I = self.priors['cbv%i' %(ncbv+1)]
+		Is = self.priors['cbv%i_std' %(ncbv+1)]
 		# negative log prior
 
 		mid = I(X[0],X[1])
@@ -249,7 +255,7 @@ class CBV(object):
 			return res
 
 	#--------------------------------------------------------------------------
-	def fitting_pos(self, Priors, flux, Ncbvs, cbv_area, pos, method='powell', wscale=5):
+	def fitting_pos(self, flux, Ncbvs, pos, method='powell', wscale=5):
 		if method=='powell':
 			# Initial guesses for coefficients:
 			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
@@ -257,7 +263,7 @@ class CBV(object):
 
 			res = np.zeros(Ncbvs, dtype='float64')
 			for jj in range(Ncbvs):
-				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, Priors, cbv_area, pos, wscale), method='Powell').x
+				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, pos, wscale), method='Powell').x
 
 			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res), method='Powell').x
 
@@ -265,7 +271,7 @@ class CBV(object):
 			return res
 
 	#--------------------------------------------------------------------------
-	def fitting_pos_2(self, Priors, flux, err, Ncbvs, cbv_area, pos, method='powell', wscale=5):
+	def fitting_pos_2(self, flux, err, Ncbvs, pos, method='powell', wscale=5):
 		if method=='powell':
 			# Initial guesses for coefficients:
 			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
@@ -273,7 +279,7 @@ class CBV(object):
 
 			res = np.zeros(Ncbvs, dtype='float64')
 			for jj in range(Ncbvs):
-				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, Priors, cbv_area, pos, wscale), method='Powell').x
+				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale), method='Powell').x
 
 			offset = minimize(self._lhood_off_2, coeffs0[-1], args=(flux, err, res), method='Powell').x
 
@@ -281,7 +287,7 @@ class CBV(object):
 			return res
 
 	#--------------------------------------------------------------------------
-	def fit(self, flux, err=None, pos=None, cbv_area=None, Priors=None, Numcbvs=3, sigma_clip=4.0, maxiter=3, use_bic=True, method='powel', func='pos', wscale=5):
+	def fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=3, use_bic=True, method='powel', func='pos', wscale=5):
 
 		# Find the median flux to normalise light curve
 		median_flux = nanmedian(flux)
@@ -311,7 +317,7 @@ class CBV(object):
 
 				# Do the fit:
 				if func=='pos':
-					res = self.fitting_pos_2(Priors, fluxi, err, Ncbvs, cbv_area, pos, method=method, wscale=wscale)
+					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, method=method, wscale=wscale)
 				else:
 					res = self.fitting_lh(fluxi, Ncbvs, method=method)
 
@@ -359,9 +365,7 @@ class CBV(object):
 		return flux_filter, res_final
 
 	#--------------------------------------------------------------------------
-	def cotrend_single(self, lc, n_components, data_path, alpha=1.3, WS_lim=20, Priors=None, ini=True, use_bic=False, method='powell'):
-
-		cbv_area = lc.meta['task']['cbv_area']
+	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='powell'):
 
 		# Remove bad data based on quality
 		quality_remove = 1 #+...
@@ -381,7 +385,7 @@ class CBV(object):
 #			pos = np.array([lc.centroid_row, lc.centroid_col])
 
 			# Prior curve
-			pc = self._priorcurve(Priors, pos, cbv_area, n_components) * np.nanmedian(lc.flux)
+			pc = self._priorcurve(pos, n_components) * np.nanmedian(lc.flux)
 
 			# Compute new variability measure
 			residual = MAD_model(lc.flux-pc)
@@ -396,7 +400,7 @@ class CBV(object):
 				flux_filter, res = self.fit(lc.flux, Numcbvs=np.min([n_components, 3]), use_bic=False, method=method, func='lh')
 				lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
 			else:
-				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, cbv_area=cbv_area, Priors=Priors, Numcbvs=n_components, use_bic=use_bic, method=method, func='pos', wscale=WS**alpha)
+				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=use_bic, method=method, func='pos', wscale=WS**alpha)
 				lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
 
 			return flux_filter, res, residual, WS, pc
