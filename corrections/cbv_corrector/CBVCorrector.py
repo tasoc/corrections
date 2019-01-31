@@ -2,25 +2,24 @@
 # -*- coding: utf-8 -*-
 """
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
+from ..plots import plt, matplotlib
 import os
 from sklearn.decomposition import PCA
 from bottleneck import allnan, nanmedian
 from scipy.interpolate import pchip_interpolate
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
-import warnings
-warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from tqdm import tqdm
 from scipy.interpolate import Rbf
 from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
-from ..plots import plt, save_figure
 import matplotlib.colors as colors
 import logging
 
