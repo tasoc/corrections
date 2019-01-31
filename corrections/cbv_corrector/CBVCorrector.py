@@ -7,10 +7,8 @@
 from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 from sklearn.decomposition import PCA
-import matplotlib.colors as colors
 from bottleneck import allnan, nanmedian
 from scipy.interpolate import pchip_interpolate
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
@@ -18,15 +16,13 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from tqdm import tqdm
 from scipy.interpolate import Rbf
-
 from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
-
+from ..plots import plt, save_figure
+import matplotlib.colors as colors
 import logging
-
-plt.ioff()
 
 #------------------------------------------------------------------------------
 class CBVCorrector(BaseCorrector):
@@ -347,7 +343,6 @@ class CBVCorrector(BaseCorrector):
 
 			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
-
 
 			# Plot all the CBVs:
 			fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
@@ -727,16 +722,16 @@ class CBVCorrector(BaseCorrector):
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
-			
+
 		# Load priors into memory:
 		P = self.priors.get('cbv_area%d_cbv%i' %(cbv_area, 1))
 		if P is None:
 			logger.debug("Loading Priors for area %d into memory", cbv_area)
 			for jj, ncbv in enumerate(np.arange(1,n_components0+1)):
 				self.priors['cbv_area%d_cbv%i' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,ncbv)))
-				self.priors['cbv_area%d_cbv%i_std' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))	
-			
-			
+				self.priors['cbv_area%d_cbv%i_std' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))
+
+
 		logger.info('Fitting using number of components: %i' %n_components)
 
 		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, self.data_folder, Priors=self.priors, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
