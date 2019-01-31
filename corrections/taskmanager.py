@@ -5,6 +5,7 @@ A TaskManager which keeps track of which targets to process.
 
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 .. codeauthor:: Lindsey Carboneau
+.. codeauthor:: Filipe Pereira
 """
 
 from __future__ import division, with_statement, print_function, absolute_import
@@ -117,7 +118,7 @@ class TaskManager(object):
 		if camera is not None:
 			constraints.append('todolist.camera=%d' % camera)
 		if ccd is not None:
-			constraints.append('todolist.ccd=%d' % ccd)	
+			constraints.append('todolist.ccd=%d' % ccd)
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
@@ -130,8 +131,8 @@ class TaskManager(object):
 			constraints
 		))
 		task = self.cursor.fetchone()
-		if task is not None: task = dict(task)
-		return task
+		if task: return dict(task)
+		return None
 
 	def save_results(self, result):
 
@@ -171,8 +172,10 @@ class TaskManager(object):
 	def get_random_task(self):
 		"""
 		Get random task to be processed.
-
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-		raise NotImplementedError("A helpful error message goes here") # TODO
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL ORDER BY RANDOM() LIMIT 1;")
+		task = self.cursor.fetchone()
+		if task: return dict(task)
+		return None
