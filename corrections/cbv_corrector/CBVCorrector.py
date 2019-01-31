@@ -17,12 +17,13 @@ from statsmodels.nonparametric.kde import KDEUnivariate as KDE
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from tqdm import tqdm
-from scipy.interpolate import Rbf, SmoothBivariateSpline
+from scipy.interpolate import Rbf
 
 from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
-from ..utilities import savePickle
+from ..utilities import savePickle, loadPickle
+
 import logging
 
 plt.ioff()
@@ -70,6 +71,8 @@ class CBVCorrector(BaseCorrector):
 
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
+		# Dictionary that will hold Priors:
+		self.priors = {}
 
 	#--------------------------------------------------------------------------
 	def lc_matrix(self, cbv_area):
@@ -423,8 +426,6 @@ class CBVCorrector(BaseCorrector):
 
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1]
-
-
 		logger.info('New max number of components: %i' %int(n_components0))
 
 		if self.Numcbvs == 'all':
@@ -445,13 +446,13 @@ class CBVCorrector(BaseCorrector):
 			flux_filter, res = cbv.cotrend_single(lc, n_components, self.data_folder, ini=True)
 			lc_corr = (lc.flux/flux_filter-1)*1e6
 
-#				# SAVE TO DIAGNOSTICS FILE::
-#				wn_ratio = GOC_wn(flux, flux-flux_filter)
+			# TODO: compute diagnostics requiring the light curve
+#			# SAVE TO DIAGNOSTICS FILE::
+#			wn_ratio = GOC_wn(flux, flux-flux_filter)
 
 			res = np.array([res,]).flatten()
 			results[kk, 0] = lc.targetid
 			results[kk, 1:len(res)+1] = res
-
 
 			if do_ini_plots:
 				fig = plt.figure()
@@ -472,7 +473,6 @@ class CBVCorrector(BaseCorrector):
 				fig.savefig(os.path.join(self.plot_folder(lc), filename))
 				plt.close(fig)
 
-
 		# Save weights for priors if it is an initial run
 		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area), res=results)
 
@@ -486,7 +486,6 @@ class CBVCorrector(BaseCorrector):
 			idx2 = (r>np.percentile(r, 10)) & (r<np.percentile(r, 90))
 			kde = KDE(r[idx2])
 			kde.fit(gridsize=5000)
-
 			ax.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk))
 
 			err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
@@ -500,8 +499,8 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	def compute_weight_interpolations(self, cbv_area, dimensions=['tmag', 'col', 'tmag']):
-
-	#		cbv_areas = [int(row['cbv_area']) for row in self.search_database(select='cbv_area', distinct=True)]
+			logger = logging.getLogger(__name__)
+			logger.info("--------------------------------------------------------------")
 			n_cbvs_max = self.ncomponents
 			n_cbvs_max_new = 0
 
@@ -728,10 +727,19 @@ class CBVCorrector(BaseCorrector):
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
-
+			
+		# Load priors into memory:
+		P = self.priors.get('cbv_area%d_cbv%i' %(cbv_area, 1))
+		if P is None:
+			logger.debug("Loading Priors for area %d into memory", cbv_area)
+			for jj, ncbv in enumerate(np.arange(1,n_components0+1)):
+				self.priors['cbv_area%d_cbv%i' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,ncbv)))
+				self.priors['cbv_area%d_cbv%i_std' %(cbv_area, ncbv)] = loadPickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))	
+			
+			
 		logger.info('Fitting using number of components: %i' %n_components)
 
-		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, self.data_folder, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
+		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, self.data_folder, Priors=self.priors, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
 
 		#corrected light curve in ppm
 		lc_corr = (lc.flux/flux_filter-1)
