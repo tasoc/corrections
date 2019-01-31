@@ -7,7 +7,6 @@
 from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import logging
 from sklearn.decomposition import PCA
@@ -17,8 +16,6 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from ..utilities import loadPickle
 from .cbv_util import compute_entopy, MAD_model
-
-plt.ioff()
 
 #------------------------------------------------------------------------------
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):

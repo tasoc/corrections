@@ -91,8 +91,7 @@ class BaseCorrector(object):
 			self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
 
 			# Make sure that the folder exists:
-			if not os.path.exists(self.data_folder):
-				os.mkdir(self.data_folder)
+			os.makedirs(self.data_folder, exist_ok=True)
 
 		# The path to the TODO list:
 		todo_file = os.path.join(input_folder, 'todo.sqlite')

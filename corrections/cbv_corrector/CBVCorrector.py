@@ -7,10 +7,8 @@
 from __future__ import division, with_statement, print_function, absolute_import
 from six.moves import range
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 from sklearn.decomposition import PCA
-import matplotlib.colors as colors
 from bottleneck import allnan, nanmedian
 from scipy.interpolate import pchip_interpolate
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
@@ -18,15 +16,13 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from tqdm import tqdm
 from scipy.interpolate import Rbf
-
 from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
-
+from ..plots import plt, save_figure
+import matplotlib.colors as colors
 import logging
-
-plt.ioff()
 
 #------------------------------------------------------------------------------
 class CBVCorrector(BaseCorrector):
@@ -347,7 +343,6 @@ class CBVCorrector(BaseCorrector):
 
 			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
-
 
 			# Plot all the CBVs:
 			fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
