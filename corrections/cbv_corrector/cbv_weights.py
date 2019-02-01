@@ -222,7 +222,7 @@ def compute_weight_interpolations(filepath_todo, sector, dimensions=['row', 'col
 if __name__ == '__main__':
 	# Pick a sector, any sector....
 	sector = 0
-	n_components = 8
+	n_components = 16
 
 	# Open the TODO file for that sector:
 	filepath_todo = 'todo.sqlite'

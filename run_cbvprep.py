@@ -22,8 +22,10 @@ def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None,
 	logger.info('running CBV for area %s', str(cbv_area))
 
 	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv) as C:
-		C.compute_cbvs(cbv_area, ent_limit=el)
-		C.cotrend_ini(cbv_area, do_ini_plots=ip)
+#		C.compute_cbvs(cbv_area, ent_limit=el)
+#		C.cotrend_ini(cbv_area, do_ini_plots=ip)
+		print('start')
+		C.compute_weight_interpolations(cbv_area, ['col', 'row'])
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -48,7 +50,12 @@ if __name__ == '__main__':
 
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 
+	
+
 	args = parser.parse_args()
+	
+	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-2137876'
+	args.area = [222,]
 
 	# Set logging level:
 	logging_level = logging.INFO
@@ -100,7 +107,7 @@ if __name__ == '__main__':
 
 	# Create wrapper function which only takes a single cbv_area as input:
 	prepare_cbv_wrapper = partial(prepare_cbv, input_folder=input_folder, threshold=args.snr, ncbv=args.ncbv, el=args.el, ip=args.iniplot)
-
+	threads=1
 	# Run the preparation:
 	if threads > 1:
 		# Disable printing info messages from the parent function.

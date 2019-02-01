@@ -66,8 +66,7 @@ class CBVCorrector(BaseCorrector):
 
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
-		# Dictionary that will hold Priors:
-		self.priors = {}
+
 
 	#--------------------------------------------------------------------------
 	def lc_matrix(self, cbv_area):
@@ -493,97 +492,94 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	def compute_weight_interpolations(self, cbv_area, dimensions=['tmag', 'col', 'tmag']):
-			logger = logging.getLogger(__name__)
-			logger.info("--------------------------------------------------------------")
-			n_cbvs_max = self.ncomponents
-			n_cbvs_max_new = 0
+		logger = logging.getLogger(__name__)
+		logger.info("--------------------------------------------------------------")
+		from mpl_toolkits.mplot3d import Axes3D
+		
+		if os.path.exists(os.path.join(self.data_folder, 'Rbf_area%d_cbv1.pkl' %cbv_area)):
+			print('Weights for area%d already done' %cbv_area)
+			return
+		
+		print('Computing weights for area%d' %cbv_area)
+		results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
+		n_stars = results.shape[0]
+		n_cbvs = results.shape[1]-2 #results also include star name and offset
+		
+		
+		
+		fig0 = plt.figure(figsize=plt.figaspect(2)*1)
+		axx = fig0.add_subplot(111, projection='3d')
+#		n_cbvs_max = self.ncomponents
+##		n_cbvs_max_new = 0
+#		print(self.data_folder, self.ncomponents)
 
-			figures1 = {}
-			figures2 = {}
-			for i in range(n_cbvs_max):
-				figures1['cbv%i' %i] = {}
-				figures2['cbv%i' %i] = {}
-				for j in range(4):
-	#				figures1['cbv%i' %i]['cam%i' %j]
-					fig, ax = plt.subplots(2,2, num='cbv%i_cam%i' %(i,j+1), figsize=(15,15), )
-					figures1['cbv%i' %i]['cam%i' %(j+1)] = fig
-					figures2['cbv%i' %i]['cam%i' %(j+1)] = ax
-	#				figures1.append(fig)
-	#				figures2.append(ax)
+		figures1 = {}
+		figures2 = {}
+		for i in range(n_cbvs):
+			fig, ax = plt.subplots(2,2, num='cbv%i' %(i), figsize=(8,8), )
+			figures1['cbv%i' %i] = fig
+			figures2['cbv%i' %i] = ax
+#			for j in range(4):
+#				fig, ax = plt.subplots(2,2, num='cbv%i_cam%i' %(i,j+1), figsize=(15,15), )
+#				figures1['cbv%i' %i]['cam%i' %(j+1)] = fig
+#				figures2['cbv%i' %i]['cam%i' %(j+1)] = ax
+				
+
+		colormap = plt.cm.PuOr #or any other colormap
+#		min_max_vals = np.zeros([n_cbvs_max, 4, 4])
+#		min_max_vals = np.zeros([n_cbvs_max, 2])
+
+		#TODO: obtain from sector information
+#		midx = 40.54 # Something wrong! field is 27 deg wide, not 24
+#		midy = 18
 
 
-			colormap = plt.cm.PuOr #or any other colormap
-			min_max_vals = np.zeros([n_cbvs_max, 4, 4])
+		pos_mag={}
 
-			#TODO: obtain from sector information
-	#		midx = 40.54 # Something wrong! field is 27 deg wide, not 24
-	#		midy = 18
-
-
-			pos_mag={}
-
-		# Loop through the CBV areas:
-		# - or run them in parallel - whatever you like!
+	# Loop through the CBV areas:
+	# - or run them in parallel - whatever you like!
 #		for ii, cbv_area in enumerate(cbv_areas):
 
-			if os.path.exists(os.path.join(self.data_folder, 'Rbf_area%d_cbv1.pkl' %cbv_area)):
-				print('Weights for area%d already done' %cbv_area)
-				return
+		
 
-			print('Computing weights for area%d' %cbv_area)
-			results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
-			n_stars = results.shape[0]
-			n_cbvs = results.shape[1]-2 #results also include star name and offset
+		
 
-			if n_cbvs>n_cbvs_max_new:
-				n_cbvs_max_new = n_cbvs
+#		if n_cbvs>n_cbvs_max_new:
+#		n_cbvs_max_new = n_cbvs
 
-			pos_mag0 = np.zeros([n_stars, 7])
+		pos_mag0 = np.zeros([n_stars, 3])
 
-			pos_mag[cbv_area] = {}
+		pos_mag = {}
 
-			for jj, star in enumerate(results[:,0]):
+		for jj, star in enumerate(results[:,0]):
 
-				star_single = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area, 'todolist.starid=%i' %int(star)])#, select='cbv_area')
-
-				# Fix small glitch /by Rasmus) in assignment of lat/lon
-#				if cbv_area==122:
-#					if star_single[0]['eclat']>15:
-#						pos_mag0[jj, 0] = 50
-#						pos_mag0[jj, 1] = 10
-#						pos_mag0[jj, 2] = 10
-#						continue
-
-
-#				pos_mag[cbv_area]['eclon'] = np.array([])
-
-#				pos_mag0[jj, 0] = star_single[0]['eclon']
-#				pos_mag0[jj, 1] = star_single[0]['eclat']
-#				print(star_single[0]['pos_row'])
-#				pos_mag0[jj, 0] = star_single[0]['pos_row']*(star_single[0]['ccd']<3)+(star_single[0]['ccd']>2)*(4096 - star_single[0]['pos_row'])
-
-
-				if star_single[0]['ccd']==1:
-					pos_mag0[jj, 1] = star_single[0]['pos_column']
-					pos_mag0[jj, 0] = star_single[0]['pos_row']
-				if star_single[0]['ccd']==2:
-					pos_mag0[jj, 1] = star_single[0]['pos_column']+2048
-					pos_mag0[jj, 0] = star_single[0]['pos_row']
-				if star_single[0]['ccd']==3:
-					pos_mag0[jj, 1] = 4096 - star_single[0]['pos_column']
-					pos_mag0[jj, 0] = 4096 - star_single[0]['pos_row']
-				if star_single[0]['ccd']==4:
-					pos_mag0[jj, 1] = 2048 - star_single[0]['pos_column']
-					pos_mag0[jj, 0] = 4096 - star_single[0]['pos_row']
+			star_single = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area, 'todolist.starid=%i' %int(star)])#, select='cbv_area')
+			pos_mag0[jj, 0] = star_single[0]['pos_row']
+			pos_mag0[jj, 1] = star_single[0]['pos_column']
+			pos_mag0[jj, 2] = star_single[0]['tmag']
+		
+#		pos_mag0[:,]
+#			if star_single[0]['ccd']==1:
+#				pos_mag0[jj, 1] = star_single[0]['pos_column']
+#				pos_mag0[jj, 0] = star_single[0]['pos_row']
+#			if star_single[0]['ccd']==2:
+#				pos_mag0[jj, 1] = star_single[0]['pos_column']+2048
+#				pos_mag0[jj, 0] = star_single[0]['pos_row']
+#			if star_single[0]['ccd']==3:
+#				pos_mag0[jj, 1] = 4096 - star_single[0]['pos_column']
+#				pos_mag0[jj, 0] = 4096 - star_single[0]['pos_row']
+#			if star_single[0]['ccd']==4:
+#				pos_mag0[jj, 1] = 2048 - star_single[0]['pos_column']
+#				pos_mag0[jj, 0] = 4096 - star_single[0]['pos_row']
 
 #				else:
 #					pos_mag0[jj, 0] = star_single[0]['pos_row']+ 6*2048 + (star_single[0]['ccd']>2)*2048
 #					pos_mag0[jj, 1] = star_single[0]['pos_column']+(star_single[0]['ccd']==2)*2048+(star_single[0]['ccd']==3)*2048
 
 
-				pos_mag0[jj, 2] = star_single[0]['tmag']
+			
 
-				# Convert to polar coordinates
+			# Convert to polar coordinates
 #				angle = math.atan2(star_single[0]['eclat']-midy, star_single[0]['eclon']-midx)
 #				angle = angle * 360 / (2*np.pi)
 #				if (angle < 0):
@@ -594,21 +590,25 @@ class CBVCorrector(BaseCorrector):
 
 #			pos_mag[cbv_area]['eclon'] = pos_mag0[:, 0]
 #			pos_mag[cbv_area]['eclat'] = pos_mag0[:, 1]
-			pos_mag[cbv_area]['row'] = pos_mag0[:, 0]
-			pos_mag[cbv_area]['col'] = pos_mag0[:, 1]
-			pos_mag[cbv_area]['tmag'] = pos_mag0[:, 2]
-#			pos_mag[cbv_area]['rad'] = pos_mag0[:, 4]
-#			pos_mag[cbv_area]['theta'] = pos_mag0[:, 4]
-			pos_mag[cbv_area]['results'] = results
-			pos_mag[cbv_area]['cam'] = star_single[0]['camera']
+		pos_mag['row'] = pos_mag0[:, 0]/2048
+		pos_mag['col'] = pos_mag0[:, 1]/2048
+		
+#		np.clip(pos_mag0[:, 2], 2, 20)/20
+		pos_mag['tmag'] = np.clip(pos_mag0[:, 2], 2, 20)/20
+		
+#		np.clip()
+##			pos_mag[cbv_area]['rad'] = pos_mag0[:, 4]
+##			pos_mag[cbv_area]['theta'] = pos_mag0[:, 4]
+#		pos_mag[cbv_area]['results'] = results
+#		pos_mag[cbv_area]['cam'] = star_single[0]['camera']
 
 
 #			f = 0
-			for j in range(n_cbvs):
+		for j in range(n_cbvs):
 #				for i in range(4):
 
-				VALS = np.abs(results[:,1+j])
-				# Perform binning
+			VALS = np.abs(results[:,1+j])
+			# Perform binning
 
 #					axm = figures2[j][0,0]
 #					axs = figures2[j][0,1]
@@ -616,70 +616,125 @@ class CBVCorrector(BaseCorrector):
 #					axm2 = figures2[j][1,0]
 #					axs2 = figures2[j][1,1]
 
-				cam = int(pos_mag[cbv_area]['cam'])
-				axm = figures2['cbv%i' %j]['cam%i' %cam][0,0]
-				axs = figures2['cbv%i' %j]['cam%i' %cam][0,1]
+#			cam = int(pos_mag[cbv_area]['cam'])
+#			axm = figures2['cbv%i' %j]['cam%i' %cam][0,0]
+#			axs = figures2['cbv%i' %j]['cam%i' %cam][0,1]
+#
+#			axm2 = figures2['cbv%i' %j]['cam%i' %cam][1,0]
+#			axs2 = figures2['cbv%i' %j]['cam%i' %cam][1,1]
+			
+			axm = figures2['cbv%i' %j][0,0]
+			axs = figures2['cbv%i' %j][0,1]
 
-				axm2 = figures2['cbv%i' %j]['cam%i' %cam][1,0]
-				axs2 = figures2['cbv%i' %j]['cam%i' %cam][1,1]
+			axm2 = figures2['cbv%i' %j][1,0]
+			axs2 = figures2['cbv%i' %j][1,1]
 
 
-				if np.percentile(VALS,10)<min_max_vals[j,cam-1,0]:
-					min_max_vals[j,cam-1, 0] = np.percentile(VALS,10)
-				if np.percentile(VALS,90)>min_max_vals[j,cam-1,1]:
-					min_max_vals[j,cam-1,1] = np.percentile(VALS,90)
+#			if np.percentile(VALS,10)<min_max_vals[j,cam-1,0]:
+#				min_max_vals[j,cam-1, 0] = np.percentile(VALS,10)
+#			if np.percentile(VALS,90)>min_max_vals[j,cam-1,1]:
+#				min_max_vals[j,cam-1,1] = np.percentile(VALS,90)
+				
+#			if np.percentile(VALS,10)<min_max_vals[j,0]:
+#				min_max_vals[j,0] = np.percentile(VALS,10)
+#			if np.percentile(VALS,90)>min_max_vals[j,1]:
+#				min_max_vals[j,1] = np.percentile(VALS,90)	
 
-				normalize = colors.Normalize(vmin=min_max_vals[j,cam-1,0], vmax=min_max_vals[j,cam-1,1])
+#			normalize = colors.Normalize(vmin=min_max_vals[j,cam-1,0], vmax=min_max_vals[j,cam-1,1])
+			normalize = colors.Normalize(vmin=np.percentile(VALS,5), vmax=np.percentile(VALS,95))
 
-				# Adjust grid-size depending on size of CBV area
-				gz = (str(cbv_area)[-1]=='1')*5 + (str(cbv_area)[-1]=='2')*10 + (str(cbv_area)[-1]=='3')*15 +(str(cbv_area)[-1]=='4')*10
-				# CBV values
-				hbm = axm.hexbin(pos_mag[cbv_area][dimensions[0]], pos_mag[cbv_area][dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize)
-				# CBV values scatter
-				hbs = axs.hexbin(pos_mag[cbv_area][dimensions[0]], pos_mag[cbv_area][dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize)
+			# Adjust grid-size depending on size of CBV area
+#			gz = (str(cbv_area)[-1]=='1')*5 + (str(cbv_area)[-1]=='2')*10 + (str(cbv_area)[-1]=='3')*15 +(str(cbv_area)[-1]=='4')*10
+#			# CBV values
+#			hbm = axm.hexbin(pos_mag[cbv_area][dimensions[0]], pos_mag[cbv_area][dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize)
+#			# CBV values scatter
+#			hbs = axs.hexbin(pos_mag[cbv_area][dimensions[0]], pos_mag[cbv_area][dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize)
+			
+			gz = 25
+			# CBV values
+			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+#			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, bins=np.linspace(0, 1, 20, endpoint=False), reduce_C_function=reduce_mode, cmap=colormap, norm=normalize)
+			# CBV values scatter
+#			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, bins=np.linspace(0, 1, 20, endpoint=False), reduce_C_function=reduce_std, cmap=colormap, norm=normalize)
+			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
 
-				# Get values and vertices of hexbinning
-				zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
-				zvalss0 = hbs.get_array();		vertss0 = hbs.get_offsets()
+			# Get values and vertices of hexbinning
+			zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
+			zvalss0 = hbs.get_array();		vertss0 = hbs.get_offsets()
+			print(vertsm0.shape)
+			# Bins to keed for interpolation
+			idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
+			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
 
-				# Bins to keed for interpolation
-				idxm = ndim_med_filt(zvalsm0, vertsm0, 6)
-				idxs = ndim_med_filt(zvalss0, vertss0, 6)
+			# Plot removed bins
+			axm.plot(vertsm0[~idxm,0], vertsm0[~idxm,1], marker='.', ms=1, ls='', color='r')
+			axs.plot(vertss0[~idxs,0], vertss0[~idxs,1], marker='.', ms=1, ls='', color='r')
 
-				# Plot removed bins
-				axm.plot(vertsm0[~idxm,0], vertsm0[~idxm,1], marker='.', ms=1, ls='', color='r')
-				axs.plot(vertss0[~idxs,0], vertss0[~idxs,1], marker='.', ms=1, ls='', color='r')
+			# Trim binned values before interpolation
+			zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
+			zvalss, vertss = zvalss0[idxs], vertss0[idxs]
 
-				# Trim binned values before interpolation
-				zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
-				zvalss, vertss = zvalss0[idxs], vertss0[idxs]
+			rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=1)
+			rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=1)
 
-				rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=1)
-				rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=1)
+#			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
+#			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
 
-				savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
-				savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
-
-				# Plot resulting interpolation
+			# Plot resulting interpolation
 #				x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
 #				x2 = np.linspace(vertss[:,0].min(), vertss[:,0].max(), 100); y2 = np.linspace(vertss[:,1].min(), vertss[:,1].max(), 100); xv2, yv2 = np.meshgrid(x2, y2)
-				rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
-				rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
-
+			rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
+			rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
+			
+#			rm = rbfim(vertsm0[:,0], vertsm0[:,1])
+#			rs = rbfis(vertsm0[:,0], vertsm0[:,1])
 #				rm = np.abs(rbfim(xv1, yv1))
 #				rs = np.abs(rbfis(xv2, yv2))
 
-				if np.percentile(rm,10)<min_max_vals[j,cam-1,2]:
-					min_max_vals[j,cam-1,2] = np.percentile(rm,10)
-				if np.percentile(rm,90)>min_max_vals[j,cam-1,3]:
-					min_max_vals[j,cam-1,3] = np.percentile(VALS,90)
+#			if np.percentile(rm,10)<min_max_vals[j,cam-1,2]:
+#				min_max_vals[j,cam-1,2] = np.percentile(rm,10)
+#			if np.percentile(rm,90)>min_max_vals[j,cam-1,3]:
+#				min_max_vals[j,cam-1,3] = np.percentile(VALS,90)
 
-				normalize = colors.Normalize(vmin=min_max_vals[j,cam-1,2], vmax=min_max_vals[j,cam-1,3])
+#			normalize = colors.Normalize(vmin=min_max_vals[j,cam-1,2], vmax=min_max_vals[j,cam-1,3])
+			normalize1 = colors.Normalize(vmin=np.percentile(rm,5), vmax=np.percentile(rm,95))
+			normalize2 = colors.Normalize(vmin=np.percentile(rs,5), vmax=np.percentile(rs,95))
 #				axm2.contourf(xv1, yv1, rm, cmap=colormap, norm=normalize)
 #				axs2.contourf(xv2, yv2, rs, cmap=colormap, norm=normalize)
 
-				axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize)
-				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize)
+			axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize1)
+			axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
+			
+			print(pos_mag['tmag'])
+			if j==0:
+				
+				for kk in range(2):
+					figgg = plt.figure()
+					axxx = figgg.add_subplot(111)
+					
+#					if kk==0:
+#						idx = (pos_mag['tmag']<=0.4)
+					if kk==0:
+						idx = (pos_mag['tmag']<=0.5)# & (pos_mag['tmag']>0.4)
+					else:
+						idx = (pos_mag['tmag']>0.5)
+					hbm = axxx.hexbin(pos_mag[dimensions[0]][idx], pos_mag[dimensions[1]][idx], C=VALS[idx], gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+					zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
+#					idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
+#					zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
+					rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=1)
+					rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
+					print(pos_mag['tmag'])
+					print(np.percentile(rm,5), np.percentile(rm,95))
+					normalize = colors.Normalize(vmin=np.percentile(rm,5), vmax=np.percentile(rm,95))
+					
+					axx.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, 10, cmap=colormap, norm=normalize)
+			
+			
+			
+			
+#				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
+				
 
 #				filename = 'cbv%i_cam%i.png' %(j,i)
 #				figures1[f].savefig(os.path.join(self.data_folder, filename))
