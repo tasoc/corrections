@@ -22,85 +22,89 @@ from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
 import matplotlib.colors as colors
 import logging
-from scipy.spatial import ConvexHull
-from shapely.ops import cascaded_union, polygonize
-from scipy.spatial import Delaunay
-import shapely.geometry as geometry
-from descartes import PolygonPatch
-import math
+from scipy.spatial import distance
+from scipy import stats
+import sys
+#from scipy.spatial import ConvexHull
+#from shapely.ops import cascaded_union, polygonize
+#from scipy.spatial import Delaunay
+#import shapely.geometry as geometry
+#from descartes import PolygonPatch
+#from scipy import stats
+#import math
 #------------------------------------------------------------------------------
 
-def alpha_shape(points, alpha):
-	"""
-	Compute the alpha shape (concave hull) of a set
-	of points.
-	@param points: Iterable container of points.
-	@param alpha: alpha value to influence the
-        gooeyness of the border. Smaller numbers
-        don't fall inward as much as larger numbers.
-        Too large, and you lose everything!
-    """
-	if len(points) < 4:
-        # When you have a triangle, there is no sense
-        # in computing an alpha shape.
-		return geometry.MultiPoint(list(points)).convex_hull
-	
-	def add_edge(edges, edge_points, coords, i, j):
-		"""
-        Add a line between the i-th and j-th points,
-        if not in the list already
-        """
-		if (i, j) in edges or (j, i) in edges:
-			# already added
-			return
-		edges.add( (i, j) )
-		edge_points.append(coords[ [i, j] ])
-			
-#	coords = np.array([point.coords[0] for point in points])
-	
-	tri = Delaunay(points)
-	edges = set()
-	edge_points = []
-    # loop over triangles:
-    # ia, ib, ic = indices of corner points of the
-    # triangle
-	for ia, ib, ic in tri.vertices:
-		pa = points[ia]
-		pb = points[ib]
-		pc = points[ic]
-        # Lengths of sides of triangle
-		a = math.sqrt((pa[0]-pb[0])**2 + (pa[1]-pb[1])**2)
-		b = math.sqrt((pb[0]-pc[0])**2 + (pb[1]-pc[1])**2)
-		c = math.sqrt((pc[0]-pa[0])**2 + (pc[1]-pa[1])**2)
-        # Semiperimeter of triangle
-		s = (a + b + c)/2.0
-        # Area of triangle by Heron's formula
-		area = math.sqrt(s*(s-a)*(s-b)*(s-c))
-		circum_r = a*b*c/(4.0*area)
-        # Here's the radius filter.
-        #print circum_r
-		if circum_r < 1.0/alpha:
-			add_edge(edges, edge_points, points, ia, ib)
-			add_edge(edges, edge_points, points, ib, ic)
-			add_edge(edges, edge_points, points, ic, ia)
-	m = geometry.MultiLineString(edge_points)
-	triangles = list(polygonize(m))
-	
-	return cascaded_union(triangles), edge_points 
-
-
-def plot_polygon(polygon):
-    fig = plt.figure(figsize=(10,10))
-    ax = fig.add_subplot(111)
-    margin = .3
-    x_min, y_min, x_max, y_max = polygon.bounds
-    ax.set_xlim([x_min-margin, x_max+margin])
-    ax.set_ylim([y_min-margin, y_max+margin])
-    patch = PolygonPatch(polygon, fc='#999999',
-                         ec='#000000', fill=True,
-                         zorder=-1)
-    ax.add_patch(patch)
-    return fig
+#def alpha_shape(points, alpha):
+#	"""
+#	Compute the alpha shape (concave hull) of a set
+#	of points.
+#	@param points: Iterable container of points.
+#	@param alpha: alpha value to influence the
+#        gooeyness of the border. Smaller numbers
+#        don't fall inward as much as larger numbers.
+#        Too large, and you lose everything!
+#    """
+#	if len(points) < 4:
+#        # When you have a triangle, there is no sense
+#        # in computing an alpha shape.
+#		return geometry.MultiPoint(list(points)).convex_hull
+#	
+#	def add_edge(edges, edge_points, coords, i, j):
+#		"""
+#        Add a line between the i-th and j-th points,
+#        if not in the list already
+#        """
+#		if (i, j) in edges or (j, i) in edges:
+#			# already added
+#			return
+#		edges.add( (i, j) )
+#		edge_points.append(coords[ [i, j] ])
+#			
+##	coords = np.array([point.coords[0] for point in points])
+#	
+#	tri = Delaunay(points)
+#	edges = set()
+#	edge_points = []
+#    # loop over triangles:
+#    # ia, ib, ic = indices of corner points of the
+#    # triangle
+#	for ia, ib, ic in tri.vertices:
+#		pa = points[ia]
+#		pb = points[ib]
+#		pc = points[ic]
+#        # Lengths of sides of triangle
+#		a = math.sqrt((pa[0]-pb[0])**2 + (pa[1]-pb[1])**2)
+#		b = math.sqrt((pb[0]-pc[0])**2 + (pb[1]-pc[1])**2)
+#		c = math.sqrt((pc[0]-pa[0])**2 + (pc[1]-pa[1])**2)
+#        # Semiperimeter of triangle
+#		s = (a + b + c)/2.0
+#        # Area of triangle by Heron's formula
+#		area = math.sqrt(s*(s-a)*(s-b)*(s-c))
+#		circum_r = a*b*c/(4.0*area)
+#        # Here's the radius filter.
+#        #print circum_r
+#		if circum_r < 1.0/alpha:
+#			add_edge(edges, edge_points, points, ia, ib)
+#			add_edge(edges, edge_points, points, ib, ic)
+#			add_edge(edges, edge_points, points, ic, ia)
+#	m = geometry.MultiLineString(edge_points)
+#	triangles = list(polygonize(m))
+#	
+#	return cascaded_union(triangles), edge_points 
+#
+#
+#def plot_polygon(polygon):
+#    fig = plt.figure(figsize=(10,10))
+#    ax = fig.add_subplot(111)
+#    margin = .3
+#    x_min, y_min, x_max, y_max = polygon.bounds
+#    ax.set_xlim([x_min-margin, x_max+margin])
+#    ax.set_ylim([y_min-margin, y_max+margin])
+#    patch = PolygonPatch(polygon, fc='#999999',
+#                         ec='#000000', fill=True,
+#                         zorder=-1)
+#    ax.add_patch(patch)
+#    return fig
 
 
 
@@ -612,8 +616,8 @@ class CBVCorrector(BaseCorrector):
 		
 		n_cbvs = 2
 		
-		fig0 = plt.figure(figsize=plt.figaspect(2)*1)
-		axx = fig0.add_subplot(111, projection='3d')
+#		fig0 = plt.figure(figsize=plt.figaspect(2)*1)
+#		axx = fig0.add_subplot(111, projection='3d')
 #		n_cbvs_max = self.ncomponents
 ##		n_cbvs_max_new = 0
 #		print(self.data_folder, self.ncomponents)
@@ -659,9 +663,9 @@ class CBVCorrector(BaseCorrector):
 		for jj, star in enumerate(results[:,0]):
 
 			star_single = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area, 'todolist.starid=%i' %int(star)])#, select='cbv_area')
-			pos_mag0[jj, 0] = star_single[0]['pos_row']
-			pos_mag0[jj, 1] = star_single[0]['pos_column']
-			pos_mag0[jj, 2] = star_single[0]['tmag']
+			pos_mag0[jj, 0] = star_single[0]['pos_row']/2048
+			pos_mag0[jj, 1] = star_single[0]['pos_column']/2048
+			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)/20
 		
 #		pos_mag0[:,]
 #			if star_single[0]['ccd']==1:
@@ -695,11 +699,33 @@ class CBVCorrector(BaseCorrector):
 
 #			pos_mag[cbv_area]['eclon'] = pos_mag0[:, 0]
 #			pos_mag[cbv_area]['eclat'] = pos_mag0[:, 1]
-		pos_mag['row'] = pos_mag0[:, 0]/2048
-		pos_mag['col'] = pos_mag0[:, 1]/2048
+			
+		D = distance.pdist(pos_mag0, metric='euclidean')
+		print(pos_mag0.shape, D.shape)
 		
-#		np.clip(pos_mag0[:, 2], 2, 20)/20
+		pos_mag['row'] = pos_mag0[:, 0]
+		pos_mag['col'] = pos_mag0[:, 1]/2048
 		pos_mag['tmag'] = np.clip(pos_mag0[:, 2], 2, 20)/20
+		
+		N_neigh = 500
+		
+		for j in range(n_cbvs):
+			VALS = np.abs(results[:,1+j])
+			
+			for i in range(len(VALS)):
+				idx_sort = np.argsort(D[i,:])
+				W = D[idx_sort][1:N_neigh+1] # sort values according to distance from point
+				
+				V = VALS[idx_sort][1:N_neigh+1]
+		
+				kernel = stats.gaussian_kde(V, wieghts=W)
+				
+				S = kernel.resample(5000)
+				
+				plt.figure()
+				plt.hist(S, 100)
+				plt.show()
+				sys.exit()
 		
 #		np.clip()
 ##			pos_mag[cbv_area]['rad'] = pos_mag0[:, 4]
@@ -709,25 +735,29 @@ class CBVCorrector(BaseCorrector):
 
 
 #			f = 0
-		for j in range(n_cbvs):
-
-			VALS = np.abs(results[:,1+j])
-			
-			axm = figures2['cbv%i' %j][0,0]
-			axs = figures2['cbv%i' %j][0,1]
-
-			axm2 = figures2['cbv%i' %j][1,0]
-			axs2 = figures2['cbv%i' %j][1,1]
-
-
-			normalize = colors.Normalize(vmin=np.percentile(VALS,5), vmax=np.percentile(VALS,95))
-
-
-
+#		for j in range(n_cbvs):
+#
+#			VALS = np.abs(results[:,1+j])
+#			
+#			axm = figures2['cbv%i' %j][0,0]
+#			axs = figures2['cbv%i' %j][0,1]
+#
+#			axm2 = figures2['cbv%i' %j][1,0]
+#			axs2 = figures2['cbv%i' %j][1,1]
+#
+#
+#			normalize = colors.Normalize(vmin=np.percentile(VALS,5), vmax=np.percentile(VALS,95))
+#
+#
+#
 #			gz = 25
 #			# CBV values
-#			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
-#			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+##			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+##			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+#
+#			bin_means, bin_edges, binnumber = stats.binned_statistic_dd([pos_mag['row'],pos_mag['col'],pos_mag['tmag']], VALS, statistic='median', bins=10)
+#			print(bin_means)
+#			
 #
 #			# Get values and vertices of hexbinning
 #			zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
@@ -747,156 +777,156 @@ class CBVCorrector(BaseCorrector):
 #			
 #			rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=0)
 #			rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=0)
-			
-			
-			idxm = ndim_med_filt(VALS, np.column_stack((pos_mag[dimensions[0]], pos_mag[dimensions[1]])), 15, mad_frac=3)
-#			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
-			rbfim = Rbf(pos_mag[dimensions[0]][idxm], pos_mag[dimensions[1]][idxm], VALS[idxm], smooth=0)
-			
-			
-			
-			
-			
-
-#			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
-#			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
-
-			# Plot resulting interpolation
-#			x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
-#			x2 = np.linspace(vertss[:,0].min(), vertss[:,0].max(), 100); y2 = np.linspace(vertss[:,1].min(), vertss[:,1].max(), 100); xv2, yv2 = np.meshgrid(x2, y2)
-			
-			x1 = np.linspace(0, 1, 100); y1 = np.linspace(0, 1, 100); 			
-			xv, yv = np.meshgrid(x1, y1)
-			xvi, yvi = np.meshgrid(range(len(x1)), range(len(y1)))
-			
-			
-#			x2 = np.linspace(0, 1, 100); y2 = np.linspace(vertss[:,1].min(), 1, 100); xv2, yv2 = np.meshgrid(x2, y2)
-#			rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
-#			rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
-			
-			rm = np.abs(rbfim(xv, yv))
-#			rs = np.abs(rbfis(xv, yv))
-
-			normalize1 = colors.Normalize(vmin=np.percentile(rm,5), vmax=np.percentile(rm,95))
-#			normalize2 = colors.Normalize(vmin=np.percentile(rs,5), vmax=np.percentile(rs,95))
-			axm2.contourf(xv, yv, rm, 15, cmap=colormap, norm=normalize1, extent=(0, 1, 0, 1))
-#			axs2.contourf(xv, yv, rs, 15, cmap=colormap, norm=normalize2, extent=(0, 1, 0, 1))
-
-#			axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize1)
-#			axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
-			
-#			print(pos_mag['tmag'])
-#			if j==0:
-##				levels = np.linspace(np.percentile(rm,0), np.percentile(rm,100), 40)
-#				mag_range = np.max(pos_mag['tmag']) - np.min(pos_mag['tmag'])
-#				dtmag = mag_range/2
-#				
-#				points = np.array(list(zip(pos_mag[dimensions[0]], pos_mag[dimensions[1]])))
-#				
-#				
-#				alpha = .1
-#				concave_hull, edge_points = alpha_shape(points,alpha=alpha)
-#
-#				plot_polygon(concave_hull)
-#
-#
-#
-##				hull = ConvexHull(points)
-##				
-##				for simplex in hull.simplices:
-##					   axm2.plot(points[simplex, 0], points[simplex, 1], 'k')
-##				
-##				axm2.scatter(pos_mag[dimensions[0]], pos_mag[dimensions[1]], marker='.')   
-#	
-#				for kk in range(2):
-##					normalize0 = colors.Normalize(vmin=np.percentile(kk + .1*rm,5), vmax=np.percentile(kk + .1*rm,95))
-#					
-#					figgg = plt.figure()
-#					axxx = figgg.add_subplot(111)
-#					
-#					idx = (pos_mag['tmag']>np.min(pos_mag['tmag']) + kk*dtmag) & (pos_mag['tmag']<=np.min(pos_mag['tmag']) + (kk+1)*dtmag)
-#
-#					print(sum(idx))
-#
-#					hbm = axxx.hexbin(pos_mag[dimensions[0]][idx], pos_mag[dimensions[1]][idx], C=VALS[idx], gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
-#					zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
-#					
-#					
-#					
-#					
-#					rbfim = Rbf(vertsm0[:,0], vertsm0[:,1], zvalsm0, smooth=1)
-#					rm0 = np.abs(rbfim(xv, yv))
-
-
-
-#					for simplex in hull.simplices:
-#					    plt.plot(points[simplex, 0], points[simplex, 1])
-#
-#					plt.scatter(*points.T, alpha=.5, color='k', s=200, marker='v')
-#					positionsi = np.array(np.array([xvi, yvi])).T.reshape(-1, 2)
-#					positions = np.array(np.array([xv, yv])).T.reshape(-1, 2)
-#					
-#					figs = plt.figure()
-#					axs = figs.add_subplot(111)
-#					
-#					for ll, p in enumerate(positions):
-##						print(points.shape, p.shape)
-#						
-#						new_points = np.append(points, p.reshape(1, 2), axis=0)
-#						
-#						point_is_in_hull = is_p_inside_points_hull(hull, new_points)
-#						
-##						point_is_in_hull = in_hull(tuple(p), hull)
-#						if point_is_in_hull:
-#							axs.scatter(p[0], p[1], marker='o', color='r')
-#						else:
-#							axs.scatter(p[0], p[1], marker='o', color='k')
-##							print(new_points)
-##							print(positionsi[ll], tuple(p))
-##							rm0[positionsi[ll]] = 0
-##					    marker = 'x' if point_is_in_hull else 'd'
-##					    color = 'g' if point_is_in_hull else 'm'
-##					    plt.scatter(p[0], p[1], marker=marker, color=color)
-#	
-#	
-	
-#					idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
-#					zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
-					
-#					print(pos_mag['tmag'])
-#					print(np.percentile(rm,5), np.percentile(rm,95))
-					
-#					normalize0 = colors.Normalize(vmin=np.percentile(kk + .01*rm0[np.nonzero(rm0)],5), vmax=np.percentile(kk + .01*rm0,95))
-					
-#					axx.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, 10, cmap=colormap, norm=normalize)
 #			
-					
-#					axx.contourf(xv, yv, kk + .01*rm0, 40, zdir='z', cmap=colormap)#, norm=normalize0) #levels=kk + .1*levels, 
-##					axx.contour(xv, yv, kk + .1*rm, 40, zdir='z', color='k', norm=normalize1) #levels=kk + .1*levels, 
+#			
+##			idxm = ndim_med_filt(VALS, np.column_stack((pos_mag[dimensions[0]], pos_mag[dimensions[1]])), 15, mad_frac=3)
+###			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
+##			rbfim = Rbf(pos_mag[dimensions[0]][idxm], pos_mag[dimensions[1]][idxm], VALS[idxm], smooth=0)
+##			
+#			
+#			
+#			
+#			
+#
+##			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
+##			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
+#
+#			# Plot resulting interpolation
+##			x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
+##			x2 = np.linspace(vertss[:,0].min(), vertss[:,0].max(), 100); y2 = np.linspace(vertss[:,1].min(), vertss[:,1].max(), 100); xv2, yv2 = np.meshgrid(x2, y2)
+#			
+#			x1 = np.linspace(0, 1, 100); y1 = np.linspace(0, 1, 100); 			
+#			xv, yv = np.meshgrid(x1, y1)
+#			xvi, yvi = np.meshgrid(range(len(x1)), range(len(y1)))
+#			
+#			
+##			x2 = np.linspace(0, 1, 100); y2 = np.linspace(vertss[:,1].min(), 1, 100); xv2, yv2 = np.meshgrid(x2, y2)
+##			rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
+##			rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
+#			
+#			rm = np.abs(rbfim(xv, yv))
+##			rs = np.abs(rbfis(xv, yv))
+#
+#			normalize1 = colors.Normalize(vmin=np.percentile(rm,5), vmax=np.percentile(rm,95))
+##			normalize2 = colors.Normalize(vmin=np.percentile(rs,5), vmax=np.percentile(rs,95))
+#			axm2.contourf(xv, yv, rm, 15, cmap=colormap, norm=normalize1, extent=(0, 1, 0, 1))
+##			axs2.contourf(xv, yv, rs, 15, cmap=colormap, norm=normalize2, extent=(0, 1, 0, 1))
+#
+##			axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize1)
+##			axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
+#			
+##			print(pos_mag['tmag'])
+##			if j==0:
+###				levels = np.linspace(np.percentile(rm,0), np.percentile(rm,100), 40)
+##				mag_range = np.max(pos_mag['tmag']) - np.min(pos_mag['tmag'])
+##				dtmag = mag_range/2
+##				
+##				points = np.array(list(zip(pos_mag[dimensions[0]], pos_mag[dimensions[1]])))
+##				
+##				
+##				alpha = .1
+##				concave_hull, edge_points = alpha_shape(points,alpha=alpha)
+##
+##				plot_polygon(concave_hull)
+##
+##
+##
+###				hull = ConvexHull(points)
+###				
+###				for simplex in hull.simplices:
+###					   axm2.plot(points[simplex, 0], points[simplex, 1], 'k')
+###				
+###				axm2.scatter(pos_mag[dimensions[0]], pos_mag[dimensions[1]], marker='.')   
+##	
+##				for kk in range(2):
+###					normalize0 = colors.Normalize(vmin=np.percentile(kk + .1*rm,5), vmax=np.percentile(kk + .1*rm,95))
+##					
+##					figgg = plt.figure()
+##					axxx = figgg.add_subplot(111)
+##					
+##					idx = (pos_mag['tmag']>np.min(pos_mag['tmag']) + kk*dtmag) & (pos_mag['tmag']<=np.min(pos_mag['tmag']) + (kk+1)*dtmag)
+##
+##					print(sum(idx))
+##
+##					hbm = axxx.hexbin(pos_mag[dimensions[0]][idx], pos_mag[dimensions[1]][idx], C=VALS[idx], gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+##					zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
+##					
+##					
+##					
+##					
+##					rbfim = Rbf(vertsm0[:,0], vertsm0[:,1], zvalsm0, smooth=1)
+##					rm0 = np.abs(rbfim(xv, yv))
+#
+#
+#
+##					for simplex in hull.simplices:
+##					    plt.plot(points[simplex, 0], points[simplex, 1])
+##
+##					plt.scatter(*points.T, alpha=.5, color='k', s=200, marker='v')
+##					positionsi = np.array(np.array([xvi, yvi])).T.reshape(-1, 2)
+##					positions = np.array(np.array([xv, yv])).T.reshape(-1, 2)
+##					
+##					figs = plt.figure()
+##					axs = figs.add_subplot(111)
+##					
+##					for ll, p in enumerate(positions):
+###						print(points.shape, p.shape)
+##						
+##						new_points = np.append(points, p.reshape(1, 2), axis=0)
+##						
+##						point_is_in_hull = is_p_inside_points_hull(hull, new_points)
+##						
+###						point_is_in_hull = in_hull(tuple(p), hull)
+##						if point_is_in_hull:
+##							axs.scatter(p[0], p[1], marker='o', color='r')
+##						else:
+##							axs.scatter(p[0], p[1], marker='o', color='k')
+###							print(new_points)
+###							print(positionsi[ll], tuple(p))
+###							rm0[positionsi[ll]] = 0
+###					    marker = 'x' if point_is_in_hull else 'd'
+###					    color = 'g' if point_is_in_hull else 'm'
+###					    plt.scatter(p[0], p[1], marker=marker, color=color)
+##	
+##	
+#	
+##					idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
+##					zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
 #					
-#					plt.close(figgg)
-#				break
-			
-#				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, norm=normalize2)
-				
-
-#				filename = 'cbv%i_cam%i.png' %(j,i)
-#				figures1[f].savefig(os.path.join(self.data_folder, filename))
-#				f+=1
-
-
-#		for i in range(n_cbvs_max_new):
-#			for j in range(4):
-#				figs = figures1['cbv%i' %i]['cam%i' %(j+1)]
-#				filename = 'cbv%i_cam%i.png' %(i,j+1)
-#		figs.savefig(os.path.join(self.data_folder, filename))
-
-#		for k, figs in enumerate(figures1):
-#			if k>=n_cbvs_max_new:
-#				break
-#			filename = 'cbv%i.png' %k
-#			figs.savefig(os.path.join(self.data_folder, filename))
-
+##					print(pos_mag['tmag'])
+##					print(np.percentile(rm,5), np.percentile(rm,95))
+#					
+##					normalize0 = colors.Normalize(vmin=np.percentile(kk + .01*rm0[np.nonzero(rm0)],5), vmax=np.percentile(kk + .01*rm0,95))
+#					
+##					axx.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, 10, cmap=colormap, norm=normalize)
+##			
+#					
+##					axx.contourf(xv, yv, kk + .01*rm0, 40, zdir='z', cmap=colormap)#, norm=normalize0) #levels=kk + .1*levels, 
+###					axx.contour(xv, yv, kk + .1*rm, 40, zdir='z', color='k', norm=normalize1) #levels=kk + .1*levels, 
+##					
+##					plt.close(figgg)
+##				break
+#			
+##				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, norm=normalize2)
+#				
+#
+##				filename = 'cbv%i_cam%i.png' %(j,i)
+##				figures1[f].savefig(os.path.join(self.data_folder, filename))
+##				f+=1
+#
+#
+##		for i in range(n_cbvs_max_new):
+##			for j in range(4):
+##				figs = figures1['cbv%i' %i]['cam%i' %(j+1)]
+##				filename = 'cbv%i_cam%i.png' %(i,j+1)
+##		figs.savefig(os.path.join(self.data_folder, filename))
+#
+##		for k, figs in enumerate(figures1):
+##			if k>=n_cbvs_max_new:
+##				break
+##			filename = 'cbv%i.png' %k
+##			figs.savefig(os.path.join(self.data_folder, filename))
+#
 
 	#--------------------------------------------------------------------------
 	def do_correction(self, lc):
