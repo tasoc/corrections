@@ -22,8 +22,88 @@ from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
 import matplotlib.colors as colors
 import logging
-
+from scipy.spatial import ConvexHull
+from shapely.ops import cascaded_union, polygonize
+from scipy.spatial import Delaunay
+import shapely.geometry as geometry
+from descartes import PolygonPatch
+import math
 #------------------------------------------------------------------------------
+
+def alpha_shape(points, alpha):
+	"""
+	Compute the alpha shape (concave hull) of a set
+	of points.
+	@param points: Iterable container of points.
+	@param alpha: alpha value to influence the
+        gooeyness of the border. Smaller numbers
+        don't fall inward as much as larger numbers.
+        Too large, and you lose everything!
+    """
+	if len(points) < 4:
+        # When you have a triangle, there is no sense
+        # in computing an alpha shape.
+		return geometry.MultiPoint(list(points)).convex_hull
+	
+	def add_edge(edges, edge_points, coords, i, j):
+		"""
+        Add a line between the i-th and j-th points,
+        if not in the list already
+        """
+		if (i, j) in edges or (j, i) in edges:
+			# already added
+			return
+		edges.add( (i, j) )
+		edge_points.append(coords[ [i, j] ])
+			
+#	coords = np.array([point.coords[0] for point in points])
+	
+	tri = Delaunay(points)
+	edges = set()
+	edge_points = []
+    # loop over triangles:
+    # ia, ib, ic = indices of corner points of the
+    # triangle
+	for ia, ib, ic in tri.vertices:
+		pa = points[ia]
+		pb = points[ib]
+		pc = points[ic]
+        # Lengths of sides of triangle
+		a = math.sqrt((pa[0]-pb[0])**2 + (pa[1]-pb[1])**2)
+		b = math.sqrt((pb[0]-pc[0])**2 + (pb[1]-pc[1])**2)
+		c = math.sqrt((pc[0]-pa[0])**2 + (pc[1]-pa[1])**2)
+        # Semiperimeter of triangle
+		s = (a + b + c)/2.0
+        # Area of triangle by Heron's formula
+		area = math.sqrt(s*(s-a)*(s-b)*(s-c))
+		circum_r = a*b*c/(4.0*area)
+        # Here's the radius filter.
+        #print circum_r
+		if circum_r < 1.0/alpha:
+			add_edge(edges, edge_points, points, ia, ib)
+			add_edge(edges, edge_points, points, ib, ic)
+			add_edge(edges, edge_points, points, ic, ia)
+	m = geometry.MultiLineString(edge_points)
+	triangles = list(polygonize(m))
+	
+	return cascaded_union(triangles), edge_points 
+
+
+def plot_polygon(polygon):
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(111)
+    margin = .3
+    x_min, y_min, x_max, y_max = polygon.bounds
+    ax.set_xlim([x_min-margin, x_max+margin])
+    ax.set_ylim([y_min-margin, y_max+margin])
+    patch = PolygonPatch(polygon, fc='#999999',
+                         ec='#000000', fill=True,
+                         zorder=-1)
+    ax.add_patch(patch)
+    return fig
+
+
+
 class CBVCorrector(BaseCorrector):
 	"""
 	The CBV (Co-trending Basis Vectors) correction method for the TASOC
@@ -492,6 +572,31 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	def compute_weight_interpolations(self, cbv_area, dimensions=['tmag', 'col', 'tmag']):
+		
+#		def in_hull(p, hull):
+#		    """
+#		    Test if points in `p` are in `hull`
+#		
+#		    `p` should be a `NxK` coordinates of `N` points in `K` dimensions
+#		    `hull` is either a scipy.spatial.Delaunay object or the `MxK` array of the 
+#		    coordinates of `M` points in `K`dimensions for which Delaunay triangulation
+#		    will be computed
+#		    """
+#		    from scipy.spatial import Delaunay
+#		    if not isinstance(hull,Delaunay):
+#		        hull = Delaunay(hull)
+#		
+#		    return hull.find_simplex(p)>=0
+
+#		def is_p_inside_points_hull(hull, p):
+##		    hull = ConvexHull(points)
+#		    
+#		    new_hull = ConvexHull(p)
+#		    if list(hull.vertices) == list(new_hull.vertices):
+#		        return True
+#		    else:
+#		        return False	
+	
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
 		from mpl_toolkits.mplot3d import Axes3D
@@ -505,7 +610,7 @@ class CBVCorrector(BaseCorrector):
 		n_stars = results.shape[0]
 		n_cbvs = results.shape[1]-2 #results also include star name and offset
 		
-		
+		n_cbvs = 2
 		
 		fig0 = plt.figure(figsize=plt.figaspect(2)*1)
 		axx = fig0.add_subplot(111, projection='3d')
@@ -605,23 +710,8 @@ class CBVCorrector(BaseCorrector):
 
 #			f = 0
 		for j in range(n_cbvs):
-#				for i in range(4):
 
 			VALS = np.abs(results[:,1+j])
-			# Perform binning
-
-#					axm = figures2[j][0,0]
-#					axs = figures2[j][0,1]
-#
-#					axm2 = figures2[j][1,0]
-#					axs2 = figures2[j][1,1]
-
-#			cam = int(pos_mag[cbv_area]['cam'])
-#			axm = figures2['cbv%i' %j]['cam%i' %cam][0,0]
-#			axs = figures2['cbv%i' %j]['cam%i' %cam][0,1]
-#
-#			axm2 = figures2['cbv%i' %j]['cam%i' %cam][1,0]
-#			axs2 = figures2['cbv%i' %j]['cam%i' %cam][1,1]
 			
 			axm = figures2['cbv%i' %j][0,0]
 			axs = figures2['cbv%i' %j][0,1]
@@ -630,110 +720,164 @@ class CBVCorrector(BaseCorrector):
 			axs2 = figures2['cbv%i' %j][1,1]
 
 
-#			if np.percentile(VALS,10)<min_max_vals[j,cam-1,0]:
-#				min_max_vals[j,cam-1, 0] = np.percentile(VALS,10)
-#			if np.percentile(VALS,90)>min_max_vals[j,cam-1,1]:
-#				min_max_vals[j,cam-1,1] = np.percentile(VALS,90)
-				
-#			if np.percentile(VALS,10)<min_max_vals[j,0]:
-#				min_max_vals[j,0] = np.percentile(VALS,10)
-#			if np.percentile(VALS,90)>min_max_vals[j,1]:
-#				min_max_vals[j,1] = np.percentile(VALS,90)	
-
-#			normalize = colors.Normalize(vmin=min_max_vals[j,cam-1,0], vmax=min_max_vals[j,cam-1,1])
 			normalize = colors.Normalize(vmin=np.percentile(VALS,5), vmax=np.percentile(VALS,95))
 
-			# Adjust grid-size depending on size of CBV area
-#			gz = (str(cbv_area)[-1]=='1')*5 + (str(cbv_area)[-1]=='2')*10 + (str(cbv_area)[-1]=='3')*15 +(str(cbv_area)[-1]=='4')*10
+
+
+#			gz = 25
 #			# CBV values
-#			hbm = axm.hexbin(pos_mag[cbv_area][dimensions[0]], pos_mag[cbv_area][dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize)
-#			# CBV values scatter
-#			hbs = axs.hexbin(pos_mag[cbv_area][dimensions[0]], pos_mag[cbv_area][dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize)
+#			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+#			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+#
+#			# Get values and vertices of hexbinning
+#			zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
+#			zvalss0 = hbs.get_array();		vertss0 = hbs.get_offsets()
+#
+#			# Bins to keed for interpolation
+#			idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
+#			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
+#
+#			# Plot removed bins
+#			axm.plot(vertsm0[~idxm,0], vertsm0[~idxm,1], marker='.', ms=1, ls='', color='r')
+#			axs.plot(vertss0[~idxs,0], vertss0[~idxs,1], marker='.', ms=1, ls='', color='r')
+#
+#			# Trim binned values before interpolation
+#			zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
+#			zvalss, vertss = zvalss0[idxs], vertss0[idxs]
+#			
+#			rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=0)
+#			rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=0)
 			
-			gz = 25
-			# CBV values
-			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
-#			hbm = axm.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, bins=np.linspace(0, 1, 20, endpoint=False), reduce_C_function=reduce_mode, cmap=colormap, norm=normalize)
-			# CBV values scatter
-#			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, bins=np.linspace(0, 1, 20, endpoint=False), reduce_C_function=reduce_std, cmap=colormap, norm=normalize)
-			hbs = axs.hexbin(pos_mag[dimensions[0]], pos_mag[dimensions[1]], C=VALS, gridsize=gz, reduce_C_function=reduce_std, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
-
-			# Get values and vertices of hexbinning
-			zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
-			zvalss0 = hbs.get_array();		vertss0 = hbs.get_offsets()
-			print(vertsm0.shape)
-			# Bins to keed for interpolation
-			idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
-			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
-
-			# Plot removed bins
-			axm.plot(vertsm0[~idxm,0], vertsm0[~idxm,1], marker='.', ms=1, ls='', color='r')
-			axs.plot(vertss0[~idxs,0], vertss0[~idxs,1], marker='.', ms=1, ls='', color='r')
-
-			# Trim binned values before interpolation
-			zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
-			zvalss, vertss = zvalss0[idxs], vertss0[idxs]
-
-			rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=1)
-			rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=1)
+			
+			idxm = ndim_med_filt(VALS, np.column_stack((pos_mag[dimensions[0]], pos_mag[dimensions[1]])), 15, mad_frac=3)
+#			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
+			rbfim = Rbf(pos_mag[dimensions[0]][idxm], pos_mag[dimensions[1]][idxm], VALS[idxm], smooth=0)
+			
+			
+			
+			
+			
 
 #			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
 #			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
 
 			# Plot resulting interpolation
-#				x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
-#				x2 = np.linspace(vertss[:,0].min(), vertss[:,0].max(), 100); y2 = np.linspace(vertss[:,1].min(), vertss[:,1].max(), 100); xv2, yv2 = np.meshgrid(x2, y2)
-			rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
-			rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
+#			x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
+#			x2 = np.linspace(vertss[:,0].min(), vertss[:,0].max(), 100); y2 = np.linspace(vertss[:,1].min(), vertss[:,1].max(), 100); xv2, yv2 = np.meshgrid(x2, y2)
 			
-#			rm = rbfim(vertsm0[:,0], vertsm0[:,1])
-#			rs = rbfis(vertsm0[:,0], vertsm0[:,1])
-#				rm = np.abs(rbfim(xv1, yv1))
-#				rs = np.abs(rbfis(xv2, yv2))
+			x1 = np.linspace(0, 1, 100); y1 = np.linspace(0, 1, 100); 			
+			xv, yv = np.meshgrid(x1, y1)
+			xvi, yvi = np.meshgrid(range(len(x1)), range(len(y1)))
+			
+			
+#			x2 = np.linspace(0, 1, 100); y2 = np.linspace(vertss[:,1].min(), 1, 100); xv2, yv2 = np.meshgrid(x2, y2)
+#			rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
+#			rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
+			
+			rm = np.abs(rbfim(xv, yv))
+#			rs = np.abs(rbfis(xv, yv))
 
-#			if np.percentile(rm,10)<min_max_vals[j,cam-1,2]:
-#				min_max_vals[j,cam-1,2] = np.percentile(rm,10)
-#			if np.percentile(rm,90)>min_max_vals[j,cam-1,3]:
-#				min_max_vals[j,cam-1,3] = np.percentile(VALS,90)
-
-#			normalize = colors.Normalize(vmin=min_max_vals[j,cam-1,2], vmax=min_max_vals[j,cam-1,3])
 			normalize1 = colors.Normalize(vmin=np.percentile(rm,5), vmax=np.percentile(rm,95))
-			normalize2 = colors.Normalize(vmin=np.percentile(rs,5), vmax=np.percentile(rs,95))
-#				axm2.contourf(xv1, yv1, rm, cmap=colormap, norm=normalize)
-#				axs2.contourf(xv2, yv2, rs, cmap=colormap, norm=normalize)
+#			normalize2 = colors.Normalize(vmin=np.percentile(rs,5), vmax=np.percentile(rs,95))
+			axm2.contourf(xv, yv, rm, 15, cmap=colormap, norm=normalize1, extent=(0, 1, 0, 1))
+#			axs2.contourf(xv, yv, rs, 15, cmap=colormap, norm=normalize2, extent=(0, 1, 0, 1))
 
-			axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize1)
-			axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
+#			axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize1)
+#			axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
 			
-			print(pos_mag['tmag'])
-			if j==0:
-				
-				for kk in range(2):
-					figgg = plt.figure()
-					axxx = figgg.add_subplot(111)
-					
-#					if kk==0:
-#						idx = (pos_mag['tmag']<=0.4)
-					if kk==0:
-						idx = (pos_mag['tmag']<=0.5)# & (pos_mag['tmag']>0.4)
-					else:
-						idx = (pos_mag['tmag']>0.5)
-					hbm = axxx.hexbin(pos_mag[dimensions[0]][idx], pos_mag[dimensions[1]][idx], C=VALS[idx], gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
-					zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
+#			print(pos_mag['tmag'])
+#			if j==0:
+##				levels = np.linspace(np.percentile(rm,0), np.percentile(rm,100), 40)
+#				mag_range = np.max(pos_mag['tmag']) - np.min(pos_mag['tmag'])
+#				dtmag = mag_range/2
+#				
+#				points = np.array(list(zip(pos_mag[dimensions[0]], pos_mag[dimensions[1]])))
+#				
+#				
+#				alpha = .1
+#				concave_hull, edge_points = alpha_shape(points,alpha=alpha)
+#
+#				plot_polygon(concave_hull)
+#
+#
+#
+##				hull = ConvexHull(points)
+##				
+##				for simplex in hull.simplices:
+##					   axm2.plot(points[simplex, 0], points[simplex, 1], 'k')
+##				
+##				axm2.scatter(pos_mag[dimensions[0]], pos_mag[dimensions[1]], marker='.')   
+#	
+#				for kk in range(2):
+##					normalize0 = colors.Normalize(vmin=np.percentile(kk + .1*rm,5), vmax=np.percentile(kk + .1*rm,95))
+#					
+#					figgg = plt.figure()
+#					axxx = figgg.add_subplot(111)
+#					
+#					idx = (pos_mag['tmag']>np.min(pos_mag['tmag']) + kk*dtmag) & (pos_mag['tmag']<=np.min(pos_mag['tmag']) + (kk+1)*dtmag)
+#
+#					print(sum(idx))
+#
+#					hbm = axxx.hexbin(pos_mag[dimensions[0]][idx], pos_mag[dimensions[1]][idx], C=VALS[idx], gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
+#					zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
+#					
+#					
+#					
+#					
+#					rbfim = Rbf(vertsm0[:,0], vertsm0[:,1], zvalsm0, smooth=1)
+#					rm0 = np.abs(rbfim(xv, yv))
+
+
+
+#					for simplex in hull.simplices:
+#					    plt.plot(points[simplex, 0], points[simplex, 1])
+#
+#					plt.scatter(*points.T, alpha=.5, color='k', s=200, marker='v')
+#					positionsi = np.array(np.array([xvi, yvi])).T.reshape(-1, 2)
+#					positions = np.array(np.array([xv, yv])).T.reshape(-1, 2)
+#					
+#					figs = plt.figure()
+#					axs = figs.add_subplot(111)
+#					
+#					for ll, p in enumerate(positions):
+##						print(points.shape, p.shape)
+#						
+#						new_points = np.append(points, p.reshape(1, 2), axis=0)
+#						
+#						point_is_in_hull = is_p_inside_points_hull(hull, new_points)
+#						
+##						point_is_in_hull = in_hull(tuple(p), hull)
+#						if point_is_in_hull:
+#							axs.scatter(p[0], p[1], marker='o', color='r')
+#						else:
+#							axs.scatter(p[0], p[1], marker='o', color='k')
+##							print(new_points)
+##							print(positionsi[ll], tuple(p))
+##							rm0[positionsi[ll]] = 0
+##					    marker = 'x' if point_is_in_hull else 'd'
+##					    color = 'g' if point_is_in_hull else 'm'
+##					    plt.scatter(p[0], p[1], marker=marker, color=color)
+#	
+#	
+	
 #					idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
 #					zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
-					rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=1)
-					rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
-					print(pos_mag['tmag'])
-					print(np.percentile(rm,5), np.percentile(rm,95))
-					normalize = colors.Normalize(vmin=np.percentile(rm,5), vmax=np.percentile(rm,95))
 					
-					axx.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, 10, cmap=colormap, norm=normalize)
+#					print(pos_mag['tmag'])
+#					print(np.percentile(rm,5), np.percentile(rm,95))
+					
+#					normalize0 = colors.Normalize(vmin=np.percentile(kk + .01*rm0[np.nonzero(rm0)],5), vmax=np.percentile(kk + .01*rm0,95))
+					
+#					axx.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, 10, cmap=colormap, norm=normalize)
+#			
+					
+#					axx.contourf(xv, yv, kk + .01*rm0, 40, zdir='z', cmap=colormap)#, norm=normalize0) #levels=kk + .1*levels, 
+##					axx.contour(xv, yv, kk + .1*rm, 40, zdir='z', color='k', norm=normalize1) #levels=kk + .1*levels, 
+#					
+#					plt.close(figgg)
+#				break
 			
-			
-			
-			
-#				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
+#				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, norm=normalize2)
 				
 
 #				filename = 'cbv%i_cam%i.png' %(j,i)
