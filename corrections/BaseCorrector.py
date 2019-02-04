@@ -25,6 +25,7 @@ from lightkurve import TessLightCurve
 from .version import get_version
 from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
+from .manual_filters import manual_exclude
 
 __version__ = get_version()
 
@@ -337,7 +338,8 @@ class BaseCorrector(object):
 				sector=2,
 				#ra=0,
 				#dec=0,
-				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
+				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+				meta={}
 			)
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
@@ -369,8 +371,13 @@ class BaseCorrector(object):
 					sector=hdu[0].header.get('SECTOR'),
 					ra=hdu[0].header.get('RA_OBJ'),
 					dec=hdu[0].header.get('DEC_OBJ'),
-					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
+					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+					meta={}
 				)
+
+				# Apply manual exclude flag:
+				manexcl = manual_exclude(lc)
+				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
 
 		else:
 			raise ValueError("Invalid file format")
