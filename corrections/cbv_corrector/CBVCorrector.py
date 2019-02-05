@@ -21,6 +21,7 @@ from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
 import matplotlib.colors as colors
+#from mpl_toolkits.mplot3d import Axes3D
 import logging
 from scipy.spatial import distance
 from scipy import stats
@@ -48,7 +49,7 @@ import sys
 #        # When you have a triangle, there is no sense
 #        # in computing an alpha shape.
 #		return geometry.MultiPoint(list(points)).convex_hull
-#	
+#
 #	def add_edge(edges, edge_points, coords, i, j):
 #		"""
 #        Add a line between the i-th and j-th points,
@@ -59,9 +60,9 @@ import sys
 #			return
 #		edges.add( (i, j) )
 #		edge_points.append(coords[ [i, j] ])
-#			
+#
 ##	coords = np.array([point.coords[0] for point in points])
-#	
+#
 #	tri = Delaunay(points)
 #	edges = set()
 #	edge_points = []
@@ -89,8 +90,8 @@ import sys
 #			add_edge(edges, edge_points, points, ic, ia)
 #	m = geometry.MultiLineString(edge_points)
 #	triangles = list(polygonize(m))
-#	
-#	return cascaded_union(triangles), edge_points 
+#
+#	return cascaded_union(triangles), edge_points
 #
 #
 #def plot_polygon(polygon):
@@ -182,7 +183,7 @@ class CBVCorrector(BaseCorrector):
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
 		tmpfile = os.path.join(self.data_folder, 'mat-%d.npz' %cbv_area)
-		if os.path.exists(tmpfile):
+		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
 			mat = data['mat']
@@ -200,7 +201,7 @@ class CBVCorrector(BaseCorrector):
 			ax.axvline(self.threshold_variability, color='r')
 			ax.set_xscale('log')
 			ax.set_xlabel('Variability')
-			fig.savefig(os.path.join(self.data_folder, 'variability-area%d.png' %cbv_area))
+			fig.savefig(os.path.join(self.data_folder, 'variability-area%d.png' % cbv_area))
 			plt.close(fig)
 
 			# Get the list of star that we are going to load in the lightcurves for:
@@ -246,20 +247,17 @@ class CBVCorrector(BaseCorrector):
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
 
-				try:
-					stds0[k] = np.sqrt(star['variance'])
-				except Exception as e:
-					stds0[k] = np.nan
-					print(e)
+				# Store the standard deviations of each lightcurve:
+				stds0[k] = np.NaN if star['variance'] is None else np.sqrt(star['variance'])
 
 			# Only start calculating correlations if we are actually filtering using them:
 			if self.threshold_correlation < 1.0:
-				file_correlations = os.path.join(self.data_folder, 'correlations-%d.npy' %cbv_area)
-				if os.path.exists(file_correlations):
-					correlations = np.load(file_correlations)
-				else:
-					# Calculate the correlation matrix between all lightcurves:
-					correlations = lc_matrix_calc(Nstars, mat0)#, stds0)
+				# Calculate the correlation matrix between all lightcurves:
+				correlations = lc_matrix_calc(Nstars, mat0)#, stds0)
+
+				# If running in DEBUG mode, save the correlations matrix to file:
+				if logger.isEnabledFor(logging.DEBUG):
+					file_correlations = os.path.join(self.data_folder, 'correlations-%d.npy' % cbv_area)
 					np.save(file_correlations, correlations)
 
 				# Find the median absolute correlation between each lightcurve and all other lightcurves:
@@ -278,7 +276,8 @@ class CBVCorrector(BaseCorrector):
 				del correlations, c, indx
 
 			# Save something for debugging:
-			np.savez(tmpfile, mat=mat, stds=stds)
+			if logger.isEnabledFor(logging.DEBUG):
+				np.savez(tmpfile, mat=mat, stds=stds)
 
 		return mat, stds
 
@@ -304,7 +303,7 @@ class CBVCorrector(BaseCorrector):
 
 		logger.info('Running matrix clean')
 		tmpfile = os.path.join(self.data_folder, 'mat-%d_clean.npz' % cbv_area)
-		if os.path.exists(tmpfile):
+		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
 			mat = data['mat']
@@ -335,7 +334,8 @@ class CBVCorrector(BaseCorrector):
 				mat[k, ~indx] = pchip_interpolate(cadenceno[indx], mat[k, indx], cadenceno[~indx])
 
 			# Save something for debugging:
-			np.savez(tmpfile, mat=mat, stds=stds, indx_nancol=indx_nancol, Ntimes=Ntimes)
+			if logger.isEnabledFor(logging.DEBUG):
+				np.savez(tmpfile, mat=mat, stds=stds, indx_nancol=indx_nancol, Ntimes=Ntimes)
 
 		return mat, stds, indx_nancol, Ntimes
 
@@ -403,7 +403,6 @@ class CBVCorrector(BaseCorrector):
 			# Save the CBV to file:
 			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area), cbv)
 
-
 			####################### PLOTS #################################
 			# Plot the "effectiveness" of each CBV:
 			max_components=20
@@ -412,17 +411,15 @@ class CBVCorrector(BaseCorrector):
 
 			fig0 = plt.figure(figsize=(12,8))
 			ax0 = fig0.add_subplot(121)
-			ax02 = fig0.add_subplot(122)
 			ax0.plot(n_cbv_components, pca_scores, 'b', label='PCA scores')
 			ax0.set_xlabel('nb of components')
 			ax0.set_ylabel('CV scores')
 			ax0.legend(loc='lower right')
-
+			ax02 = fig0.add_subplot(122)
 			ax02.plot(np.arange(1, cbv0.shape[1]+1), pca.explained_variance_ratio_, '.-')
 			ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
 			ax02.set_xlabel('CBV number')
 			ax02.set_ylabel('Variance explained ratio')
-
 			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
 
@@ -454,9 +451,10 @@ class CBVCorrector(BaseCorrector):
 					ax.set_title('Basis Vector %d' % (k+1))
 				except:
 					pass
-			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' %cbv_area))
-			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' %cbv_area))
-			plt.close('all')
+			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' % cbv_area))
+			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' % cbv_area))
+			plt.close(fig)
+			plt.close(fig2)
 
 	#--------------------------------------------------------------------------
 	def cotrend_ini(self, cbv_area, do_ini_plots=False):
@@ -551,7 +549,7 @@ class CBVCorrector(BaseCorrector):
 				plt.close(fig)
 
 		# Save weights for priors if it is an initial run
-		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area), res=results)
+		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % cbv_area), res=results)
 
 		# Plot CBV weights
 		fig = plt.figure(figsize=(15,6))
@@ -576,46 +574,45 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	def compute_weight_interpolations(self, cbv_area, dimensions=['tmag', 'col', 'tmag']):
-		
+
 #		def in_hull(p, hull):
 #		    """
 #		    Test if points in `p` are in `hull`
-#		
+#
 #		    `p` should be a `NxK` coordinates of `N` points in `K` dimensions
-#		    `hull` is either a scipy.spatial.Delaunay object or the `MxK` array of the 
+#		    `hull` is either a scipy.spatial.Delaunay object or the `MxK` array of the
 #		    coordinates of `M` points in `K`dimensions for which Delaunay triangulation
 #		    will be computed
 #		    """
 #		    from scipy.spatial import Delaunay
 #		    if not isinstance(hull,Delaunay):
 #		        hull = Delaunay(hull)
-#		
+#
 #		    return hull.find_simplex(p)>=0
 
 #		def is_p_inside_points_hull(hull, p):
 ##		    hull = ConvexHull(points)
-#		    
+#
 #		    new_hull = ConvexHull(p)
 #		    if list(hull.vertices) == list(new_hull.vertices):
 #		        return True
 #		    else:
-#		        return False	
-	
+#		        return False
+
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
-		from mpl_toolkits.mplot3d import Axes3D
-		
+
 		if os.path.exists(os.path.join(self.data_folder, 'Rbf_area%d_cbv1.pkl' %cbv_area)):
 			print('Weights for area%d already done' %cbv_area)
 			return
-		
+
 		print('Computing weights for area%d' %cbv_area)
 		results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
 		n_stars = results.shape[0]
 		n_cbvs = results.shape[1]-2 #results also include star name and offset
-		
+
 		n_cbvs = 2
-		
+
 #		fig0 = plt.figure(figsize=plt.figaspect(2)*1)
 #		axx = fig0.add_subplot(111, projection='3d')
 #		n_cbvs_max = self.ncomponents
@@ -632,7 +629,7 @@ class CBVCorrector(BaseCorrector):
 #				fig, ax = plt.subplots(2,2, num='cbv%i_cam%i' %(i,j+1), figsize=(15,15), )
 #				figures1['cbv%i' %i]['cam%i' %(j+1)] = fig
 #				figures2['cbv%i' %i]['cam%i' %(j+1)] = ax
-				
+
 
 		colormap = plt.cm.PuOr #or any other colormap
 #		min_max_vals = np.zeros([n_cbvs_max, 4, 4])
@@ -649,9 +646,9 @@ class CBVCorrector(BaseCorrector):
 	# - or run them in parallel - whatever you like!
 #		for ii, cbv_area in enumerate(cbv_areas):
 
-		
 
-		
+
+
 
 #		if n_cbvs>n_cbvs_max_new:
 #		n_cbvs_max_new = n_cbvs
@@ -666,7 +663,7 @@ class CBVCorrector(BaseCorrector):
 			pos_mag0[jj, 0] = star_single[0]['pos_row']/2048
 			pos_mag0[jj, 1] = star_single[0]['pos_column']/2048
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)/20
-		
+
 #		pos_mag0[:,]
 #			if star_single[0]['ccd']==1:
 #				pos_mag0[jj, 1] = star_single[0]['pos_column']
@@ -686,7 +683,7 @@ class CBVCorrector(BaseCorrector):
 #					pos_mag0[jj, 1] = star_single[0]['pos_column']+(star_single[0]['ccd']==2)*2048+(star_single[0]['ccd']==3)*2048
 
 
-			
+
 
 			# Convert to polar coordinates
 #				angle = math.atan2(star_single[0]['eclat']-midy, star_single[0]['eclon']-midx)
@@ -699,34 +696,34 @@ class CBVCorrector(BaseCorrector):
 
 #			pos_mag[cbv_area]['eclon'] = pos_mag0[:, 0]
 #			pos_mag[cbv_area]['eclat'] = pos_mag0[:, 1]
-			
+
 		D = distance.pdist(pos_mag0, metric='euclidean')
 		print(pos_mag0.shape, D.shape)
-		
+
 		pos_mag['row'] = pos_mag0[:, 0]
 		pos_mag['col'] = pos_mag0[:, 1]/2048
 		pos_mag['tmag'] = np.clip(pos_mag0[:, 2], 2, 20)/20
-		
+
 		N_neigh = 500
-		
+
 		for j in range(n_cbvs):
 			VALS = np.abs(results[:,1+j])
-			
+
 			for i in range(len(VALS)):
 				idx_sort = np.argsort(D[i,:])
 				W = D[idx_sort][1:N_neigh+1] # sort values according to distance from point
-				
+
 				V = VALS[idx_sort][1:N_neigh+1]
-		
+
 				kernel = stats.gaussian_kde(V, wieghts=W)
-				
+
 				S = kernel.resample(5000)
-				
+
 				plt.figure()
 				plt.hist(S, 100)
 				plt.show()
 				sys.exit()
-		
+
 #		np.clip()
 ##			pos_mag[cbv_area]['rad'] = pos_mag0[:, 4]
 ##			pos_mag[cbv_area]['theta'] = pos_mag0[:, 4]
@@ -738,7 +735,7 @@ class CBVCorrector(BaseCorrector):
 #		for j in range(n_cbvs):
 #
 #			VALS = np.abs(results[:,1+j])
-#			
+#
 #			axm = figures2['cbv%i' %j][0,0]
 #			axs = figures2['cbv%i' %j][0,1]
 #
@@ -757,7 +754,7 @@ class CBVCorrector(BaseCorrector):
 #
 #			bin_means, bin_edges, binnumber = stats.binned_statistic_dd([pos_mag['row'],pos_mag['col'],pos_mag['tmag']], VALS, statistic='median', bins=10)
 #			print(bin_means)
-#			
+#
 #
 #			# Get values and vertices of hexbinning
 #			zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
@@ -774,19 +771,19 @@ class CBVCorrector(BaseCorrector):
 #			# Trim binned values before interpolation
 #			zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
 #			zvalss, vertss = zvalss0[idxs], vertss0[idxs]
-#			
+#
 #			rbfim = Rbf(vertsm[:,0], vertsm[:,1], zvalsm, smooth=0)
 #			rbfis = Rbf(vertss[:,0], vertss[:,1], zvalss, smooth=0)
-#			
-#			
+#
+#
 ##			idxm = ndim_med_filt(VALS, np.column_stack((pos_mag[dimensions[0]], pos_mag[dimensions[1]])), 15, mad_frac=3)
 ###			idxs = ndim_med_filt(zvalss0, vertss0, 6, mad_frac=3)
 ##			rbfim = Rbf(pos_mag[dimensions[0]][idxm], pos_mag[dimensions[1]][idxm], VALS[idxm], smooth=0)
-##			
-#			
-#			
-#			
-#			
+##
+#
+#
+#
+#
 #
 ##			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), rbfim)
 ##			savePickle(os.path.join(self.data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,int(j+1))), rbfis)
@@ -794,16 +791,16 @@ class CBVCorrector(BaseCorrector):
 #			# Plot resulting interpolation
 ##			x1 = np.linspace(vertsm[:,0].min(), vertsm[:,0].max(), 100); y1 = np.linspace(vertsm[:,1].min(), vertsm[:,1].max(), 100); xv1, yv1 = np.meshgrid(x1, y1)
 ##			x2 = np.linspace(vertss[:,0].min(), vertss[:,0].max(), 100); y2 = np.linspace(vertss[:,1].min(), vertss[:,1].max(), 100); xv2, yv2 = np.meshgrid(x2, y2)
-#			
-#			x1 = np.linspace(0, 1, 100); y1 = np.linspace(0, 1, 100); 			
+#
+#			x1 = np.linspace(0, 1, 100); y1 = np.linspace(0, 1, 100);
 #			xv, yv = np.meshgrid(x1, y1)
 #			xvi, yvi = np.meshgrid(range(len(x1)), range(len(y1)))
-#			
-#			
+#
+#
 ##			x2 = np.linspace(0, 1, 100); y2 = np.linspace(vertss[:,1].min(), 1, 100); xv2, yv2 = np.meshgrid(x2, y2)
 ##			rm = np.abs(rbfim(vertsm0[:,0], vertsm0[:,1]))
 ##			rs = np.abs(rbfis(vertsm0[:,0], vertsm0[:,1]))
-#			
+#
 #			rm = np.abs(rbfim(xv, yv))
 ##			rs = np.abs(rbfis(xv, yv))
 #
@@ -814,16 +811,16 @@ class CBVCorrector(BaseCorrector):
 #
 ##			axm2.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, cmap=colormap, norm=normalize1)
 ##			axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, cmap=colormap, norm=normalize2)
-#			
+#
 ##			print(pos_mag['tmag'])
 ##			if j==0:
 ###				levels = np.linspace(np.percentile(rm,0), np.percentile(rm,100), 40)
 ##				mag_range = np.max(pos_mag['tmag']) - np.min(pos_mag['tmag'])
 ##				dtmag = mag_range/2
-##				
+##
 ##				points = np.array(list(zip(pos_mag[dimensions[0]], pos_mag[dimensions[1]])))
-##				
-##				
+##
+##
 ##				alpha = .1
 ##				concave_hull, edge_points = alpha_shape(points,alpha=alpha)
 ##
@@ -832,28 +829,28 @@ class CBVCorrector(BaseCorrector):
 ##
 ##
 ###				hull = ConvexHull(points)
-###				
+###
 ###				for simplex in hull.simplices:
 ###					   axm2.plot(points[simplex, 0], points[simplex, 1], 'k')
-###				
-###				axm2.scatter(pos_mag[dimensions[0]], pos_mag[dimensions[1]], marker='.')   
-##	
+###
+###				axm2.scatter(pos_mag[dimensions[0]], pos_mag[dimensions[1]], marker='.')
+##
 ##				for kk in range(2):
 ###					normalize0 = colors.Normalize(vmin=np.percentile(kk + .1*rm,5), vmax=np.percentile(kk + .1*rm,95))
-##					
+##
 ##					figgg = plt.figure()
 ##					axxx = figgg.add_subplot(111)
-##					
+##
 ##					idx = (pos_mag['tmag']>np.min(pos_mag['tmag']) + kk*dtmag) & (pos_mag['tmag']<=np.min(pos_mag['tmag']) + (kk+1)*dtmag)
 ##
 ##					print(sum(idx))
 ##
 ##					hbm = axxx.hexbin(pos_mag[dimensions[0]][idx], pos_mag[dimensions[1]][idx], C=VALS[idx], gridsize=gz, reduce_C_function=reduce_mode, cmap=colormap, norm=normalize, extent=(0, 1, 0, 1))
 ##					zvalsm0 = hbm.get_array();		vertsm0 = hbm.get_offsets()
-##					
-##					
-##					
-##					
+##
+##
+##
+##
 ##					rbfim = Rbf(vertsm0[:,0], vertsm0[:,1], zvalsm0, smooth=1)
 ##					rm0 = np.abs(rbfim(xv, yv))
 #
@@ -865,17 +862,17 @@ class CBVCorrector(BaseCorrector):
 ##					plt.scatter(*points.T, alpha=.5, color='k', s=200, marker='v')
 ##					positionsi = np.array(np.array([xvi, yvi])).T.reshape(-1, 2)
 ##					positions = np.array(np.array([xv, yv])).T.reshape(-1, 2)
-##					
+##
 ##					figs = plt.figure()
 ##					axs = figs.add_subplot(111)
-##					
+##
 ##					for ll, p in enumerate(positions):
 ###						print(points.shape, p.shape)
-##						
+##
 ##						new_points = np.append(points, p.reshape(1, 2), axis=0)
-##						
+##
 ##						point_is_in_hull = is_p_inside_points_hull(hull, new_points)
-##						
+##
 ###						point_is_in_hull = in_hull(tuple(p), hull)
 ##						if point_is_in_hull:
 ##							axs.scatter(p[0], p[1], marker='o', color='r')
@@ -887,28 +884,28 @@ class CBVCorrector(BaseCorrector):
 ###					    marker = 'x' if point_is_in_hull else 'd'
 ###					    color = 'g' if point_is_in_hull else 'm'
 ###					    plt.scatter(p[0], p[1], marker=marker, color=color)
-##	
-##	
-#	
+##
+##
+#
 ##					idxm = ndim_med_filt(zvalsm0, vertsm0, 6, mad_frac=3)
 ##					zvalsm, vertsm = zvalsm0[idxm], vertsm0[idxm]
-#					
+#
 ##					print(pos_mag['tmag'])
 ##					print(np.percentile(rm,5), np.percentile(rm,95))
-#					
+#
 ##					normalize0 = colors.Normalize(vmin=np.percentile(kk + .01*rm0[np.nonzero(rm0)],5), vmax=np.percentile(kk + .01*rm0,95))
-#					
+#
 ##					axx.tricontourf(vertsm0[:,0], vertsm0[:,1], rm, 10, cmap=colormap, norm=normalize)
-##			
-#					
-##					axx.contourf(xv, yv, kk + .01*rm0, 40, zdir='z', cmap=colormap)#, norm=normalize0) #levels=kk + .1*levels, 
-###					axx.contour(xv, yv, kk + .1*rm, 40, zdir='z', color='k', norm=normalize1) #levels=kk + .1*levels, 
-##					
+##
+#
+##					axx.contourf(xv, yv, kk + .01*rm0, 40, zdir='z', cmap=colormap)#, norm=normalize0) #levels=kk + .1*levels,
+###					axx.contour(xv, yv, kk + .1*rm, 40, zdir='z', color='k', norm=normalize1) #levels=kk + .1*levels,
+##
 ##					plt.close(figgg)
 ##				break
-#			
+#
 ##				axs2.tricontourf(vertsm0[:,0], vertsm0[:,1], rs, norm=normalize2)
-#				
+#
 #
 ##				filename = 'cbv%i_cam%i.png' %(j,i)
 ##				figures1[f].savefig(os.path.join(self.data_folder, filename))
@@ -950,7 +947,7 @@ class CBVCorrector(BaseCorrector):
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
-					
+
 		logger.info('Fitting using number of components: %i' %n_components)
 
 		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
