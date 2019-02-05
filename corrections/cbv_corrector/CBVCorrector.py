@@ -20,6 +20,7 @@ from .cbv_util import compute_scores, ndim_med_filt, reduce_mode, reduce_std
 from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, loadPickle
 import matplotlib.colors as colors
+#from mpl_toolkits.mplot3d import Axes3D
 import logging
 from scipy.spatial.distance import squareform, pdist
 from scipy import stats
@@ -116,7 +117,7 @@ class CBVCorrector(BaseCorrector):
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
 		tmpfile = os.path.join(self.data_folder, 'mat-%d.npz' %cbv_area)
-		if os.path.exists(tmpfile):
+		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
 			mat = data['mat']
@@ -134,7 +135,7 @@ class CBVCorrector(BaseCorrector):
 			ax.axvline(self.threshold_variability, color='r')
 			ax.set_xscale('log')
 			ax.set_xlabel('Variability')
-			fig.savefig(os.path.join(self.data_folder, 'variability-area%d.png' %cbv_area))
+			fig.savefig(os.path.join(self.data_folder, 'variability-area%d.png' % cbv_area))
 			plt.close(fig)
 
 			# Get the list of star that we are going to load in the lightcurves for:
@@ -180,20 +181,17 @@ class CBVCorrector(BaseCorrector):
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
 
-				try:
-					stds0[k] = np.sqrt(star['variance'])
-				except Exception as e:
-					stds0[k] = np.nan
-					print(e)
+				# Store the standard deviations of each lightcurve:
+				stds0[k] = np.NaN if star['variance'] is None else np.sqrt(star['variance'])
 
 			# Only start calculating correlations if we are actually filtering using them:
 			if self.threshold_correlation < 1.0:
-				file_correlations = os.path.join(self.data_folder, 'correlations-%d.npy' %cbv_area)
-				if os.path.exists(file_correlations):
-					correlations = np.load(file_correlations)
-				else:
-					# Calculate the correlation matrix between all lightcurves:
-					correlations = lc_matrix_calc(Nstars, mat0)#, stds0)
+				# Calculate the correlation matrix between all lightcurves:
+				correlations = lc_matrix_calc(Nstars, mat0)#, stds0)
+
+				# If running in DEBUG mode, save the correlations matrix to file:
+				if logger.isEnabledFor(logging.DEBUG):
+					file_correlations = os.path.join(self.data_folder, 'correlations-%d.npy' % cbv_area)
 					np.save(file_correlations, correlations)
 
 				# Find the median absolute correlation between each lightcurve and all other lightcurves:
@@ -212,7 +210,8 @@ class CBVCorrector(BaseCorrector):
 				del correlations, c, indx
 
 			# Save something for debugging:
-			np.savez(tmpfile, mat=mat, stds=stds)
+			if logger.isEnabledFor(logging.DEBUG):
+				np.savez(tmpfile, mat=mat, stds=stds)
 
 		return mat, stds
 
@@ -238,7 +237,7 @@ class CBVCorrector(BaseCorrector):
 
 		logger.info('Running matrix clean')
 		tmpfile = os.path.join(self.data_folder, 'mat-%d_clean.npz' % cbv_area)
-		if os.path.exists(tmpfile):
+		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
 			mat = data['mat']
@@ -269,7 +268,8 @@ class CBVCorrector(BaseCorrector):
 				mat[k, ~indx] = pchip_interpolate(cadenceno[indx], mat[k, indx], cadenceno[~indx])
 
 			# Save something for debugging:
-			np.savez(tmpfile, mat=mat, stds=stds, indx_nancol=indx_nancol, Ntimes=Ntimes)
+			if logger.isEnabledFor(logging.DEBUG):
+				np.savez(tmpfile, mat=mat, stds=stds, indx_nancol=indx_nancol, Ntimes=Ntimes)
 
 		return mat, stds, indx_nancol, Ntimes
 
@@ -337,7 +337,6 @@ class CBVCorrector(BaseCorrector):
 			# Save the CBV to file:
 			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area), cbv)
 
-
 			####################### PLOTS #################################
 			# Plot the "effectiveness" of each CBV:
 			max_components=20
@@ -346,17 +345,15 @@ class CBVCorrector(BaseCorrector):
 
 			fig0 = plt.figure(figsize=(12,8))
 			ax0 = fig0.add_subplot(121)
-			ax02 = fig0.add_subplot(122)
 			ax0.plot(n_cbv_components, pca_scores, 'b', label='PCA scores')
 			ax0.set_xlabel('nb of components')
 			ax0.set_ylabel('CV scores')
 			ax0.legend(loc='lower right')
-
+			ax02 = fig0.add_subplot(122)
 			ax02.plot(np.arange(1, cbv0.shape[1]+1), pca.explained_variance_ratio_, '.-')
 			ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
 			ax02.set_xlabel('CBV number')
 			ax02.set_ylabel('Variance explained ratio')
-
 			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
 
@@ -388,9 +385,10 @@ class CBVCorrector(BaseCorrector):
 					ax.set_title('Basis Vector %d' % (k+1))
 				except:
 					pass
-			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' %cbv_area))
-			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' %cbv_area))
-			plt.close('all')
+			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' % cbv_area))
+			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' % cbv_area))
+			plt.close(fig)
+			plt.close(fig2)
 
 	#--------------------------------------------------------------------------
 	def cotrend_ini(self, cbv_area, do_ini_plots=False):
@@ -485,7 +483,7 @@ class CBVCorrector(BaseCorrector):
 				plt.close(fig)
 
 		# Save weights for priors if it is an initial run
-		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' %cbv_area), res=results)
+		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % cbv_area), res=results)
 
 		# Plot CBV weights
 		fig = plt.figure(figsize=(15,6))
@@ -631,7 +629,7 @@ class CBVCorrector(BaseCorrector):
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
-					
+
 		logger.info('Fitting using number of components: %i' %n_components)
 
 		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
