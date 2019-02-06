@@ -9,13 +9,13 @@ the corrections package.
 
 from __future__ import division, with_statement, print_function, absolute_import
 import numpy as np
-import dill
+from six.moves import cPickle as pickle
 import gzip
 from bottleneck import nanmedian, nanmean
 from scipy.stats import binned_statistic
 
 # Constants:
-mad_to_sigma = 1.482602218505602 # Constant is 1/norm.ppf(3/4)
+mad_to_sigma = 1.482602218505602 #: Conversion constant from MAD to Sigma. Constant is 1/norm.ppf(3/4)
 
 PICKLE_DEFAULT_PROTOCOL = 2 #: Default protocol to use for saving pickle files.
 
@@ -36,7 +36,7 @@ def savePickle(fname, obj):
 		o = open
 
 	with o(fname, 'wb') as fid:
-		dill.dump(obj, fid, protocol=PICKLE_DEFAULT_PROTOCOL)
+		pickle.dump(obj, fid, protocol=PICKLE_DEFAULT_PROTOCOL)
 
 #------------------------------------------------------------------------------
 def loadPickle(fname):
@@ -58,7 +58,7 @@ def loadPickle(fname):
 		o = open
 
 	with o(fname, 'rb') as fid:
-		return dill.load(fid)
+		return pickle.load(fid)
 
 #------------------------------------------------------------------------------
 def sphere_distance(ra1, dec1, ra2, dec2):
