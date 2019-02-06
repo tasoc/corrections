@@ -11,7 +11,8 @@ import os
 import logging
 from sklearn.decomposition import PCA
 from bottleneck import allnan, nansum, nanmedian
-from scipy.optimize import minimize
+from scipy.optimize import minimize, fmin_powell
+from scipy import stats
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from ..utilities import loadPickle
@@ -130,11 +131,12 @@ class CBV(object):
 				
 		self.priors = {}
 		for jj, ncbv in enumerate(np.arange(1,self.cbv.shape[1]+1)):
-			priorpath = os.path.join(data_folder, 'Rbf_area%d_cbv%i.pkl' %(cbv_area,ncbv))
+			priorpath = os.path.join(data_folder, 'D_area%d_cbv%i.pkl' %(cbv_area,ncbv))
 			if os.path.exists(priorpath):
 				self.priors['cbv%i' %ncbv] = loadPickle(priorpath)
-				self.priors['cbv%i_std' %ncbv] = loadPickle(os.path.join(data_folder, 'Rbf_area%d_cbv%i_std.pkl' %(cbv_area,ncbv)))	
 		
+		
+		self.inires = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
 
 	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
@@ -178,97 +180,116 @@ class CBV(object):
 		return m
 
 	#--------------------------------------------------------------------------
-	def _lhood(self, coeffs, flux, err):
-		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
+#	def _lhood(self, coeffs, flux, err):
+#		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
 
 	#--------------------------------------------------------------------------
-	def _lhood_off(self, coeffs, flux, fitted):
-		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted))**2)
+#	def _lhood_off(self, coeffs, flux, fitted):
+#		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted))**2)
 
 	#--------------------------------------------------------------------------
 	def _lhood_off_2(self, coeffs, flux, err, fitted):
 		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err**2)
 
 	#--------------------------------------------------------------------------
-	def _lhood1d(self, coeff, flux, ncbv):
-		return 0.5*nansum((flux - self.mdl1d(coeff, ncbv))**2)
+#	def _lhood1d(self, coeff, flux, ncbv):
+#		return 0.5*nansum((flux - self.mdl1d(coeff, ncbv))**2)
 
 	#--------------------------------------------------------------------------
 	def _lhood1d_2(self, coeff, flux, err, ncbv):
 		return 0.5*nansum(((flux - self.mdl1d(coeff, ncbv))/err)**2) + 0.5*np.log(err**2)
 
 	#--------------------------------------------------------------------------
-	def _posterior1d(self, coeff, flux, ncbv, pos, wscale=5):
-		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(coeff, pos, ncbv, wscale)
-		return Post
+#	def _posterior1d(self, coeff, flux, ncbv, pos, wscale=5):
+#		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(coeff, pos, ncbv, wscale)
+#		return Post
 
 	#--------------------------------------------------------------------------
-	def _posterior1d_2(self, coeff, flux, err, ncbv, pos, wscale=5):
-		Post = self._lhood1d_2(coeff, flux, err, ncbv) + self._prior1d(coeff, pos, ncbv, wscale)
+	def _posterior1d_2(self, coeff, flux, err, ncbv, pos, wscale, KDE):
+		Post = self._lhood1d_2(coeff, flux, err, ncbv) + self._prior1d(coeff, wscale, KDE)
 		return Post
 
 
 	#--------------------------------------------------------------------------
-	def _priorcurve(self, x, Ncbvs):
-		X = np.array(x)
+	def _priorcurve(self, x, Ncbvs, N_neigh):
+#		X = np.array(x)
 		res = np.zeros_like(self.cbv[:, 0], dtype='float64')
 		for ncbv in range(Ncbvs):
-			I = self.priors['cbv%i' %(ncbv+1)]
-			mid = I(X[0],X[1])
-			res += self.mdl1d(mid, ncbv) - 1
+			
+			tree = self.priors['cbv%i' %(ncbv+1)]
+			dist, ind = tree.query(np.array([x]), k=N_neigh+1)
+			V = self.inires[:,1+Ncbvs][ind][0][1::]
+			W = 1/dist[0][1::]
+			
+			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+			
+			def kernel_opt(x): return -1*KDE.logpdf(x)
+			opt = fmin_powell(kernel_opt, 0, disp=0)
+			
+#			I = self.priors['cbv%i' %(ncbv+1)]
+#			mid = I(X[0],X[1])
+			res += self.mdl1d(opt, ncbv) - 1
 		return res + 1
 
 	#--------------------------------------------------------------------------
-	def _prior1d(self, c, x, ncbv, wscale=5):
-		X = np.array(x)
-		I = self.priors['cbv%i' %(ncbv+1)]
-		Is = self.priors['cbv%i_std' %(ncbv+1)]
-		# negative log prior
-
-		mid = I(X[0],X[1])
-		wid = wscale*Is(X[0],X[1])
-		Ptot = 0.5*( (c-mid)/ wid)**2 + 0.5*np.log(wid)
+	def _prior1d(self, c, wscale, KDE):
+#		X = np.array(x)
+#		tree = self.priors['cbv%i' %(ncbv+1)]
+##		Is = self.priors['cbv%i_std' %(ncbv+1)]
+#		# negative log prior
+#		
+#		dist, ind = tree.query(np.array([X]), k=N_neigh+1)
+#		V = VALS[ind][0][1::]
+#		W = 1/dist[0][1::]
+#		
+#		KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+		Ptot = -1*KDE.logpdf(c)
+		
+		
+#		mid = I(X[0],X[1])
+#		wid = wscale*Is(X[0],X[1])
+#		Ptot = 0.5*( (c-mid)/ wid)**2 + 0.5*np.log(wid)
 		return Ptot
 
 	#--------------------------------------------------------------------------
-	def fitting_lh(self, flux, Ncbvs, method='powell'):
-		if method=='powell':
-			# Initial guesses for coefficients:
-			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
-			coeffs0[0] = 1
+	def fitting_lh(self, flux, Ncbvs, method='llsq'):
+#		if method=='powell':
+#			# Initial guesses for coefficients:
+#			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
+#			coeffs0[0] = 1
+#
+#			res = np.zeros(Ncbvs, dtype='float64')
+#			for jj in range(Ncbvs):
+#				res[jj] = minimize(self._lhood1d, coeffs0[jj], args=(flux, jj), method='Powell').x
+#
+#			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res), method='Powell').x
+#			res = np.append(res, offset)
+#
+#			return res
 
-			res = np.zeros(Ncbvs, dtype='float64')
-			for jj in range(Ncbvs):
-				res[jj] = minimize(self._lhood1d, coeffs0[jj], args=(flux, jj), method='Powell').x
-
-			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res), method='Powell').x
-			res = np.append(res, offset)
-
-			return res
-
-		elif method=='llsq':
+		if method=='llsq':
 			res = self.lsfit(flux)
 			res[-1] -= 1
 			return res
 
 	#--------------------------------------------------------------------------
-	def fitting_pos(self, flux, Ncbvs, pos, method='powell', wscale=5):
-		if method=='powell':
-			# Initial guesses for coefficients:
-			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
-			coeffs0[0] = 1
-
-			res = np.zeros(Ncbvs, dtype='float64')
-			for jj in range(Ncbvs):
-				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, pos, wscale), method='Powell').x
-
-			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res), method='Powell').x
-
-			res = np.append(res, offset)
-			return res
+#	def fitting_pos(self, flux, Ncbvs, pos, method='powell', wscale=5):
+#		if method=='powell':
+#			# Initial guesses for coefficients:
+#			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
+#			coeffs0[0] = 1
+#
+#			res = np.zeros(Ncbvs, dtype='float64')
+#			for jj in range(Ncbvs):
+#				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, pos, wscale), method='Powell').x
+#
+#			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res), method='Powell').x
+#
+#			res = np.append(res, offset)
+#			return res
 
 	#--------------------------------------------------------------------------
-	def fitting_pos_2(self, flux, err, Ncbvs, pos, method='powell', wscale=5):
+	def fitting_pos_2(self, flux, err, Ncbvs, pos, method='powell', wscale=5, N_neigh=1000):
 		if method=='powell':
 			# Initial guesses for coefficients:
 			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
@@ -276,7 +297,15 @@ class CBV(object):
 
 			res = np.zeros(Ncbvs, dtype='float64')
 			for jj in range(Ncbvs):
-				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale), method='Powell').x
+				
+				tree = self.priors['cbv%i' %(jj+1)]
+				dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
+				V = self.inires[:,1+Ncbvs][ind][0][1::]
+				W = 1/dist[0][1::]
+				
+				KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+				
+				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
 
 			offset = minimize(self._lhood_off_2, coeffs0[-1], args=(flux, err, res), method='Powell').x
 
@@ -284,7 +313,7 @@ class CBV(object):
 			return res
 
 	#--------------------------------------------------------------------------
-	def fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=3, use_bic=True, method='powel', func='pos', wscale=5):
+	def fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=3, use_bic=True, method='powel', func='pos', wscale=5, N_neigh=1000):
 
 		# Find the median flux to normalise light curve
 		median_flux = nanmedian(flux)
@@ -314,7 +343,7 @@ class CBV(object):
 
 				# Do the fit:
 				if func=='pos':
-					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, method=method, wscale=wscale)
+					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, method=method, wscale=wscale, N_neigh=N_neigh)
 				else:
 					res = self.fitting_lh(fluxi, Ncbvs, method=method)
 
@@ -362,7 +391,7 @@ class CBV(object):
 		return flux_filter, res_final
 
 	#--------------------------------------------------------------------------
-	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='powell'):
+	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='powell', N_neig=1000):
 
 		# Remove bad data based on quality
 		quality_remove = 1 #+...
@@ -376,13 +405,18 @@ class CBV(object):
 
 		else:
 			#TODO: add option to use other coordinates
-			row = lc.meta['task']['pos_row']+(lc.meta['task']['ccd']>2)*2048
-			col = lc.meta['task']['pos_column']+(lc.meta['task']['ccd']%2==0)*2048
-			pos = np.array([row, col])
+#			row = lc.meta['task']['pos_row']+(lc.meta['task']['ccd']>2)*2048
+#			col = lc.meta['task']['pos_column']+(lc.meta['task']['ccd']%2==0)*2048
+			
+			row = lc.meta['task']['pos_row']
+			col = lc.meta['task']['pos_column']
+			tmag = lc.meta['task']['tmag']
+			
+			pos = np.array([row, col, tmag])
 #			pos = np.array([lc.centroid_row, lc.centroid_col])
 
 			# Prior curve
-			pc = self._priorcurve(pos, n_components) * np.nanmedian(lc.flux)
+			pc = self._priorcurve(pos, n_components, N_neig) * np.nanmedian(lc.flux)
 
 			# Compute new variability measure
 			residual = MAD_model(lc.flux-pc)
@@ -397,7 +431,7 @@ class CBV(object):
 				flux_filter, res = self.fit(lc.flux, Numcbvs=np.min([n_components, 3]), use_bic=False, method=method, func='lh')
 				lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
 			else:
-				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=use_bic, method=method, func='pos', wscale=WS**alpha)
+				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=use_bic, method=method, func='pos', wscale=WS**alpha, N_neig=N_neig)
 				lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
 
 			return flux_filter, res, residual, WS, pc

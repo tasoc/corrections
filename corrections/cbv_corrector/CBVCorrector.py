@@ -51,7 +51,7 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=20, alpha=1.3, method='powell', use_bic=True, \
+	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=20, alpha=1.3, N_neig=1000, method='powell', use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=None, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
@@ -82,6 +82,7 @@ class CBVCorrector(BaseCorrector):
 		self.ncomponents = ncomponents
 		self.alpha = alpha
 		self.WS_lim = WS_lim
+		self.N_neig = N_neig
 
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
@@ -632,7 +633,7 @@ class CBVCorrector(BaseCorrector):
 
 		logger.info('Fitting using number of components: %i' %n_components)
 
-		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim)
+		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim, N_neig=self.N_neig)
 
 		#corrected light curve in ppm
 		lc_corr = (lc.flux/flux_filter-1)
