@@ -32,13 +32,13 @@ from .cbv_util import MAD_model
 #------------------------------------------------------------------------------
 
 def MAD_scatter(X, Y, bins=15):
-	
+
 	bin_means, bin_edges, binnumber = stats.binned_statistic(X, Y, statistic=nanmedian, bins=bins)
 	bin_width = (bin_edges[1] - bin_edges[0])
 	bin_centers = bin_edges[1:] - bin_width/2
 	idx = np.isfinite(bin_centers) & np.isfinite(bin_means)
 	spl = InterpolatedUnivariateSpline(bin_centers[idx] , bin_means[idx])
-	
+
 	M = MAD_model(Y-spl(X))
 	return M
 
@@ -511,11 +511,11 @@ class CBVCorrector(BaseCorrector):
 	def compute_weight_interpolations(self, cbv_area):
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
-		
+
 		results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
 		n_stars = results.shape[0]
 		n_cbvs = results.shape[1]-2 #results also include star name and offset
-			
+
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0 = np.zeros([n_stars, 3])
 		for jj, star in enumerate(results[:,0]):
@@ -523,73 +523,73 @@ class CBVCorrector(BaseCorrector):
 			pos_mag0[jj, 0] = star_single[0]['pos_row']
 			pos_mag0[jj, 1] = star_single[0]['pos_column']
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
-		
-		
+
+
 		# Loop through the CBV areas:
-		for j in range(n_cbvs):			
+		for j in range(n_cbvs):
 			logger.info('Computing distances for area%d cbv%i' %(cbv_area, int(j+1)))
-		
+
 			# Initiate array containing MAD scatter of fit coefficients
 			Ms = np.array([])
 			VALS = results[:,1+j]
-			
+
 			# Relative importance of dimensions
 			S = np.array([1, 1, 2])
-			
+
 			# Compute distance weighting matrix
 			for jj in range(3):
 				Ms = np.append(Ms, MAD_scatter(pos_mag0[:, jj], VALS)/S[jj])
 			LL = np.linalg.inv(np.diag(Ms)).T
-			
+
 			# Construct and save distance tree
-			dist = DistanceMetric.get_metric('mahalanobis', VI=LL)	
-			tree = BallTree(pos_mag0, metric=dist)   
-			
+			dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
+			tree = BallTree(pos_mag0, metric=dist)
+
 			savePickle(os.path.join(self.data_folder, 'D_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), tree)
-		
+
 
 #			from sklearn.neighbors import KernelDensity
 #			N_neigh = 1000
 #			for i in range(len(VALS)):
-#				
+#
 #				if not i==0:
 #					continue
-##				
+##
 #				dist1, ind = tree.query(np.array([pos_mag0[i, :]]), k=N_neigh+1)
 #				V = VALS[ind][0][1::]
 #				W = 1/dist1[0][1::]
-#				
+#
 #				print(V)
 #				print(W)
-#				
+#
 #				t0 = time.time()
 #				kde = KernelDensity(kernel='epanechnikov', bandwidth=0.1).fit(V[:, np.newaxis], sample_weight=W.flatten())
 #				print(time.time()- t0)
-#				
+#
 #				t0 = time.time()
 #				for h in range(5000):
 #					kde.score_samples([[np.random.uniform(low=V.min(), high=V.max())]])
 #				print(time.time()- t0)
-#				
-#				
+#
+#
 #				X_plot = np.linspace(V.min()-1, V.max()+1, 1000)[:, np.newaxis]
 #				log_dens = kde.score_samples(X_plot)
-#				
-#				
+#
+#
 #				plt.figure()
 #				plt.plot(X_plot[:, 0], np.exp(log_dens))
 #
-#				
-#				t0 = time.time()				
+#
+#				t0 = time.time()
 #				kernel1 = stats.gaussian_kde(V, weights=W.flatten(), bw_method=0.1)
 #				print(time.time()- t0)
-#				
+#
 #				t0 = time.time()
 #				for h in range(5000):
 #					kernel1.logpdf(np.random.uniform(low=V.min(), high=V.max()))
 #				print(time.time()- t0)
-#				
-#				
+#
+#
 ##				t0 = time.time()
 ##				print('here')
 ##				S = kernel.resample(5000)
@@ -604,9 +604,9 @@ class CBVCorrector(BaseCorrector):
 ##				plt.hist(S1[0], 100, color='g', normed=True)
 #				plt.show()
 #				sys.exit()
-#		
-		
-		
+#
+
+
 
 	#--------------------------------------------------------------------------
 	def do_correction(self, lc):
@@ -636,7 +636,7 @@ class CBVCorrector(BaseCorrector):
 		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim, N_neig=self.N_neig)
 
 		#corrected light curve in ppm
-		lc_corr = (lc.flux/flux_filter-1)
+		lc_corr = 1e6*(lc.copy()/flux_filter - 1)
 
 		res = np.array([res,]).flatten()
 
@@ -660,7 +660,7 @@ class CBVCorrector(BaseCorrector):
 			ax1.set_ylabel('Flux (counts)')
 			ax1.set_xticks([])
 			ax2 = fig.add_subplot(212)
-			ax2.plot(lc.time, lc_corr*1e6)
+			ax2.plot(lc_corr.time, lc_corr.flux)
 			ax2.set_xlabel('Time (BJD)')
 			ax2.set_ylabel('Relative flux (ppm)')
 			plt.tight_layout()
@@ -671,6 +671,4 @@ class CBVCorrector(BaseCorrector):
 			plt.close(fig)
 
 		# TODO: update status
-		lc.flux = lc_corr
-		lc *= 1e6
-		return lc, STATUS.OK
+		return lc_corr, STATUS.OK
