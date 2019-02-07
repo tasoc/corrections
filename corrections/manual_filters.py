@@ -26,4 +26,7 @@ def manual_exclude(lc):
 	if lc.sector == 1 and lc.camera == 1:
 		manexcl[lc.cadenceno >= 6030] = True
 
+	if lc.sector == 1:
+		manexcl[(lc.time >= 1347) & (lc.time <= 1349)] = True
+
 	return manexcl
