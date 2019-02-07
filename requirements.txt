@@ -1,6 +1,6 @@
 six
 numpy == 1.15.4
-scipy
+scipy >= 1.2
 astropy
 Bottleneck >= 1.2
 lightkurve
@@ -10,4 +10,3 @@ psycopg2-binary
 scikit-learn
 statsmodels
 patsy
-dill
