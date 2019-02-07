@@ -35,19 +35,18 @@ if __name__ == '__main__':
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
-	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
-	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 #	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
 	
 	
-	args.camera = 2
-	args.ccd = 1
-	args.method = 'cbv'
-	args.all = True
-	args.plot = False
-	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-2127753'
+#	args.camera = 3
+#	args.ccd = 3
+#	args.starid = 38634217
+#	args.method = 'cbv'
+#	args.all = True
+#	args.plot = True
+#	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
 
 
 	# Make sure at least one setting is given:

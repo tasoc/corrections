@@ -24,6 +24,7 @@ def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None,
 	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv) as C:
 		C.compute_cbvs(cbv_area, ent_limit=el)
 		C.cotrend_ini(cbv_area, do_ini_plots=ip)
+		C.compute_weight_interpolations(cbv_area)
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -49,6 +50,8 @@ if __name__ == '__main__':
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 
 	args = parser.parse_args()
+	
+#	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
 
 	# Set logging level:
 	logging_level = logging.INFO

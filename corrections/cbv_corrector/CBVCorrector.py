@@ -27,6 +27,7 @@ from scipy import stats
 from scipy.interpolate import InterpolatedUnivariateSpline
 import sys
 from sklearn.neighbors import DistanceMetric, BallTree
+from ..quality import CorrectorQualityFlags
 from .cbv_util import MAD_model
 
 #------------------------------------------------------------------------------
@@ -51,8 +52,8 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=20, alpha=1.3, N_neig=1000, method='powell', use_bic=True, \
-			  threshold_correlation=0.5, threshold_snrtest=None, threshold_variability=1.3, **kwargs):
+	def __init__(self, *args, Numcbvs=16, ncomponents=None, WS_lim=5, alpha=1.3, N_neigh=500, method='powell', use_bic=True, \
+			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
 
@@ -82,7 +83,7 @@ class CBVCorrector(BaseCorrector):
 		self.ncomponents = ncomponents
 		self.alpha = alpha
 		self.WS_lim = WS_lim
-		self.N_neig = N_neig
+		self.N_neigh = N_neigh
 
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
@@ -104,7 +105,7 @@ class CBVCorrector(BaseCorrector):
 
         Returns:
             mat: matrix of *self.threshold_correlation*% most correlated light curves, to be used in CBV calculation
-			stds: standard deviations of light curves in "mat"
+			varis: variances of light curves in "mat"
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
@@ -122,7 +123,7 @@ class CBVCorrector(BaseCorrector):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
 			mat = data['mat']
-			stds = data['stds']
+			varis = data['varis']
 
 		else:
 			# Find the median of the variabilities:
@@ -155,7 +156,7 @@ class CBVCorrector(BaseCorrector):
 			logger.info("Loading in lightcurves...")
 			mat0 = np.empty((Nstars, Ntimes), dtype='float64')
 			mat0.fill(np.nan)
-			stds0 = np.empty(Nstars, dtype='float64')
+			varis0 = np.empty(Nstars, dtype='float64')
 
 			# Loop over stars
 			for k, star in tqdm(enumerate(stars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
@@ -164,9 +165,8 @@ class CBVCorrector(BaseCorrector):
 				lc = self.load_lightcurve(star)
 
 				# Remove bad data based on quality
-				quality_remove = 1 #+...
-				flag_removed = (lc.quality & quality_remove != 0)
-				lc.flux[flag_removed] = np.nan
+				flag_good = CorrectorQualityFlags.filter(lc.quality)
+				lc.flux[~flag_good] = np.nan
 
 				# Remove a point on both sides of momentum dump
 #				idx_remove = np.where(flag_removed)[0]
@@ -183,7 +183,7 @@ class CBVCorrector(BaseCorrector):
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
 
 				# Store the standard deviations of each lightcurve:
-				stds0[k] = np.NaN if star['variance'] is None else np.sqrt(star['variance'])
+				varis0[k] = np.NaN if star['variance'] is None else star['variance']
 
 			# Only start calculating correlations if we are actually filtering using them:
 			if self.threshold_correlation < 1.0:
@@ -205,16 +205,16 @@ class CBVCorrector(BaseCorrector):
 
 				# Only keep the top "threshold_correlation"% of the lightcurves that are most correlated:
 				mat = mat0[indx, :]
-				stds = stds0[indx]
+				varis = varis0[indx]
 
 				# Clean up a bit:
 				del correlations, c, indx
 
 			# Save something for debugging:
 			if logger.isEnabledFor(logging.DEBUG):
-				np.savez(tmpfile, mat=mat, stds=stds)
+				np.savez(tmpfile, mat=mat, varis=varis)
 
-		return mat, stds
+		return mat, varis
 
 	#--------------------------------------------------------------------------
 	def lc_matrix_clean(self, cbv_area):
@@ -227,7 +227,7 @@ class CBVCorrector(BaseCorrector):
 
 		Returns:
 			mat: matrix from :py:func:`CBVCorrector.lc_matrix` that has been gap-filled and with nans removed, to be used in CBV calculation
-			stds: standard deviations of light curves in "mat"
+			varis: variances of light curves in "mat"
 			indx_nancol: the indices for the timestamps with nans in all light curves
 			Ntimes: Number of timestamps in light curves contained in mat before removing nans
 
@@ -242,14 +242,14 @@ class CBVCorrector(BaseCorrector):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
 			mat = data['mat']
-			stds = data['stds']
+			varis = data['varis']
 
 			Ntimes = data['Ntimes']
 			indx_nancol = data['indx_nancol']
 
 		else:
 			# Compute light curve correlation matrix
-			mat0, stds = self.lc_matrix(cbv_area)
+			mat0, varis = self.lc_matrix(cbv_area)
 
 			# Print the final shape of the matrix:
 			logger.info("Matrix size: %d x %d" % mat0.shape)
@@ -263,16 +263,16 @@ class CBVCorrector(BaseCorrector):
 			logger.info("Gap-filling lightcurves...")
 			for k in tqdm(range(mat.shape[0]), total=mat.shape[0], disable=not logger.isEnabledFor(logging.INFO)):
 
-				mat[k, :] /= stds[k]
+				mat[k, :] /= varis[k]
 				# Fill out missing values by interpolating the lightcurve:
 				indx = np.isfinite(mat[k, :])
 				mat[k, ~indx] = pchip_interpolate(cadenceno[indx], mat[k, indx], cadenceno[~indx])
 
 			# Save something for debugging:
 			if logger.isEnabledFor(logging.DEBUG):
-				np.savez(tmpfile, mat=mat, stds=stds, indx_nancol=indx_nancol, Ntimes=Ntimes)
+				np.savez(tmpfile, mat=mat, varis=varis, indx_nancol=indx_nancol, Ntimes=Ntimes)
 
-		return mat, stds, indx_nancol, Ntimes
+		return mat, varis, indx_nancol, Ntimes
 
 	#--------------------------------------------------------------------------
 	def compute_cbvs(self, cbv_area, ent_limit=-1.5, targ_limit=150):
@@ -307,7 +307,7 @@ class CBVCorrector(BaseCorrector):
 			logger.info('Computing CBV for area %d' % cbv_area)
 
 			# Extract or compute cleaned and gapfilled light curve matrix
-			mat0, stds, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
+			mat0, _, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
 
 			# Calculate initial CBVs
 			logger.info('Computing %d CBVs' %self.ncomponents)
@@ -332,7 +332,7 @@ class CBVCorrector(BaseCorrector):
 			cbv.fill(np.nan)
 			cbv[~indx_nancol, :] = np.transpose(pca.components_)
 
-			# Signal-to-Noise test:
+			# Signal-to-Noise test (here only for plotting)
 			indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
 
 			# Save the CBV to file:
@@ -444,6 +444,7 @@ class CBVCorrector(BaseCorrector):
 			n_components = np.min([self.Numcbvs, n_components0])
 
 		logger.info('Fitting using number of components: %i' %int(n_components))
+		# initialize results array, including TIC, CBV components, and an residual offset
 		results = np.zeros([len(stars), n_components+2])
 
 		# Loop through stars
@@ -514,38 +515,39 @@ class CBVCorrector(BaseCorrector):
 
 		results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
 		n_stars = results.shape[0]
-		n_cbvs = results.shape[1]-2 #results also include star name and offset
+#		n_cbvs = results.shape[1]-2 #results also include star name and offset
 
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0 = np.zeros([n_stars, 3])
 		for jj, star in enumerate(results[:,0]):
 			star_single = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area, 'todolist.starid=%i' %int(star)])
-			pos_mag0[jj, 0] = star_single[0]['pos_row']
-			pos_mag0[jj, 1] = star_single[0]['pos_column']
+			pos_mag0[jj, 0] = star_single[0]['pos_row']#/1638
+			pos_mag0[jj, 1] = star_single[0]['pos_column']#/1638
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
 
-
+#		print(np.percentile(pos_mag0[:, 2], 90), np.percentile(pos_mag0[:, 2], 10), np.percentile(pos_mag0[:, 2], 90)-np.percentile(pos_mag0[:, 2], 10))
 		# Loop through the CBV areas:
-		for j in range(n_cbvs):
-			logger.info('Computing distances for area%d cbv%i' %(cbv_area, int(j+1)))
-
-			# Initiate array containing MAD scatter of fit coefficients
-			Ms = np.array([])
-			VALS = results[:,1+j]
+#		for j in range(n_cbvs):
+#			logger.info('Computing distances for area%d cbv%i' %(cbv_area, int(j+1)))
+#
+#			# Initiate array containing MAD scatter of fit coefficients
+#			Ms = np.array([])
+#			VALS = results[:,1+j]
 
 			# Relative importance of dimensions
-			S = np.array([1, 1, 2])
+		S = np.array([1, 1, 2])
 
 			# Compute distance weighting matrix
-			for jj in range(3):
-				Ms = np.append(Ms, MAD_scatter(pos_mag0[:, jj], VALS)/S[jj])
-			LL = np.linalg.inv(np.diag(Ms)).T
+#			for jj in range(3):
+#				Ms = np.append(Ms, MAD_scatter(pos_mag0[:, jj], VALS)/S[jj])
+#			LL = np.linalg.inv(np.diag(Ms)).T
+		LL = np.diag(S)
 
 			# Construct and save distance tree
-			dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
-			tree = BallTree(pos_mag0, metric=dist)
+		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
+		tree = BallTree(pos_mag0, metric=dist)
 
-			savePickle(os.path.join(self.data_folder, 'D_area%d_cbv%i.pkl' %(cbv_area,int(j+1))), tree)
+		savePickle(os.path.join(self.data_folder, 'D_area%d.pkl' %(cbv_area)), tree)
 
 
 #			from sklearn.neighbors import KernelDensity
@@ -625,15 +627,16 @@ class CBVCorrector(BaseCorrector):
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1]
 
-		logger.info('New max number of components: %i' %n_components0)
+		logger.info('Max number of components above SNR: %i' %n_components0)
 		if self.Numcbvs == 'all':
 			n_components = n_components0
 		else:
 			n_components = np.min([self.Numcbvs, n_components0])
 
+		logger.info('Co-trending star with TIC ID: %i' %lc.meta['task']['starid'])
 		logger.info('Fitting using number of components: %i' %n_components)
 
-		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim, N_neig=self.N_neig)
+		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim, N_neigh=self.N_neigh)
 
 		#corrected light curve in ppm
 		lc_corr = 1e6*(lc.copy()/flux_filter - 1)
