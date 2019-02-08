@@ -508,14 +508,33 @@ class CBVCorrector(BaseCorrector):
 		fig.savefig(os.path.join(self.data_folder, 'weights-sector-%d.png' % (cbv_area)))
 		plt.close(fig)
 
+
+
+
+
 	#--------------------------------------------------------------------------
-	def compute_weight_interpolations(self, cbv_area):
+	def compute_distance_map(self, cbv_area):
+		"""
+		
+		
+		
+		BLA BLA BLA
+		
+		
+		
+		
+		
+		
+		"""
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
-
-		results = np.load(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area)))['res']
+		
+		inipath = os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % (cbv_area))
+		if not os.path.exists(inipath):
+			raise IOError('Trying to make priors without initial corrections')
+			
+		results = np.load(inipath)['res']
 		n_stars = results.shape[0]
-#		n_cbvs = results.shape[1]-2 #results also include star name and offset
 
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0 = np.zeros([n_stars, 3])
@@ -525,89 +544,15 @@ class CBVCorrector(BaseCorrector):
 			pos_mag0[jj, 1] = star_single[0]['pos_column']#/1638
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
 
-#		print(np.percentile(pos_mag0[:, 2], 90), np.percentile(pos_mag0[:, 2], 10), np.percentile(pos_mag0[:, 2], 90)-np.percentile(pos_mag0[:, 2], 10))
-		# Loop through the CBV areas:
-#		for j in range(n_cbvs):
-#			logger.info('Computing distances for area%d cbv%i' %(cbv_area, int(j+1)))
-#
-#			# Initiate array containing MAD scatter of fit coefficients
-#			Ms = np.array([])
-#			VALS = results[:,1+j]
-
-			# Relative importance of dimensions
+		# Relative importance of dimensions
 		S = np.array([1, 1, 2])
-
-			# Compute distance weighting matrix
-#			for jj in range(3):
-#				Ms = np.append(Ms, MAD_scatter(pos_mag0[:, jj], VALS)/S[jj])
-#			LL = np.linalg.inv(np.diag(Ms)).T
 		LL = np.diag(S)
 
-			# Construct and save distance tree
+		# Construct and save distance tree
 		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
 		tree = BallTree(pos_mag0, metric=dist)
 
 		savePickle(os.path.join(self.data_folder, 'D_area%d.pkl' %(cbv_area)), tree)
-
-
-#			from sklearn.neighbors import KernelDensity
-#			N_neigh = 1000
-#			for i in range(len(VALS)):
-#
-#				if not i==0:
-#					continue
-##
-#				dist1, ind = tree.query(np.array([pos_mag0[i, :]]), k=N_neigh+1)
-#				V = VALS[ind][0][1::]
-#				W = 1/dist1[0][1::]
-#
-#				print(V)
-#				print(W)
-#
-#				t0 = time.time()
-#				kde = KernelDensity(kernel='epanechnikov', bandwidth=0.1).fit(V[:, np.newaxis], sample_weight=W.flatten())
-#				print(time.time()- t0)
-#
-#				t0 = time.time()
-#				for h in range(5000):
-#					kde.score_samples([[np.random.uniform(low=V.min(), high=V.max())]])
-#				print(time.time()- t0)
-#
-#
-#				X_plot = np.linspace(V.min()-1, V.max()+1, 1000)[:, np.newaxis]
-#				log_dens = kde.score_samples(X_plot)
-#
-#
-#				plt.figure()
-#				plt.plot(X_plot[:, 0], np.exp(log_dens))
-#
-#
-#				t0 = time.time()
-#				kernel1 = stats.gaussian_kde(V, weights=W.flatten(), bw_method=0.1)
-#				print(time.time()- t0)
-#
-#				t0 = time.time()
-#				for h in range(5000):
-#					kernel1.logpdf(np.random.uniform(low=V.min(), high=V.max()))
-#				print(time.time()- t0)
-#
-#
-##				t0 = time.time()
-##				print('here')
-##				S = kernel.resample(5000)
-##				S1 = kernel1.resample(5000)
-##				print(time.time()- t0)
-##				print('here')
-##				print(S[0])
-##				plt.figure()
-##				plt.hist(S[0], 100)
-###				plt.figure()
-#				plt.plot(X_plot[:, 0], kernel1.evaluate(X_plot[:, 0]), 'r-')
-##				plt.hist(S1[0], 100, color='g', normed=True)
-#				plt.show()
-#				sys.exit()
-#
-
 
 
 	#--------------------------------------------------------------------------
@@ -623,7 +568,12 @@ class CBVCorrector(BaseCorrector):
 			logger.debug("Loading CBV for area %d into memory", cbv_area)
 			cbv = CBV(self.data_folder, cbv_area, self.threshold_snrtest)
 			self.cbvs[cbv_area] = cbv
-
+			
+			if cbv.priors is None:
+				raise IOError('Trying to co-trend without a defined prior')
+				
+				
+				
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1]
 

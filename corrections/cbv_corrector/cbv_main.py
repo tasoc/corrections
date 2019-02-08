@@ -132,25 +132,16 @@ class CBV(object):
 		indx_lowsnr = cbv_snr_test(self.cbv, threshold_snrtest)
 		self.remove_cols(indx_lowsnr)
 				
-		
+		self.priors = None
 		priorpath = os.path.join(data_folder, 'D_area%d.pkl' %cbv_area)
-		self.priors = loadPickle(priorpath)
+		if os.path.exists(priorpath):
+			self.priors = loadPickle(priorpath)
 		
-		
-#		for jj, ncbv in enumerate(np.arange(1,self.cbv.shape[1]+1)):
-#			print(jj, ncbv)
-#			
-#			if os.path.exists(priorpath):
-#				self.priors['cbv%i' %ncbv] = loadPickle(priorpath)
-		
+		self.inires = None
 		inipath = os.path.join(data_folder, 'mat-%d_free_weights.npz' %cbv_area)
-		self.inires = np.load(inipath)['res']
+		if os.path.exists(inipath):
+			self.inires = np.load(inipath)['res']
 		
-#		print(self.inires)
-#		
-#		print(filepath)
-#		print(priorpath)
-#		print(inipath)
 
 	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
