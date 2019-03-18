@@ -165,19 +165,9 @@ class CBVCorrector(BaseCorrector):
 				lc = self.load_lightcurve(star)
 
 				# Remove bad data based on quality
-				flag_good = CorrectorQualityFlags.filter(lc.quality)
+#				flag_good = CorrectorQualityFlags.filter(lc.quality)
+				flag_good = CorrectorQualityFlags.filter(lc.quality, 0)
 				lc.flux[~flag_good] = np.nan
-
-				# Remove a point on both sides of momentum dump
-#				idx_remove = np.where(flag_removed)[0]
-#				idx_removem = idx_remove - 1
-#				idx_removemt = idx_remove - 2
-#				idx_removep = idx_remove + 1
-#				idx_removept = idx_remove + 2
-#				lc.flux[idx_removem[(idx_removem>0)]] = np.nan
-#				lc.flux[idx_removemt[(idx_removemt>0)]] = np.nan
-#				lc.flux[idx_removep[(idx_removep<len(flag_removed))]] = np.nan
-#				lc.flux[idx_removept[(idx_removept<len(flag_removed))]] = np.nan
 
 				# Normalize the data and store it in the rows of the matrix:
 				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
