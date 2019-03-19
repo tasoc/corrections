@@ -24,6 +24,13 @@ from ..quality import CorrectorQualityFlags, TESSQualityFlags
 # 
 # =============================================================================
 
+def wn(ori_flux, corrected_flux):
+	"""Calculate added white nosie between two light curves"""
+	
+	pass
+
+	# Check Kepler PDC Eq. 8.4-8.5
+
 
 class LCValidation(object):
 
@@ -338,14 +345,7 @@ class LCValidation(object):
 		
 		
 		
-		
-	def wn(ori_flux, corrected_flux):
-		
-		pass
-	
-		# Check Kepler PDC Eq. 8.4-8.5
-
-	def added_noise(self)
+	def added_noise(self):
 		
 		#call wn on loaded targets
 		pass
