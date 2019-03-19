@@ -15,10 +15,14 @@ import json
 import argparse
 import sqlite3
 import six
+from lightkurve import TessLightCurve
+from astropy.io import fits
+
 
 from .cbv_main import lc_matrix_calc
 from ..plots import plt
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
+from .manual_filters import manual_exclude
 
 # =============================================================================
 # 
