@@ -311,18 +311,14 @@ class LCValidation(object):
 				lc.flux[~flag_good] = np.nan
 
 				# Normalize the data and store it in the rows of the matrix:
-				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
-
-				# Store the standard deviations of each lightcurve:
-				varis0[k] = np.NaN if star['variance'] is None else star['variance']
-
+				mat0[k, :] = lc.flux / nanmean(lc.flux) - 1.0
 
 
 			# Calculate the correlation matrix between all lightcurves:
 			correlations = lc_matrix_calc(Nstars, mat0)
 
 			# Save the correlations matrix to file:
-			file_correlations = os.path.join(self.data_folder, 'correlations-%d.npy' % cbv_area)
+			file_correlations = os.path.join(self.data_folder, 'post_correlations-%d.npy' % cbv_area)
 			np.save(file_correlations, correlations)
 
 			# Find the median absolute correlation between each lightcurve and all other lightcurves:
@@ -338,7 +334,7 @@ class LCValidation(object):
 				
 			# Save something for debugging:
 			if logger.isEnabledFor(logging.DEBUG):
-				np.savez(tmpfile, mat=mat, varis=varis)
+				np.savez(tmpfile, mat=mat)
 		
 		
 		
