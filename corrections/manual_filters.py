@@ -23,10 +23,10 @@ def manual_exclude(lc):
 
 	manexcl = np.zeros_like(lc.time, dtype='bool')
 
-	if lc.sector == 1 and lc.camera == 1:
-		manexcl[lc.cadenceno >= 5050] = True
-
-	if lc.sector == 1:
-		manexcl[(lc.time >= 1347) & (lc.time <= 1350)] = True
+#	if lc.sector == 1 and lc.camera == 1:
+#		manexcl[lc.cadenceno >= 5050] = True
+#
+#	if lc.sector == 1:
+#		manexcl[(lc.time >= 1347) & (lc.time <= 1350)] = True
 
 	return manexcl
