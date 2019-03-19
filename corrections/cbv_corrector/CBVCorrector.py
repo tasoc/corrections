@@ -27,7 +27,7 @@ from scipy import stats
 from scipy.interpolate import InterpolatedUnivariateSpline
 import sys
 from sklearn.neighbors import DistanceMetric, BallTree
-from ..quality import CorrectorQualityFlags
+from ..quality import CorrectorQualityFlags, TESSQualityFlags
 from .cbv_util import MAD_model
 
 #------------------------------------------------------------------------------
@@ -165,8 +165,7 @@ class CBVCorrector(BaseCorrector):
 				lc = self.load_lightcurve(star)
 
 				# Remove bad data based on quality
-#				flag_good = CorrectorQualityFlags.filter(lc.quality)
-				flag_good = CorrectorQualityFlags.filter(lc.quality, 0)
+				flag_good = TESSQualityFlags.filter(lc.pixel_quality, TESSQualityFlags.CBV_BITMASK) & CorrectorQualityFlags.filter(lc.quality, CorrectorQualityFlags.CBV_BITMASK)
 				lc.flux[~flag_good] = np.nan
 
 				# Normalize the data and store it in the rows of the matrix:
@@ -178,7 +177,7 @@ class CBVCorrector(BaseCorrector):
 			# Only start calculating correlations if we are actually filtering using them:
 			if self.threshold_correlation < 1.0:
 				# Calculate the correlation matrix between all lightcurves:
-				correlations = lc_matrix_calc(Nstars, mat0)#, stds0)
+				correlations = lc_matrix_calc(Nstars, mat0)
 
 				# If running in DEBUG mode, save the correlations matrix to file:
 				if logger.isEnabledFor(logging.DEBUG):
