@@ -16,8 +16,9 @@ from scipy.signal import savgol_filter, medfilt
 from scipy.interpolate import interp1d
 
 
-cbv_area = 222
-data_folder= '/home/mikkelnl/ownCloud/Documents/Asteroseis/TESS/TASOC_code/corrections/corrections/data/cbv'
+cbv_area = 333
+data_folder= '/home/mikkelnl/ownCloud/Documents/Asteroseis/TESS/TASOC_code/corrections/corrections/data/cbv_old'
+#data_folder= '/home/mikkelnl/ownCloud/Documents/Asteroseis/TESS/TASOC_code/corrections/corrections/data/cbv'
 
 filepath = os.path.join(data_folder, 'cbv-%d.npy' % cbv_area)
 cbv = np.load(filepath)
@@ -89,4 +90,5 @@ for j in range(cbv.shape[1]):
 #	
 #	plt.scatter(xs[peaks], np.abs(y2)[peaks])
 
+#fig.savefig()
 plt.show()
