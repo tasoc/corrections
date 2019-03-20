@@ -32,7 +32,7 @@ def test_ensemble_basics():
 		assert ec.input_folder == INPUT_DIR, "Incorrect input folder"
 		assert ec.plot == True, "Plot parameter passed appropriately"
 
-@pytest.mark.skipif("TRAVIS" in os.environ and os.environ["TRAVIS"] == True,
+@pytest.mark.skipif(os.environ["USER"] == 'travis',
 					reason="This requires a sector of data. Impossible to run with Travis")
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
@@ -59,7 +59,7 @@ def test_ensemble_returned_values():
 	#Check status
 	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
 
-@pytest.mark.skipif("TRAVIS" in os.environ and os.environ["TRAVIS"] == True,
+@pytest.mark.skipif(os.environ["USER"] == 'travis',
 					reason="This requires a sector of data. Impossible to run with Travis")
 def test_run_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
@@ -80,7 +80,7 @@ def test_run_metadata():
 	assert outlc.meta['task']['starid'] == inlc.meta['task']['starid'], "Metadata is incomplete"
 	assert outlc.meta['task'] == inlc.meta['task'], "Metadata is incomplete"
 
-@pytest.mark.skipif("TRAVIS" in os.environ and os.environ["TRAVIS"] == True,
+@pytest.mark.skipif(os.environ["USER"] == 'travis',
 					reason="This requires a sector of data. Impossible to run with Travis")
 def test_ensemble_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
