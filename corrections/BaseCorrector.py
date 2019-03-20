@@ -77,6 +77,7 @@ class BaseCorrector(object):
 		# Save inputs:
 		self.input_folder = input_folder
 		self.plot = plot
+		self.debug = debug
 
 		# Find the auxillary data directory based on which corrector is running:
 		if self.__class__.__name__ == 'BaseCorrector':
@@ -198,7 +199,7 @@ class BaseCorrector(object):
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
-			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
+			#details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
 			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
@@ -448,8 +449,8 @@ class BaseCorrector(object):
 			with fits.open(save_file, mode='update') as hdu:
 				# Overwrite the corrected flux columns:
 				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
-				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
-				hdu['LIGHTCURVE'].data['QUALITY'] = lc.quality
+				#hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
+				#hdu['LIGHTCURVE'].data['QUALITY'] = lc.quality
 
 				# Set headers about the correction:
 				hdu['LIGHTCURVE'].header['CORRMET'] = (CorrMethod, 'Lightcurve correction method')
