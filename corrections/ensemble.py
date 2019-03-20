@@ -18,6 +18,7 @@ from copy import deepcopy
 import time
 import lightkurve
 import logging
+from scipy.optimize import minimize
 
 from . import BaseCorrector, STATUS
 
@@ -49,12 +50,13 @@ class EnsembleCorrector(BaseCorrector):
         logger = logging.getLogger(__name__)
         logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
         # Flag added to plot some data for debugging purposes
-        debug = True
+        debug = self.debug #True increases logging level
 
         # TODO: Remove in final version. Used to test execution time
         full_start = time.time()
 
         # Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
+        og_time = lc.time.copy()
         lc = lc.remove_nans()
         lc_quality_mask = (lc.quality == 0)
         lc.time = lc.time[lc_quality_mask]
@@ -94,7 +96,7 @@ class EnsembleCorrector(BaseCorrector):
         time_end = np.max(lc.time)
 
         # Set minimum range parameter...this is log10 photometric range, and stars more variable than this will be excluded from the ensemble
-        min_range = -2.0
+        min_range = 0.0
         # min_range can be changed later on, so we establish a min_range0 for when we want to reset min_range back to its initial value
         min_range0 = min_range
         #flag = 1
@@ -103,7 +105,7 @@ class EnsembleCorrector(BaseCorrector):
         # List of star indexes to be included in the ensemble
         temp_list = []
         # Initial number of closest stars to consider and variable to increase number
-        initial_num_stars = 10
+        initial_num_stars = 4
         star_count = initial_num_stars
         # (Alternate param) Initial distance at which to consider stars around the target
         # initial_search_radius = -1
@@ -139,6 +141,7 @@ class EnsembleCorrector(BaseCorrector):
                 # Compute the rest of the statistical parameters for the next star to be added to the ensemble.
                 frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) )/ np.mean(next_star_lc.flux)
                 drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
+                
                 next_star_lc.meta.update({ 'fmean' : np.mean(next_star_lc.flux),
                                             'fstd' : np.std(np.diff(next_star_lc.flux)),
                                             'frange' : frange,
@@ -147,18 +150,65 @@ class EnsembleCorrector(BaseCorrector):
                 logger.info(next_star_lc.meta.get("drange"))
                 # Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the 
                 # drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
-                if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange'] and next_star_lc.meta['frange'] < 0.03):
+                if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange'] and next_star_lc.meta['frange'] < 0.4):
+		        
+                    target_flux = deepcopy(lc.flux)
+                    
+                    mtarget_flux = target_flux - np.median(target_flux)
+                    mtarget_flux = mtarget_flux
+                    ens_flux = deepcopy(next_star_lc.flux)
+                    mens_flux = ens_flux - np.median(ens_flux)
+
+                    # 2 sigma
+                    ens2sig = 2 * np.std(mens_flux)
+                    targ2sig = 2 * np.std(mtarget_flux)
+                    # absolute value
+                    abstarg = np.absolute(mtarget_flux)
+                    absens = np.absolute(mens_flux)
+
+                    if debug:
+                        logger.info("2 sigma")
+                        logger.info(str(ens2sig) + " , " + str(targ2sig))
+
+                    # sigma clip the flux used to fit, but don't use that flux again
+                    clip_target_flux = np.where(
+                        np.where(abstarg < targ2sig, True, False)
+                        & 
+                        np.where(absens < ens2sig, True, False),
+                        mtarget_flux, 1)
+                    clip_ens_flux = np.where(
+                        np.where(abstarg < targ2sig, True, False)
+                        & 
+                        np.where(absens < ens2sig, True, False),
+                        mens_flux, 1)
+
+                    # peak at the corrected fluxes
+                    pfit = np.polyfit(clip_target_flux, clip_ens_flux, 1)
+                    pens_flux = pfit[0] * mens_flux
+                    cens_flux = pens_flux + np.median(ens_flux)
+                    #plt.plot(next_star_lc.time, (cens_flux/np.median(ens_flux)))
+                    #plt.plot(next_star_lc.time, (next_star_lc.flux/np.median(next_star_lc.flux)))
+                    # plt.plot(clip_target_flux, clip_ens_flux, '.')
+                    # plt.show(block=True)
+
+                    next_star_lc.flux = (cens_flux)
+                    # plt.plot(lc.time, cens_flux/np.median(ens_flux))
+                    # plt.plot(lc.time, lc.flux/np.median(lc.flux))
+                    # plt.show(block=True)
                     temp_list.append([next_star_index, next_star_lc.copy()])
                 i += 1
 
             ensemble_list = np.array(temp_list)
-            logger.info(ensemble_list[:,1].size)
+            if debug:
+                logger.info(ensemble_list[:,1].size)
+                logger.info(ensemble_list[:,1])
+
             # Now populate the arrays of data with the stars in the ensemble
             full_time = np.concatenate([temp_lc.time for temp_lc in ensemble_list[:,1]]).ravel()
             tflux = np.concatenate(np.array([temp_lc.flux / temp_lc.meta['fmean'] for temp_lc in ensemble_list[:,1]])).ravel()
-            full_weight = np.concatenate(np.array([np.full(temp_lc.flux.size, temp_lc.meta['fmean'] / temp_lc.meta['fstd']) for temp_lc in ensemble_list[:,1]])).ravel()
+            full_weight = np.concatenate(np.array([np.full(temp_lc.flux.size, (1. / temp_lc.meta['frange'])**2) for temp_lc in ensemble_list[:,1]])).ravel()
             full_flux = np.multiply(tflux, full_weight)
-
+            
             # TODO: As of now the code begins by ensuring 20 stars are added to the ensemble and then adds one by one. Might have to change to use a search radius
             # Fetch distance of last added star to ensemble to use as search radius to test conditions ahead
             search_radius = distance[i-1]
@@ -186,7 +236,7 @@ class EnsembleCorrector(BaseCorrector):
                         search_radius = distance[i]
 
                 # if search_radius > 400 pixels then give up trying to improve because we are too far away (400 pixels is probably too far!)
-                if search_radius > 400:
+                if search_radius > 10:
                     logger.info(search_radius)
                     logger.info(ensemble_list[:,1].size)
                     break
@@ -233,10 +283,10 @@ class EnsembleCorrector(BaseCorrector):
         # used (meaning the smallest bins are about 3 hours in length), though both this and the aggressiveness of the clipping are set from experience
         # and might need to be modified with real TESS data.
         bin_size = 4.0
-        for ib in range(6):
+        for ib in range(7):
             # Set clipping parameter based on bin size, so that smaller bins use successively more aggressive clipping. The parameter describes the
             # number of sigma used for clipping, so that we start from 6 sigma and work down to 2.25 sigma
-            clip_c = 6 - ib*0.75
+            clip_c = 6 - ib*0.5
             # Define bins to divide the data and get index of bin where each time measure falls into
             gx = np.arange(time_start - 0.5 * bin_size, time_end + bin_size, bin_size)
             bidx  = np.digitize(temp_time, gx) - 1
@@ -341,9 +391,23 @@ class EnsembleCorrector(BaseCorrector):
 
         # Correct the lightcurve
         # Scale isn't used so can remove l 305 and simplify l 306
+
+        #args = tuple((lc.flux,pp(lc.time)))
+        #def func(scalef,*args):
+        #    return np.sum(np.abs(np.diff(np.divide(args[0],1+((args[1]-1)*scalef)))))
+    
+        #scale0 = 1.0
+        #res = minimize(func,scale0,args)
+ 
+        #logger.info("Fit param: {}".format(res.x))
+    
+        #fitf2 = 1+((pp(lc.time)-1)*res.x)
+        #cflux = np.divide(flux[ifile],pp(time[ifile]))
+        
         lc_corr = lc.copy()
         # lc_corr /= tscale*pp(lc.time)
         lc_corr /= pp(lc.time)
+        #lc_corr /= fitf2
 
         # TODO: Remove in final version. Used to test execution time
         logger.info("Full do_correction, Time: {}".format(time.time()-full_start))
@@ -351,10 +415,25 @@ class EnsembleCorrector(BaseCorrector):
         if self.plot:
             ax = lc.plot(marker='o', label="Original LC")
             lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-            plt.show()
+            #plt.show()
+            plt.savefig("./randomtest/" + str(lc.targetid) + "_testrun.png")
             
         # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well. 
+        
+        if debug:
+            logger.info(temp_list)
+        
+        #sys.exit()
+        # Replace removed points with NaN's so the info can be saved to the FITS
+        if len(lc_corr.flux) != len(og_time):
+            fix_flux = np.asarray(lc_corr.flux.copy())
+            indices = np.array(np.where(np.isin(og_time, lc_corr.time, assume_unique=True, invert=True)))[0]
+            indices.tolist()
 
-        sys.exit()
+            for ind in indices:
+                fix_flux = np.insert(fix_flux, ind, np.nan)
+
+            lc_corr.flux = fix_flux.tolist()
+            lc_corr.time = og_time
 
         return lc_corr, STATUS.OK
