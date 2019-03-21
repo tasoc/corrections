@@ -25,8 +25,11 @@ from ..plots import plt, matplotlib
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 	logger = logging.getLogger(__name__)
 
-	A_signal = MAD_model(cbv_ini, axis=0)
-	A_noise = MAD_model(np.diff(cbv_ini, axis=0), axis=0)
+#	A_signal = MAD_model(cbv_ini, axis=0)
+#	A_noise = MAD_model(np.diff(cbv_ini, axis=0), axis=0)
+	
+	A_signal = np.nanstd(cbv_ini, axis=0)
+	A_noise = np.nanstd(np.diff(cbv_ini, axis=0), axis=0)
 
 	snr = 10 * np.log10( A_signal**2 / A_noise**2 )
 	logger.info("SNR threshold used %s", threshold_snrtest)
@@ -126,10 +129,13 @@ class CBV(object):
 	#--------------------------------------------------------------------------
 	def __init__(self, data_folder, cbv_area, threshold_snrtest=5):
 		filepath = os.path.join(data_folder, 'cbv-%d.npy' % cbv_area)
+		filepath_s = os.path.join(data_folder, 'cbv-s-%d.npy' % cbv_area)
 		self.cbv = np.load(filepath)
+		self.cbv_s = np.load(filepath_s)
 		
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(self.cbv, threshold_snrtest)
+		print(indx_lowsnr)
 		self.remove_cols(indx_lowsnr)
 				
 		self.priors = None
@@ -146,6 +152,7 @@ class CBV(object):
 	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
 		self.cbv = self.cbv[:, ~indx_lowsnr]
+		self.cbv_s = self.cbv_s[:, ~indx_lowsnr]
 
 	#--------------------------------------------------------------------------
 	def lsfit(self, flux):
@@ -153,7 +160,8 @@ class CBV(object):
 		Computes the least-squares solution to a linear matrix equation.
 		"""
 		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(flux)
-		A0 = self.cbv[idx,:]
+#		A0 = self.cbv[idx,:] 
+		A0 = np.column_stack((self.cbv[idx,:], self.cbv_s[idx,:])) 
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
 		F = flux[idx]
 
@@ -165,11 +173,18 @@ class CBV(object):
 
 	#--------------------------------------------------------------------------
 	def mdl(self, coeffs):
+		cbv_comb = np.column_stack((self.cbv, self.cbv_s))
+		
 		coeffs = np.atleast_1d(coeffs)
-		m = np.ones(self.cbv.shape[0], dtype='float64')
+		m = np.ones(cbv_comb.shape[0], dtype='float64')
 		for k in range(len(coeffs)-1):
-			m += coeffs[k] * self.cbv[:, k]
+			m += coeffs[k] * cbv_comb[:, k]
 		return m + coeffs[-1]
+#		coeffs = np.atleast_1d(coeffs)
+#		m = np.ones(self.cbv.shape[0], dtype='float64')
+#		for k in range(len(coeffs)-1):
+#			m += coeffs[k] * self.cbv[:, k]
+#		return m + coeffs[-1]
 
 	#--------------------------------------------------------------------------
 	def mdl_off(self, coeff, fitted):
@@ -366,8 +381,6 @@ class CBV(object):
 
 		for Ncbvs in range(Nstart, Numcbvs+1):
 			
-#			print(Ncbvs, 'bic', bic)
-
 			iters = 0
 			fluxi = np.copy(flux) / median_flux
 			
@@ -378,7 +391,6 @@ class CBV(object):
 				if func=='pos':
 					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, wscale, N_neigh, method=method, start=start)
 					
-#					print(Ncbvs, wscale, iters, res)
 				else:
 					res = self.fitting_lh(fluxi, Ncbvs, method=method)
 
