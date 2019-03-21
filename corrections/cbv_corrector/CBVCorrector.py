@@ -24,6 +24,7 @@ import matplotlib.colors as colors
 import logging
 from scipy.spatial.distance import squareform, pdist
 from scipy import stats
+from scipy.signal import savgol_filter, find_peaks
 from scipy.interpolate import InterpolatedUnivariateSpline
 import sys
 from sklearn.neighbors import DistanceMetric, BallTree
@@ -288,7 +289,7 @@ class CBVCorrector(BaseCorrector):
 		logger.info('running CBV')
 		logger.info('------------------------------------')
 
-		if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area)):
+		if os.path.exists(os.path.join(self.data_folder, 'cbv_ini-%d.npy' % cbv_area)):
 			logger.info('CBV for area %d already calculated' % cbv_area)
 			return
 
@@ -321,11 +322,11 @@ class CBVCorrector(BaseCorrector):
 			cbv.fill(np.nan)
 			cbv[~indx_nancol, :] = np.transpose(pca.components_)
 
-			# Signal-to-Noise test (here only for plotting)
-			indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
+#			# Signal-to-Noise test (here only for plotting)
+#			indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
 
 			# Save the CBV to file:
-			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area), cbv)
+			np.save(os.path.join(self.data_folder, 'cbv_ini-%d.npy' % cbv_area), cbv)
 
 			####################### PLOTS #################################
 			# Plot the "effectiveness" of each CBV:
@@ -347,27 +348,27 @@ class CBVCorrector(BaseCorrector):
 			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
 
-			# Plot all the CBVs:
+#			# Plot all the CBVs:
 			fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
 			fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
 			fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
 			fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
-
+#
 			for k, ax in enumerate(axes.flatten()):
 				try:
 					ax.plot(cbv0[:, k]+0.1, 'r-')
-					if not indx_lowsnr is None:
-						if indx_lowsnr[k]:
-							col = 'c'
-						else:
-							col = 'k'
-					else:
-						col = 'k'
-					ax.plot(cbv[:, k], ls='-', color=col)
+#					if not indx_lowsnr is None:
+#						if indx_lowsnr[k]:
+#							col = 'c'
+#						else:
+#							col = 'k'
+#					else:
+#						col = 'k'
+					ax.plot(cbv[:, k], ls='-', color='k')
 					ax.set_title('Basis Vector %d' % (k+1))
 				except:
 					pass
-
+#
 			for k, ax in enumerate(axes2.flatten()):
 				try:
 					ax.plot(-np.abs(U0[:, k]), 'r-')
@@ -375,10 +376,130 @@ class CBVCorrector(BaseCorrector):
 					ax.set_title('Basis Vector %d' % (k+1))
 				except:
 					pass
-			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' % cbv_area))
+			fig.savefig(os.path.join(self.data_folder, 'cbvs_ini-area%d.png' % cbv_area))
 			fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-area%d.png' % cbv_area))
 			plt.close(fig)
 			plt.close(fig2)
+
+	#--------------------------------------------------------------------------
+	def spike_sep(self, cbv_area):
+		
+		logger = logging.getLogger(__name__)
+		logger.info('running CBV spike separation')
+		logger.info('------------------------------------')
+		
+		
+		if os.path.exists(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area)) & os.path.exists(os.path.join(self.data_folder, 'cbv-s-%d.npy' % cbv_area)):
+			logger.info('Separated CBVs for area %d already calculated' % cbv_area)
+			return
+
+		else:
+			logger.info('Computing CBV spike separation for area %d' % cbv_area)
+			
+			# Load initial CBV from "compute_CBV"
+			filepath = os.path.join(self.data_folder, 'cbv_ini-%d.npy' % cbv_area)
+			cbv = np.load(filepath)
+			
+			# padding window, just needs to be bigger than savgol filtering window
+			wmir = 50
+			
+			# Initiate arrays for cleaned and spike CBVs
+			cbv_new = np.zeros_like(cbv)
+			cbv_spike = np.zeros_like(cbv)
+	
+			# Iterate over basis vectors
+			for j in range(cbv.shape[1]):
+				
+				# Pad ends for better peak detection at boundaries of data
+				data0 = cbv[:,j]
+				data0 = np.append(np.flip(data0[0:wmir])[0:-1], data0)
+				data0 = np.append(data0, np.flip(data0[-wmir::])[1::])
+				
+				xs = np.arange(0, len(data0))
+							
+				data = data0.copy()
+				
+				# Iterate peak detection
+				for i in range(5):
+					
+					# For savgol filter data must be continuous 
+					data2 = pchip_interpolate(xs[np.isfinite(data)], data[np.isfinite(data)], xs)
+					
+					# run low pass filter, set window width
+					w = 31 - 2*i
+					if w%2==0:
+						w+=1
+						
+					# Smooth, filtered version of data, to use to identify "outliers", i.e., spikes
+					y = savgol_filter(data2, w, 2, mode='constant')
+					y2 = data2 - y
+					
+					# Run peak detection
+					sigma = 1.4826 * nanmedian(np.abs(y2))
+					peaks, properties = find_peaks(np.abs(y2), prominence=(3*sigma, None), wlen=500)
+					
+					data[peaks] = np.nan
+			
+			
+				# Interpolate CBVs where spike has been identified
+				data = pchip_interpolate(xs[np.isfinite(data)], data[np.isfinite(data)], xs)
+			
+				# Remove padded ends and store in CBV matrices
+				# Spike signal is difference between original data and data with masked spikes
+				S = (data0[wmir-1:-wmir+1] - data[wmir-1:-wmir+1])
+				S[np.isnan(S)] = 0			
+				
+				cbv_spike[:,j] = S
+				cbv_new[:,j] = data[wmir-1:-wmir+1]
+		
+			# Save files
+			np.save(os.path.join(self.data_folder, 'cbv-%d.npy' % cbv_area), cbv_new)
+			np.save(os.path.join(self.data_folder, 'cbv-s-%d.npy' % cbv_area), cbv_spike)
+			
+			# Signal-to-Noise test (here only for plotting)
+			indx_lowsnr = cbv_snr_test(cbv_new, self.threshold_snrtest)
+			
+			# Plot all the CBVs:
+			fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
+			fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
+			fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
+			fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
+	
+			for k, ax in enumerate(axes.flatten()):
+				try:
+					if not indx_lowsnr is None:
+						if indx_lowsnr[k]:
+							col = 'c'
+						else:
+							col = 'k'
+					else:
+						col = 'k'
+					ax.plot(cbv_new[:, k], ls='-', color=col)
+					ax.set_title('Basis Vector %d' % (k+1))
+				except:
+					pass
+	
+			
+			for k, ax in enumerate(axes2.flatten()):
+				try:
+					if not indx_lowsnr is None:
+						if indx_lowsnr[k]:
+							col = 'c'
+						else:
+							col = 'k'
+					else:
+						col = 'k'
+					ax.plot(cbv_spike[:, k], ls='-', color=col)
+					ax.set_title('Spike Basis Vector %d' % (k+1))
+				except:
+					pass		
+			
+			
+			fig.savefig(os.path.join(self.data_folder, 'cbvs-area%d.png' % cbv_area))
+			fig2.savefig(os.path.join(self.data_folder, 'spike-cbvs-area%d.png' % cbv_area))
+			plt.close(fig)
+			plt.close(fig2)
+
 
 	#--------------------------------------------------------------------------
 	def cotrend_ini(self, cbv_area, do_ini_plots=False):
