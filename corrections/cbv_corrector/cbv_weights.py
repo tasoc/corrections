@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+s#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
