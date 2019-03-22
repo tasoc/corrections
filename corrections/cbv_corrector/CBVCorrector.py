@@ -555,7 +555,8 @@ class CBVCorrector(BaseCorrector):
 
 		logger.info('Fitting using number of components: %i' %int(n_components))
 		# initialize results array, including TIC, CBV components, and an residual offset
-		results = np.zeros([len(stars), n_components+2])
+		Nres = int(2*n_components+2)
+		results = np.zeros([len(stars), Nres])
 
 		# Loop through stars
 		for kk, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
@@ -598,19 +599,31 @@ class CBVCorrector(BaseCorrector):
 		np.savez(os.path.join(self.data_folder, 'mat-%d_free_weights.npz' % cbv_area), res=results)
 
 		# Plot CBV weights
-		fig = plt.figure(figsize=(15,6))
-		ax = fig.add_subplot(121)
-		ax2 = fig.add_subplot(122)
-		for kk in range(1,n_components+1):
+		fig = plt.figure(figsize=(15,15))
+		ax = fig.add_subplot(221)
+		ax2 = fig.add_subplot(222)
+		ax3 = fig.add_subplot(223)
+		ax4 = fig.add_subplot(224)
+		for kk in range(1,int(2*n_components+1)):
+			
+			if kk>n_components:
+				LS = '--'
+			else:
+				LS = '-'
 			idx = np.nonzero(results[:, kk])
 			r = results[idx, kk]
 			idx2 = (r>np.percentile(r, 10)) & (r<np.percentile(r, 90))
 			kde = KDE(r[idx2])
 			kde.fit(gridsize=5000)
-			ax.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk))
-
 			err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
-			ax2.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
+			
+			if kk>n_components:
+				ax3.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk), ls=LS)
+				ax4.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
+			else:
+				ax.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk), ls=LS)
+				ax2.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
+				
 		ax.set_xlabel('CBV weight')
 		ax2.set_ylabel('CBV weight')
 		ax2.set_xlabel('CBV')
