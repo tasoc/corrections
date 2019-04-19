@@ -53,7 +53,7 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, Numcbvs=16, ncomponents=None, WS_lim=5, alpha=1.3, N_neigh=500, method='powell', use_bic=True, \
+	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=5, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
@@ -75,6 +75,10 @@ class CBVCorrector(BaseCorrector):
 		# This will set several default settings
 		super(self.__class__, self).__init__(*args, **kwargs)
 
+
+#		method = 'Nelder-Mead'
+		
+		
 		self.Numcbvs = Numcbvs
 		self.use_bic = use_bic
 		self.method = method
@@ -669,8 +673,19 @@ class CBVCorrector(BaseCorrector):
 
 		# Relative importance of dimensions
 		S = np.array([1, 1, 2])
+#		S = np.array([np.std(pos_mag0[:, 0]), np.std(pos_mag0[:, 1]), 0.5*np.std(pos_mag0[:, 2])])
 		LL = np.diag(S)
 
+		print(np.std(pos_mag0, axis=0))
+		
+		print(np.median(pos_mag0[:,2]), np.std(pos_mag0[:,2]), np.percentile(pos_mag0[:,2], 10),  np.percentile(pos_mag0[:,2], 90))
+
+		pos_mag0[:, 0] /= np.std(pos_mag0[:, 0])
+		pos_mag0[:, 1] /= np.std(pos_mag0[:, 1])
+		pos_mag0[:, 2] /= np.std(pos_mag0[:, 2])
+		
+		
+		
 		# Construct and save distance tree
 		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
 		tree = BallTree(pos_mag0, metric=dist)
@@ -686,11 +701,15 @@ class CBVCorrector(BaseCorrector):
 		# Load the CBV (and Prior) from memory and if it is not already loaded,
 		# load it in from file and keep it in memory for next time:
 		cbv_area = lc.meta['task']['cbv_area']
+		
 		cbv = self.cbvs.get(cbv_area)
 		if cbv is None:
 			logger.debug("Loading CBV for area %d into memory", cbv_area)
 			cbv = CBV(self.data_folder, cbv_area, self.threshold_snrtest)
 			self.cbvs[cbv_area] = cbv
+			
+			#cbv.cbv
+			#cbv.cbv_s
 			
 			if cbv.priors is None:
 				raise IOError('Trying to co-trend without a defined prior')
@@ -698,7 +717,7 @@ class CBVCorrector(BaseCorrector):
 				
 				
 		# Update maximum number of components
-		n_components0 = cbv.cbv.shape[1]
+		n_components0 = cbv.cbv.shape[1] #+ cbv.cbv_s.shape[1] 
 
 		logger.info('Max number of components above SNR: %i' %n_components0)
 		if self.Numcbvs == 'all':
@@ -715,6 +734,8 @@ class CBVCorrector(BaseCorrector):
 		lc_corr = 1e6*(lc.copy()/flux_filter - 1)
 
 		res = np.array([res,]).flatten()
+		
+		print('result', res)
 
 		for ii in range(len(res)-1):
 			lc.meta['additional_headers']['CBV_c%i'%int(ii+1)] = (res[ii], 'CBV%i coefficient' %int(ii+1))
