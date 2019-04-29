@@ -29,7 +29,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 import sys
 from sklearn.neighbors import DistanceMetric, BallTree
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
-from .cbv_util import MAD_model
+from .cbv_util import MAD_model, MAD_model2
 
 #------------------------------------------------------------------------------
 
@@ -53,7 +53,7 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=5, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
+	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=0.8, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
@@ -660,6 +660,7 @@ class CBVCorrector(BaseCorrector):
 		if not os.path.exists(inipath):
 			raise IOError('Trying to make priors without initial corrections')
 			
+			
 		results = np.load(inipath)['res']
 		n_stars = results.shape[0]
 
@@ -667,22 +668,22 @@ class CBVCorrector(BaseCorrector):
 		pos_mag0 = np.zeros([n_stars, 3])
 		for jj, star in enumerate(results[:,0]):
 			star_single = self.search_database(search=['datasource="ffi"', 'cbv_area=%i' %cbv_area, 'todolist.starid=%i' %int(star)])
-			pos_mag0[jj, 0] = star_single[0]['pos_row']#/1638
-			pos_mag0[jj, 1] = star_single[0]['pos_column']#/1638
+			pos_mag0[jj, 0] = star_single[0]['pos_row']
+			pos_mag0[jj, 1] = star_single[0]['pos_column']
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
 
 		# Relative importance of dimensions
-		S = np.array([1, 1, 2])
-#		S = np.array([np.std(pos_mag0[:, 0]), np.std(pos_mag0[:, 1]), 0.5*np.std(pos_mag0[:, 2])])
+#		S = np.array([1, 1, 2])
+		S = np.array([MAD_model2(pos_mag0[:, 0]), MAD_model2(pos_mag0[:, 1]), 0.5*MAD_model2(pos_mag0[:, 2])])
 		LL = np.diag(S)
 
-		print(np.std(pos_mag0, axis=0))
-		
-		print(np.median(pos_mag0[:,2]), np.std(pos_mag0[:,2]), np.percentile(pos_mag0[:,2], 10),  np.percentile(pos_mag0[:,2], 90))
+#		print(np.std(pos_mag0, axis=0))
+#		
+#		print(np.median(pos_mag0[:,2]), np.std(pos_mag0[:,2]), np.percentile(pos_mag0[:,2], 10),  np.percentile(pos_mag0[:,2], 90))
 
-		pos_mag0[:, 0] /= np.std(pos_mag0[:, 0])
-		pos_mag0[:, 1] /= np.std(pos_mag0[:, 1])
-		pos_mag0[:, 2] /= np.std(pos_mag0[:, 2])
+#		pos_mag0[:, 0] /= np.std(pos_mag0[:, 0])
+#		pos_mag0[:, 1] /= np.std(pos_mag0[:, 1])
+#		pos_mag0[:, 2] /= np.std(pos_mag0[:, 2])
 		
 		
 		
@@ -765,7 +766,8 @@ class CBVCorrector(BaseCorrector):
 			if not os.path.exists(os.path.join(self.plot_folder(lc))):
 				os.makedirs(os.path.join(self.plot_folder(lc)))
 			fig.savefig(os.path.join(self.plot_folder(lc), filename))
-			plt.close(fig)
+#			plt.close(fig)
+			plt.show()
 
 		# TODO: update status
 		return lc_corr, STATUS.OK
