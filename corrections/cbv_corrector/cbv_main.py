@@ -12,11 +12,14 @@ import logging
 from sklearn.decomposition import PCA
 from bottleneck import allnan, nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
+from scipy.interpolate import pchip_interpolate
+
+import scipy.signal as sig
 from scipy import stats
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from ..utilities import loadPickle
-from .cbv_util import compute_entopy, MAD_model
+from .cbv_util import compute_entopy, MAD_model,MAD_model2
 from ..quality import CorrectorQualityFlags
 
 from ..plots import plt, matplotlib
@@ -253,7 +256,7 @@ class CBV(object):
 
 	#--------------------------------------------------------------------------
 	def _posterior1d(self, coeff, flux, ncbv, pos, wscale, KDE):
-		Post = self._lhood1d(coeff, flux, ncbv) + self._prior1d(coeff, wscale, KDE)
+		Post = self._lhood1d(coeff, flux, ncbv) - wscale*np.log(self._prior1d(coeff, KDE))
 		return Post
 
 
@@ -313,7 +316,7 @@ class CBV(object):
 		return res+1, opts 
 
 	#--------------------------------------------------------------------------
-	def _prior1d(self, c, wscale, KDE=None):
+	def _prior1d(self, c, KDE=None):
 #		X = np.array(x)
 #		tree = self.priors['cbv%i' %(ncbv+1)]
 ##		Is = self.priors['cbv%i_std' %(ncbv+1)]
@@ -331,13 +334,12 @@ class CBV(object):
 #			print(KDE.logpdf(c), wscale, KDE.logpdf(c)**wscale)
 #			Ptot = -1*(KDE.logpdf(c)**wscale)
 #			Ptot = (KDE.logpdf(c)**wscale)
-			Ptot = -1*KDE.logpdf(c)*wscale
+			return float(KDE(c))
 #			print(Ptot, KDE.logpdf(c))
 		
 #		mid = I(X[0],X[1])
 #		wid = wscale*Is(X[0],X[1])
 #		Ptot = 0.5*( (c-mid)/ wid)**2 + 0.5*np.log(wid)
-			return Ptot
 
 	#--------------------------------------------------------------------------
 	def fitting_lh(self, flux, Ncbvs, method='llsq'): #, Ncbvs, 
@@ -365,7 +367,7 @@ class CBV(object):
 
 		if method=='llsq':
 			res = self.lsfit_spike(flux, Ncbvs)
-#			res[-1] -= 1
+			res[-1] -= 1
 			return res	
 
 
@@ -376,6 +378,8 @@ class CBV(object):
 			if not start is None:
 				coeffs0 = start
 				coeffs0 = np.append(coeffs0, 0)
+#				coeffs0 = np.zeros(Ncbvs*2+1, dtype='float64')
+
 			else:	
 				coeffs0 = np.zeros(Ncbvs*2+1, dtype='float64')
 #				coeffs0[-1] = 0
@@ -390,29 +394,45 @@ class CBV(object):
 			
 
 			# TEST with independent spike fit
-#			res_s = self.fitting_lh_spike(flux, Ncbvs, method='llsq')
-#			print('res_s', res_s)
-#			res[Ncbvs:] = res_s[:-1]
-##			spike_filt = self.mdl_spike(res_s)
-##			flux1 = np.copy(flux) - spike_filt + 1
+			ff = pchip_interpolate(np.arange(len(flux))[np.isfinite(flux)], flux[np.isfinite(flux)], np.arange(len(flux)))
+			F = sig.medfilt(ff, 15)
+			flux2 = np.copy(flux)/F
+			res_s = self.fitting_lh_spike(flux2, Ncbvs, method='llsq')
+			print('res_s', res_s)
+			res[Ncbvs:] = res_s[:-1]
+			spike_filt = self.mdl_spike(res_s)
+			
+#			plt.figure()
+#			plt.plot(flux2)
+#			plt.plot(spike_filt-0.5)
 			
 			
+			flux1 = F*(flux2 - spike_filt + 1)
 			
+#			plt.figure()
+#			plt.plot(flux, 'b')
+#			plt.plot(F-0.1, 'k')
+#			plt.plot(flux1+0.1, 'r')
+#			plt.plot(flux2 - spike_filt + 1.5, 'g')
+#			
+#			
+#			plt.show()
+#			sys.exit()
 
 			for jj in range(Ncbvs):
 				V = self.inires[ind,1+jj][0][1::] 
 				KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 				
-				VS = self.inires[ind,1+jj + no_cbv_coeff][0][1::] 
-				KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
+#				VS = self.inires[ind,1+jj + no_cbv_coeff][0][1::] 
+#				KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 #				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
 				
-				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, pos, wscale, KDE), method=method).x				
+				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux1, jj, pos, wscale, KDE), method=method).x				
 				# Using KDE prior:
-				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux, jj + no_cbv_coeff, pos, wscale, KDES), method=method).x
+#				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux, jj + no_cbv_coeff, pos, wscale, KDES), method=method).x
 				# Using flat prior
-#				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux, jj + no_cbv_coeff, pos, wscale, None), method=method).x
+#				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux1, jj + no_cbv_coeff, pos, wscale, None), method=method).x
 
 #			offset = minimize(self._lhood_off_2, coeffs0[-1], args=(flux, err, res), method='Powell').x
 			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res, Ncbvs), method=method).x
@@ -447,8 +467,9 @@ class CBV(object):
 			Nstart = Numcbvs
 			
 			
-		print('wscale', wscale)
-		print('start', start)
+#		print('wscale', wscale)
+#		print('start', start)
+			
 		for Ncbvs in range(Nstart, Numcbvs+1):
 			
 			iters = 0
@@ -463,7 +484,6 @@ class CBV(object):
 					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, wscale, N_neigh, method=method, start=start)
 				else:
 					res = self.fitting_lh(fluxi, Ncbvs, method=method)
-#					res = self.fitting_lh(fluxi, method=method)
 
 
 				# Break if nothing changes
@@ -515,7 +535,7 @@ class CBV(object):
 		return flux_filter, res_final
 
 	#--------------------------------------------------------------------------
-	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=20, ini=True, use_bic=False, method='Powell', N_neigh=1000):
+	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=0.5, ini=True, use_bic=False, method='Powell', N_neigh=1000):
 		logger = logging.getLogger(__name__)
 		# Remove bad data based on quality
 		
@@ -523,35 +543,48 @@ class CBV(object):
 		lc.flux[~flag_good] = np.nan
 
 
-#		print(ini, use_bic)
 		# Fit the CBV to the flux:
 		if ini:
 			flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=False, method='llsq', func='lh')
 			return flux_filter, res
 
 		else:
-			row = lc.meta['task']['pos_row']#/1638
-			col = lc.meta['task']['pos_column']#/1638
+			row = lc.meta['task']['pos_row']
+			col = lc.meta['task']['pos_column']
 			tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
 			
-			pos = np.array([row/160.94891871, col/164.69549124, tmag/1.36322823])
+			pos = np.array([row, col, tmag])
 
 			# Prior curve
 			pc0, opts = self._priorcurve(pos, n_components, N_neigh)
 			pc = pc0 * lc.meta['task']['mean_flux']
 
 			# Compute new variability measure
+			idx = np.isfinite(lc.flux)
+			Poly = np.poly1d(np.polyfit(lc.time[idx], lc.flux[idx], 3))
+			Polyfit = Poly(lc.time)
 			residual = MAD_model(lc.flux-pc)
-			residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
+#			residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
+#
+#			print('residual', residual)
+#			print('residual_ratio', residual_ratio)
+#
+#			WS = np.min([1, residual_ratio])
+#			
+			
+			AA = 2
+			GRAW = np.std((pc - Polyfit) / MAD_model2(lc.flux - Polyfit) - 1)
+			GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
+			
+			beta1 = 1
+			beta2 = 1
+			VAR = np.nanstd(lc.flux - Polyfit)
+			WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
+			
+			print(GRAW, GPR, VAR, WS)
 
-			print('residual', residual)
-			print('residual_ratio', residual_ratio)
-
-			WS = np.min([1, residual_ratio])
-			WS = 1
-
-			lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
-			lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
+#			lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
+#			lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
 
 			tree = self.priors
 			dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
@@ -559,14 +592,15 @@ class CBV(object):
 			print('LLSQ res', self.inires[ind,:][0][0])
 			print('dist', dist[0])
 
-#			WS=30
-			if WS > WS_lim:
+			WS=0
+			if WS==0:
 				logger.info('Fitting using LSSQ')
-				flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
+#				flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
+				flux_filter, res = self.fit(lc.flux, Numcbvs=14, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
 				lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
 			else:
 				logger.info('Fitting using Priors')
-				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=True, method=method, func='pos', wscale=WS**alpha, N_neigh=N_neigh, start=opts)
+				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=True, method=method, func='pos', wscale=WS, N_neigh=N_neigh, start=opts)
 				lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
 
 			return flux_filter, res, residual, WS, pc
