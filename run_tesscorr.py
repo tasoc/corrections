@@ -92,20 +92,19 @@ if __name__ == '__main__':
 
 	# Initialize the corrector class:
 	with CorrClass(input_folder, plot=args.plot) as corr:
-
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder) as tm:
 			while True:
-				
 				if args.random:
 					task = tm.get_random_task()
 				else:
-					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd)
-
+					task = tm.get_task(starid=args.starid, datasource=args.datasource) #camera=args.camera, ccd=args.ccd, 
+				
 				if task is None: break
-
+				
+				
 				# Run the correction:
-				result = corr.correct(task)
+				result = corr.correct(task, output_folder=output_folder)
 
 				# Construct results to return to TaskManager:
 				tm.save_results(result)
