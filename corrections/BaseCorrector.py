@@ -152,7 +152,7 @@ class BaseCorrector(object):
 		raise NotImplementedError("A helpful error message goes here") # TODO
 
 
-	def correct(self, task):
+	def correct(self, task, output_folder=None):
 		"""
 		Run correction.
 
@@ -202,7 +202,7 @@ class BaseCorrector(object):
 			details['ptp'] = nanmedian(np.abs(np.diff(lc.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
-			save_file = self.save_lightcurve(lc)
+			save_file = self.save_lightcurve(lc, output_folder=output_folder)
 
 			# Construct result dictionary from the original task
 			result = lc.meta['task'].copy()
@@ -423,8 +423,10 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
-			#if output_folder != self.input_folder:
-			save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
+			if output_folder != self.input_folder:
+				save_file = os.path.join(output_folder, 'corr-' + os.path.basename(fname))
+			else:	
+				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 
 			# Open the FITS file to overwrite the corrected flux columns:
