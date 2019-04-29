@@ -110,11 +110,12 @@ input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined/'
 np.save(os.path.join(data_folder, 'cbv-%d.npy' % cbv_area), cbv_new)
 np.save(os.path.join(data_folder, 'cbv-s-%d.npy' % cbv_area), cbv_spike)
 
-#starid = 370250245 #Nice spike example
+
+starid = 370250245 #Nice spike example
 #starid = 370250142
 #starid = 370327326
 #starid = 370327507 #LPV
-starid = 370328324 #Coherent oscc
+#starid = 370328324 #Coherent oscc
 #starid = 370328523
 #starid = 370328558 #LPV
 #starid = 370327584
@@ -145,24 +146,34 @@ ax1.plot(lc.time, lc.flux)
 
 n_components = 5
 flux_filter, res = cbv.cotrend_single(lc, n_components, data_folder, ini=True)
-lc_corrected = (lc/flux_filter-1)#*1e6
+lc_corrected = (lc.copy()/flux_filter-1)#*1e6
 
 ax2.plot(lc.time, lc.flux)	
 ax2.plot(lc.time, flux_filter)	
 
 
-time_cut = (lc.time<1346) | (lc.time>1350)
-lc_corrected = lc_corrected[time_cut]
+#time_cut = (lc.time<1346) | (lc.time>1350)
+#lc_corrected = lc_corrected[time_cut]
 lc_corrected= lc_corrected.remove_nans()
+
+
 ax3.plot(lc.time, (lc.flux/np.nanmedian(lc.flux) - 1)*1e6)
 ax3.plot(lc_corrected.time, lc_corrected.flux*1e6)
 ax4.plot(lc_corrected.time, lc_corrected.flux*1e6)
 
 
+lc = (lc/np.nanmedian(lc.flux) -1)
+lc2 = lc.copy().remove_nans()
+#
+
 p = lc_corrected.to_periodogram(freq_unit=u.microHertz, max_frequency=282, min_frequency=0.1)
+p2 = lc2.remove_nans().to_periodogram(freq_unit=u.microHertz, max_frequency=282, min_frequency=0.1, oversample_factor=1)
 figp = plt.figure(figsize=(15,5))
 ax1p = figp.add_subplot(211)
 ax2p = figp.add_subplot(212)
+
+p2.plot(ax=ax1p, c='r', scale='log')
+p2.plot(ax=ax2p, c='r')
 p.plot(ax=ax1p, c='k', scale='log')
 p.plot(ax=ax2p, c='k')
 
