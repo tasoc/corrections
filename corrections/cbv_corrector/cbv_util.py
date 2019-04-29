@@ -25,6 +25,10 @@ def MAD_model(x, **kwargs):
 	# x: difference between input
 	return 1.4826*np.nanmedian(np.abs(x), **kwargs)
 
+def MAD_model2(x, **kwargs):
+	# x: difference between input
+	return 1.4826*np.nanmedian(np.abs(x-np.nanmedian(x)), **kwargs)
+
 #------------------------------------------------------------------------------
 def _move_median_central_1d(x, width_points):
 	y = move_median(x, width_points, min_count=1)
