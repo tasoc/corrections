@@ -23,26 +23,13 @@ import matplotlib.colors as colors
 #from mpl_toolkits.mplot3d import Axes3D
 import logging
 from scipy.spatial.distance import squareform, pdist
-from scipy import stats
 from scipy.signal import savgol_filter, find_peaks
-from scipy.interpolate import InterpolatedUnivariateSpline
 import sys
 from sklearn.neighbors import DistanceMetric, BallTree
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
-from .cbv_util import MAD_model, MAD_model2
+from .cbv_util import MAD_model, MAD_model2, MAD_scatter
 
 #------------------------------------------------------------------------------
-
-def MAD_scatter(X, Y, bins=15):
-
-	bin_means, bin_edges, binnumber = stats.binned_statistic(X, Y, statistic=nanmedian, bins=bins)
-	bin_width = (bin_edges[1] - bin_edges[0])
-	bin_centers = bin_edges[1:] - bin_width/2
-	idx = np.isfinite(bin_centers) & np.isfinite(bin_means)
-	spl = InterpolatedUnivariateSpline(bin_centers[idx] , bin_means[idx])
-
-	M = MAD_model(Y-spl(X))
-	return M
 
 
 class CBVCorrector(BaseCorrector):
@@ -53,7 +40,7 @@ class CBVCorrector(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=0.8, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
+	def __init__(self, *args, Numcbvs='all', ncomponents=None, simple_fit=True, WS_lim=0.8, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
 			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
@@ -75,10 +62,6 @@ class CBVCorrector(BaseCorrector):
 		# This will set several default settings
 		super(self.__class__, self).__init__(*args, **kwargs)
 
-
-#		method = 'Nelder-Mead'
-		
-		
 		self.Numcbvs = Numcbvs
 		self.use_bic = use_bic
 		self.method = method
@@ -89,7 +72,7 @@ class CBVCorrector(BaseCorrector):
 		self.alpha = alpha
 		self.WS_lim = WS_lim
 		self.N_neigh = N_neigh
-
+		self.simple_fit = simple_fit
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
 
@@ -352,12 +335,12 @@ class CBVCorrector(BaseCorrector):
 			fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-area%d.png' %cbv_area))
 			plt.close(fig0)
 
-#			# Plot all the CBVs:
+			# Plot all the CBVs:
 			fig, axes = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
 			fig2, axes2 = plt.subplots(int(np.ceil(self.ncomponents/2)), 2, figsize=(12, 16))
 			fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
 			fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
-#
+
 			for k, ax in enumerate(axes.flatten()):
 				try:
 					ax.plot(cbv0[:, k]+0.1, 'r-')
@@ -372,7 +355,7 @@ class CBVCorrector(BaseCorrector):
 					ax.set_title('Basis Vector %d' % (k+1))
 				except:
 					pass
-#
+
 			for k, ax in enumerate(axes2.flatten()):
 				try:
 					ax.plot(-np.abs(U0[:, k]), 'r-')
@@ -387,6 +370,16 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	def spike_sep(self, cbv_area):
+		
+		"""
+		Function that separates CBVs into a "slow" and a "spiky" component
+		
+		This is done by filtering the deta and identifying outlier
+		with a peak-finding algorithm
+		
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>		
+		"""
 		
 		logger = logging.getLogger(__name__)
 		logger.info('running CBV spike separation')
@@ -642,16 +635,10 @@ class CBVCorrector(BaseCorrector):
 	#--------------------------------------------------------------------------
 	def compute_distance_map(self, cbv_area):
 		"""
+		3D distance map for weighting initial-fit coefficients
+		into a prior	
 		
-		
-		
-		BLA BLA BLA
-		
-		
-		
-		
-		
-		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
@@ -677,15 +664,9 @@ class CBVCorrector(BaseCorrector):
 		S = np.array([MAD_model2(pos_mag0[:, 0]), MAD_model2(pos_mag0[:, 1]), 0.5*MAD_model2(pos_mag0[:, 2])])
 		LL = np.diag(S)
 
-#		print(np.std(pos_mag0, axis=0))
-#		
-#		print(np.median(pos_mag0[:,2]), np.std(pos_mag0[:,2]), np.percentile(pos_mag0[:,2], 10),  np.percentile(pos_mag0[:,2], 90))
-
 #		pos_mag0[:, 0] /= np.std(pos_mag0[:, 0])
 #		pos_mag0[:, 1] /= np.std(pos_mag0[:, 1])
 #		pos_mag0[:, 2] /= np.std(pos_mag0[:, 2])
-		
-		
 		
 		# Construct and save distance tree
 		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
@@ -696,6 +677,13 @@ class CBVCorrector(BaseCorrector):
 
 	#--------------------------------------------------------------------------
 	def do_correction(self, lc):
+		
+		"""
+		Function where the correction is called, and where
+		additional headers for the FITS are defined
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>		
+		"""
 
 		logger = logging.getLogger(__name__)
 
@@ -709,16 +697,11 @@ class CBVCorrector(BaseCorrector):
 			cbv = CBV(self.data_folder, cbv_area, self.threshold_snrtest)
 			self.cbvs[cbv_area] = cbv
 			
-			#cbv.cbv
-			#cbv.cbv_s
-			
 			if cbv.priors is None:
 				raise IOError('Trying to co-trend without a defined prior')
 				
-				
-				
 		# Update maximum number of components
-		n_components0 = cbv.cbv.shape[1] #+ cbv.cbv_s.shape[1] 
+		n_components0 = cbv.cbv.shape[1] 
 
 		logger.info('Max number of components above SNR: %i' %n_components0)
 		if self.Numcbvs == 'all':
@@ -729,25 +712,44 @@ class CBVCorrector(BaseCorrector):
 		logger.info('Co-trending star with TIC ID: %i' %lc.meta['task']['starid'])
 		logger.info('Fitting using number of components: %i' %n_components)
 
-		flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=self.method, alpha=self.alpha, WS_lim=self.WS_lim, N_neigh=self.N_neigh)
-
+		if self.simple_fit:
+			met = 'llsq'
+			flux_filter, res = cbv.cotrend_single(lc, n_components, ini=False, simple_fit=self.simple_fit, use_bic=self.use_bic, method=met, alpha=self.alpha, WS_lim=self.WS_lim, N_neigh=self.N_neigh)
+		else:
+			met = self.method
+			flux_filter, res, residual, WS, pc = cbv.cotrend_single(lc, n_components, ini=False, use_bic=self.use_bic, method=met, alpha=self.alpha, WS_lim=self.WS_lim, N_neigh=self.N_neigh)
+			logger.debug('New variability', residual)
+			
+			
 		#corrected light curve in ppm
 		lc_corr = 1e6*(lc.copy()/flux_filter - 1)
 
 		res = np.array([res,]).flatten()
 		
-		print('result', res)
+		status = STATUS.OK
+		
+		no_cbvs_fitted = int((len(res)-1)/2)
+		for ii in range(no_cbvs_fitted):
+			lc_corr.meta['additional_headers']['CBV_C%i'%int(ii+1)] = (res[ii], 'CBV%i coefficient' %int(ii+1))
+			
+		for jj in range(no_cbvs_fitted):
+			lc_corr.meta['additional_headers']['CBVS_C%i'%int(jj+1)] = (res[jj+no_cbvs_fitted], 'Spike-CBV%i coefficient' %int(jj+1))	
+			
+			if len(res)<4: #fitting and using only one CBV 
+				status = STATUS.WARNING
+			
+			if len(res)>21: #fitting and using more than 10 CBVs
+				status = STATUS.WARNING
+		
+		lc_corr.meta['additional_headers']['CBV_C0'] = (res[-1], 'fitted offset')
 
-		for ii in range(len(res)-1):
-			lc.meta['additional_headers']['CBV_c%i'%int(ii+1)] = (res[ii], 'CBV%i coefficient' %int(ii+1))
-		lc.meta['additional_headers']['offset'] = (res[-1], 'fitted offset')
+		lc_corr.meta['additional_headers']['CBV_AREA'] = (cbv_area, 'CBV area of star')
+		lc_corr.meta['additional_headers']['CBV_BIC'] = (self.use_bic, 'was BIC used to select no of CBVs')
+		lc_corr.meta['additional_headers']['CBV_FIT'] = (self.simple_fit, 'CBV fitted with LLSQ?')
+		lc_corr.meta['additional_headers']['CBV_COMP'] = (no_cbvs_fitted, 'number of fitted CBVs')
+		lc_corr.meta['additional_headers']['CBV_MAX'] = (n_components, 'number of possible CBVs to fit')
 
-		lc.meta['additional_headers']['use_BIC'] = (self.use_bic, 'was BIC used to select no of CBVs')
-		lc.meta['additional_headers']['fit_met'] = (self.method, 'method used to fit CBV')
-		lc.meta['additional_headers']['no_comp'] = (len(res)-1, 'number of fitted CBVs')
-
-		logger.debug('New variability', residual)
-
+		
 		if self.plot:
 			fig = plt.figure()
 			ax1 = fig.add_subplot(211)
@@ -766,8 +768,7 @@ class CBVCorrector(BaseCorrector):
 			if not os.path.exists(os.path.join(self.plot_folder(lc))):
 				os.makedirs(os.path.join(self.plot_folder(lc)))
 			fig.savefig(os.path.join(self.plot_folder(lc), filename))
-#			plt.close(fig)
-			plt.show()
+			plt.close(fig)
+#			plt.show()
 
-		# TODO: update status
-		return lc_corr, STATUS.OK
+		return lc_corr, status

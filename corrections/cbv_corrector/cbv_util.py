@@ -12,6 +12,8 @@ from sklearn.model_selection import cross_val_score
 from bottleneck import nansum, move_median, nanmedian
 from scipy.stats import pearsonr
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
+from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy import stats
 from scipy.special import xlogy
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
@@ -28,6 +30,17 @@ def MAD_model(x, **kwargs):
 def MAD_model2(x, **kwargs):
 	# x: difference between input
 	return 1.4826*np.nanmedian(np.abs(x-np.nanmedian(x)), **kwargs)
+
+def MAD_scatter(X, Y, bins=15):
+	bin_means, bin_edges, binnumber = stats.binned_statistic(X, Y, statistic=nanmedian, bins=bins)
+	bin_width = (bin_edges[1] - bin_edges[0])
+	bin_centers = bin_edges[1:] - bin_width/2
+	idx = np.isfinite(bin_centers) & np.isfinite(bin_means)
+	spl = InterpolatedUnivariateSpline(bin_centers[idx] , bin_means[idx])
+
+	M = MAD_model(Y-spl(X))
+	return M
+
 
 #------------------------------------------------------------------------------
 def _move_median_central_1d(x, width_points):

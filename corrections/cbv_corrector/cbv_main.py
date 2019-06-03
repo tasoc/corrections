@@ -22,8 +22,6 @@ from ..utilities import loadPickle
 from .cbv_util import compute_entopy, MAD_model,MAD_model2
 from ..quality import CorrectorQualityFlags
 
-from ..plots import plt, matplotlib
-
 #------------------------------------------------------------------------------
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 	logger = logging.getLogger(__name__)
@@ -90,23 +88,28 @@ def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
 
 #------------------------------------------------------------------------------
 def AlmightyCorrcoefEinsumOptimized(O, P):
+	
+	"""
+	Correlation coefficients using Einstein sums
+	
+	"""
 
-    (n, t) = O.shape      # n traces of t samples
-    (n_bis, m) = P.shape  # n predictions for each of m candidates
+	(n, t) = O.shape      # n traces of t samples
+	(n_bis, m) = P.shape  # n predictions for each of m candidates
 
-    DO = O - (np.einsum("nt->t", O, optimize='optimal') / np.double(n)) # compute O - mean(O)
-    DP = P - (np.einsum("nm->m", P, optimize='optimal') / np.double(n)) # compute P - mean(P)
+	DO = O - (np.einsum("nt->t", O, optimize='optimal') / np.double(n)) # compute O - mean(O)
+	DP = P - (np.einsum("nm->m", P, optimize='optimal') / np.double(n)) # compute P - mean(P)
 
-    cov = np.einsum("nm,nt->mt", DP, DO, optimize='optimal')
+	cov = np.einsum("nm,nt->mt", DP, DO, optimize='optimal')
 
-    varP = np.einsum("nm,nm->m", DP, DP, optimize='optimal')
-    varO = np.einsum("nt,nt->t", DO, DO, optimize='optimal')
-    tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
+	varP = np.einsum("nm,nm->m", DP, DP, optimize='optimal')
+	varO = np.einsum("nt,nt->t", DO, DO, optimize='optimal')
+	tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
 
-    return cov / np.sqrt(tmp)
+	return cov / np.sqrt(tmp)
 
 #------------------------------------------------------------------------------
-def lc_matrix_calc(Nstars, mat0):#, stds):
+def lc_matrix_calc(Nstars, mat0):
 	logger=logging.getLogger(__name__)
 
 	logger.info("Calculating correlations...")
@@ -154,8 +157,6 @@ class CBV(object):
 		if os.path.exists(inipath):
 			self.inires = np.load(inipath)['res']
 			
-			
-		
 
 	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
@@ -168,8 +169,6 @@ class CBV(object):
 		Computes the least-squares solution to a linear matrix equation.
 		"""
 		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(flux)
-#		A0 = self.cbv[idx,:] 
-#		A0 = np.column_stack((self.cbv[idx,:], self.cbv_s[idx,:])) 
 		A0 = np.column_stack((self.cbv[idx,:Ncbvs], self.cbv_s[idx,:Ncbvs])) 
 		
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
@@ -268,14 +267,17 @@ class CBV(object):
 
 	#--------------------------------------------------------------------------
 	def _priorcurve(self, x, Ncbvs, N_neigh):
-#		cbv_comb = np.column_stack((self.cbv, self.cbv_s))
-
-#		res = np.zeros_like(cbv_comb[:, 0], dtype='float64')
+		
+		"""
+		Get "most likely" correction from peak in prior distributions
+		of fitting coefficients
+		
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		"""
 		res = np.zeros_like(self.cbv[:, 0], dtype='float64')
 		opts = np.zeros(int(Ncbvs*2)) #entries for both CBV and CBV_S
 		
 		no_cbv_coeff = self.cbv.shape[1]
-		plt.figure()
 		
 		tree = self.priors
 		dist, ind = tree.query(np.array([x]), k=N_neigh+1)
@@ -283,24 +285,12 @@ class CBV(object):
 		
 		for ncbv in range(Ncbvs):
 			
-#			V = self.inires[:,1+ncbv][ind][0][1::]
-			V = self.inires[ind,1+ncbv][0][1::] #/10
-			VS = self.inires[ind,1+ncbv + no_cbv_coeff][0][1::] #/10
-#			print(V[0:5])
+			V = self.inires[ind,1+ncbv][0][1::] 
+			VS = self.inires[ind,1+ncbv + no_cbv_coeff][0][1::] 
 			
 			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 			KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
-			
-			VP = np.linspace(V.min()-0.5, V.max()+0.5, 100)
-#			plt.plot(VP, KDE.evaluate(VP))
-			plt.plot(VP, [-1*KDE.logpdf(c)*0.4 for c in VP])
-
-			
-			VPS = np.linspace(VS.min()-0.5, VS.max()+0.5, 100)
-			plt.plot(VPS, [-1*KDES.logpdf(c)*0.4 for c in VPS], '--')
-			
-			plt.show()
-			
+						
 			def kernel_opt(x): return -1*KDE.logpdf(x)
 			opt = fmin_powell(kernel_opt, 0, disp=0)
 			opts[ncbv] = opt
@@ -309,66 +299,28 @@ class CBV(object):
 			opt_s = fmin_powell(kernel_opts, 0, disp=0)
 			opts[ncbv + Ncbvs] = opt_s
 			
-#			print(ncbv+1, opt)
-#			I = self.priors['cbv%i' %(ncbv+1)]
-#			mid = I(X[0],X[1])
 			res += (self.mdl1d(opt, ncbv) - 1) + (self.mdl1d(opt_s, ncbv + no_cbv_coeff) - 1)
 		return res+1, opts 
 
 	#--------------------------------------------------------------------------
 	def _prior1d(self, c, KDE=None):
-#		X = np.array(x)
-#		tree = self.priors['cbv%i' %(ncbv+1)]
-##		Is = self.priors['cbv%i_std' %(ncbv+1)]
-#		# negative log prior
-#		
-#		dist, ind = tree.query(np.array([X]), k=N_neigh+1)
-#		V = VALS[ind][0][1::]
-#		W = 1/dist[0][1::]
-#		
-#		KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-		
 		if KDE is None:
 			return 0
 		else:
-#			print(KDE.logpdf(c), wscale, KDE.logpdf(c)**wscale)
-#			Ptot = -1*(KDE.logpdf(c)**wscale)
-#			Ptot = (KDE.logpdf(c)**wscale)
 			return float(KDE(c))
-#			print(Ptot, KDE.logpdf(c))
-		
-#		mid = I(X[0],X[1])
-#		wid = wscale*Is(X[0],X[1])
-#		Ptot = 0.5*( (c-mid)/ wid)**2 + 0.5*np.log(wid)
+
 
 	#--------------------------------------------------------------------------
-	def fitting_lh(self, flux, Ncbvs, method='llsq'): #, Ncbvs, 
-#		if method=='powell':
-#			# Initial guesses for coefficients:
-#			coeffs0 = np.zeros(Ncbvs+1, dtype='float64')
-#			coeffs0[0] = 1
-#
-#			res = np.zeros(Ncbvs, dtype='float64')
-#			for jj in range(Ncbvs):
-#				res[jj] = minimize(self._lhood1d, coeffs0[jj], args=(flux, jj), method='Powell').x
-#
-#			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res), method='Powell').x
-#			res = np.append(res, offset)
-#
-#			return res
-
-		if method=='llsq':
-			res = self.lsfit(flux, Ncbvs)
-			res[-1] -= 1
-			return res
+	def fitting_lh(self, flux, Ncbvs): 
+		res = self.lsfit(flux, Ncbvs)
+		res[-1] -= 1
+		return res
 		
 	#--------------------------------------------------------------------------
-	def fitting_lh_spike(self, flux, Ncbvs, method='llsq'): #, Ncbvs, 
-
-		if method=='llsq':
-			res = self.lsfit_spike(flux, Ncbvs)
-			res[-1] -= 1
-			return res	
+	def fitting_lh_spike(self, flux, Ncbvs): 
+		res = self.lsfit_spike(flux, Ncbvs)
+		res[-1] -= 1
+		return res	
 
 
 	#--------------------------------------------------------------------------
@@ -378,36 +330,30 @@ class CBV(object):
 			if not start is None:
 				coeffs0 = start
 				coeffs0 = np.append(coeffs0, 0)
-#				coeffs0 = np.zeros(Ncbvs*2+1, dtype='float64')
-
 			else:	
 				coeffs0 = np.zeros(Ncbvs*2+1, dtype='float64')
-#				coeffs0[-1] = 0
 
 
-			no_cbv_coeff = self.cbv.shape[1]
-				
 			res = np.zeros(int(Ncbvs*2), dtype='float64')
 			tree = self.priors
 			dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
 			W = 1/dist[0][1::]**2
-			
-
-			# TEST with independent spike fit
-			ff = pchip_interpolate(np.arange(len(flux))[np.isfinite(flux)], flux[np.isfinite(flux)], np.arange(len(flux)))
-			F = sig.medfilt(ff, 15)
-			flux2 = np.copy(flux)/F
-			res_s = self.fitting_lh_spike(flux2, Ncbvs, method='llsq')
-			print('res_s', res_s)
-			res[Ncbvs:] = res_s[:-1]
-			spike_filt = self.mdl_spike(res_s)
-			
-#			plt.figure()
-#			plt.plot(flux2)
-#			plt.plot(spike_filt-0.5)
-			
-			
-			flux1 = F*(flux2 - spike_filt + 1)
+#			
+#
+#			# TEST with independent spike fit
+#			ff = pchip_interpolate(np.arange(len(flux))[np.isfinite(flux)], flux[np.isfinite(flux)], np.arange(len(flux)))
+#			F = sig.medfilt(ff, 15)
+#			flux2 = np.copy(flux)/F
+#			res_s = self.fitting_lh_spike(flux2, Ncbvs)
+#			res[Ncbvs:] = res_s[:-1]
+#			spike_filt = self.mdl_spike(res_s)
+#			
+##			plt.figure()
+##			plt.plot(flux2)
+##			plt.plot(spike_filt-0.5)
+#			
+#			
+#			flux1 = F*(flux2 - spike_filt + 1)
 			
 #			plt.figure()
 #			plt.plot(flux, 'b')
@@ -428,7 +374,7 @@ class CBV(object):
 
 #				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
 				
-				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux1, jj, pos, wscale, KDE), method=method).x				
+				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, pos, wscale, KDE), method=method).x				
 				# Using KDE prior:
 #				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux, jj + no_cbv_coeff, pos, wscale, KDES), method=method).x
 				# Using flat prior
@@ -438,26 +384,22 @@ class CBV(object):
 			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res, Ncbvs), method=method).x
 
 			res = np.append(res, offset)
-#			print('res', res)
 			return res
 
 	#--------------------------------------------------------------------------
 	def fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=50, use_bic=True, method='Powell', func='pos', wscale=5, N_neigh=1000, start=None):
-
+		logger = logging.getLogger(__name__)
+		
 		# Find the median flux to normalise light curve
 		median_flux = nanmedian(flux)
 
 		if Numcbvs is None:
-#			cbv_comb = np.column_stack((, self.cbv_s))
 			Numcbvs = self.cbv.shape[1]
-#			Numcbvs = self.cbv.shape[1] + self.cbv_s.shape[1]
 
 		if use_bic:
 			# Start looping over the number of CBVs to include:
-#			bic = np.empty(Numcbvs+1, dtype='float64')
-			bic = np.array([]) #np.full(Numcbvs+1, np.inf, dtype='float64')
-			solutions = []#np.array([])
-#			print('BIC start', bic)
+			bic = np.array([]) 
+			solutions = []
 
 			# Test a range of CBVs from 1 to Numcbvs
 			# Fitting at least 1 CBV and an offset
@@ -466,10 +408,7 @@ class CBV(object):
 			# Test only fit with Numcbvs
 			Nstart = Numcbvs
 			
-			
-#		print('wscale', wscale)
-#		print('start', start)
-			
+						
 		for Ncbvs in range(Nstart, Numcbvs+1):
 			
 			iters = 0
@@ -483,7 +422,7 @@ class CBV(object):
 					# Reuse results from iterations with fewer CBVs??? 
 					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, wscale, N_neigh, method=method, start=start)
 				else:
-					res = self.fitting_lh(fluxi, Ncbvs, method=method)
+					res = self.fitting_lh(fluxi, Ncbvs)
 
 
 				# Break if nothing changes
@@ -512,19 +451,17 @@ class CBV(object):
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
 				filt = self.mdl(res)  * median_flux
-#				bic[Ncbvs] = np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( ((flux - filt)/err)**2 )
-#				bic = np.append(bic, np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( ((flux - filt)/err)**2 ))
 				bic = np.append(bic, np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( (flux - filt)**2 )) #not using errors
 				solutions.append(res)
 
 		if use_bic:
-			print('bic', bic)
-			print('iters', iters)
+			logger.info('bic %s', bic)
+			logger.info('iters %s', iters)
+			
 			# Use the solution which minimizes the BIC:
 			indx = np.argmin(bic)
-			print('optimum number of CBVs', indx+1)
+			logger.info('optimum number of CBVs %s', indx+1)
 			res_final = solutions[indx]
-#			print('final res', res_final)
 			flux_filter = self.mdl(res_final)  * median_flux
 
 		else:
@@ -535,7 +472,7 @@ class CBV(object):
 		return flux_filter, res_final
 
 	#--------------------------------------------------------------------------
-	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=0.5, ini=True, use_bic=False, method='Powell', N_neigh=1000):
+	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=0.5, simple_fit=True, ini=True, use_bic=False, method='Powell', N_neigh=1000):
 		logger = logging.getLogger(__name__)
 		# Remove bad data based on quality
 		
@@ -545,62 +482,84 @@ class CBV(object):
 
 		# Fit the CBV to the flux:
 		if ini:
+			"""
+			Do initial fits to define prior weights, i.e., include all
+			possible CBVs (disregarding BIC)
+			
+			"""
 			flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=False, method='llsq', func='lh')
+			lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
+			lc.meta['additional_headers']['CBV_MET'] = ('llsq', 'method used to fit CBV')
+
 			return flux_filter, res
 
 		else:
-			row = lc.meta['task']['pos_row']
-			col = lc.meta['task']['pos_column']
-			tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
 			
-			pos = np.array([row, col, tmag])
-
-			# Prior curve
-			pc0, opts = self._priorcurve(pos, n_components, N_neigh)
-			pc = pc0 * lc.meta['task']['mean_flux']
-
-			# Compute new variability measure
-			idx = np.isfinite(lc.flux)
-			Poly = np.poly1d(np.polyfit(lc.time[idx], lc.flux[idx], 3))
-			Polyfit = Poly(lc.time)
-			residual = MAD_model(lc.flux-pc)
-#			residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
-#
-#			print('residual', residual)
-#			print('residual_ratio', residual_ratio)
-#
-#			WS = np.min([1, residual_ratio])
-#			
-			
-			AA = 2
-			GRAW = np.std((pc - Polyfit) / MAD_model2(lc.flux - Polyfit) - 1)
-			GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
-			
-			beta1 = 1
-			beta2 = 1
-			VAR = np.nanstd(lc.flux - Polyfit)
-			WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
-			
-			print(GRAW, GPR, VAR, WS)
-
-#			lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
-#			lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
-
-			tree = self.priors
-			dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
-			
-			print('LLSQ res', self.inires[ind,:][0][0])
-			print('dist', dist[0])
-
-			WS=0
-			if WS==0:
+			if simple_fit:
+				
+				"""
+				Do "simple" LSSQ fits using BIC to decide on number of CBVs
+				to include
+				
+				"""
 				logger.info('Fitting using LSSQ')
-#				flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
-				flux_filter, res = self.fit(lc.flux, Numcbvs=14, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
-				lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
-			else:
-				logger.info('Fitting using Priors')
-				flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=True, method=method, func='pos', wscale=WS, N_neigh=N_neigh, start=opts)
-				lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
+				flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
+				lc.meta['additional_headers']['CBV_PRI'] = (False, 'Was prior used')
+				lc.meta['additional_headers']['CBV_MET'] = ('llsq', 'method used to fit CBV')
 
-			return flux_filter, res, residual, WS, pc
+				return flux_filter, res
+			else:	
+				
+				"""
+				Do fits including prior information from the initial fits - 
+				allow switching to a simple LSSQ fit depending on 
+				variability measures (not fully implemented yet!)
+				
+				"""
+				row = lc.meta['task']['pos_row']
+				col = lc.meta['task']['pos_column']
+				tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
+				
+				pos = np.array([row, col, tmag])
+	
+				# Prior curve
+				pc0, opts = self._priorcurve(pos, n_components, N_neigh)
+				pc = pc0 * lc.meta['task']['mean_flux']
+	
+				# Compute new variability measure
+				idx = np.isfinite(lc.flux)
+				Poly = np.poly1d(np.polyfit(lc.time[idx], lc.flux[idx], 3))
+				Polyfit = Poly(lc.time)
+				residual = MAD_model(lc.flux-pc)
+#				residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
+#				WS = np.min([1, residual_ratio])
+				
+				AA = 2
+				GRAW = np.std((pc - Polyfit) / MAD_model2(lc.flux - Polyfit) - 1)
+				GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
+#				
+				beta1 = 1
+				beta2 = 1
+				VAR = np.nanstd(lc.flux - Polyfit)
+				WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
+					
+#				lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
+#				lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
+	
+				tree = self.priors
+				dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
+				
+	
+				if WS>WS_lim:
+					logger.info('Fitting using LSSQ')
+					flux_filter, res = self.fit(lc.flux, Numcbvs=5, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
+					lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
+					lc.meta['additional_headers']['CBV_MET'] = ('llsq', 'method used to fit CBV')
+
+				else:
+					logger.info('Fitting using Priors')
+					flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=True, method=self.method, func='pos', wscale=WS, N_neigh=N_neigh, start=opts)
+					lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
+					lc.meta['additional_headers']['CBV_MET'] = (self.method, 'method used to fit CBV')
+
+				return flux_filter, res, residual, WS, pc

@@ -24,16 +24,19 @@ def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None,
 	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv) as C:
 		C.compute_cbvs(cbv_area, ent_limit=el)
 		C.spike_sep(cbv_area)
-		C.cotrend_ini(cbv_area, do_ini_plots=ip)
-		C.compute_distance_map(cbv_area)
+		
+		
+#		C.cotrend_ini(cbv_area, do_ini_plots=ip)
+#		try:
+#			C.compute_distance_map(cbv_area)
+#		except:
+#			pass
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
 
 	# Parse command line arguments:
 	parser = argparse.ArgumentParser(description='Run preparation of CBVs for single or several CBV-areas.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-	#parser.add_argument('-e', '--ext', help='Extension of plots.', default='png', choices=('png', 'eps'))
-	#parser.add_argument('-s', '--show', help='Show plots.', action='store_true')
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots.', action='store_true')
@@ -52,8 +55,10 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	
-#	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
-
+	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
+#	args.area = [413]
+	
+	
 	# Set logging level:
 	logging_level = logging.INFO
 	if args.quiet:
