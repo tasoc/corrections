@@ -37,6 +37,7 @@ if __name__ == '__main__':
 	parser.add_argument('--source', type=str, choices=('ffi','tpf'), default=None, help='TESS source file. Default is to choose the first in the database.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
+	parser.add_argument('-o', '--output_folder', type=str, help='Directory to output corrected files to.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
@@ -72,7 +73,9 @@ if __name__ == '__main__':
 		else:
 			input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
 
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+	output_folder = args.output_folder
+	if output_folder is None:
+		output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
 
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
@@ -81,7 +84,7 @@ if __name__ == '__main__':
 	CorrClass = corrections.corrclass(args.method)
 
 	# Initialize the corrector class:
-	with CorrClass(input_folder, plot=args.plot) as corr:
+	with CorrClass(input_folder, output_folder, plot=args.plot, debug=args.debug) as corr:
 
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder) as tm:
@@ -92,7 +95,8 @@ if __name__ == '__main__':
 				else:
 					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd, source=args.source)
 				
-				if task is None: break
+				if task is None: 
+					break
 				# Run the correction:
 				result = corr.correct(task)
 
