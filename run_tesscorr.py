@@ -85,7 +85,8 @@ if __name__ == '__main__':
 	CorrClass = corrections.corrclass(args.method)
 
 	# Initialize the corrector class:
-	with CorrClass(input_folder, plot=args.plot) as corr:
+	with CorrClass(input_folder, output_folder, plot=args.plot, debug=args.debug) as corr:
+
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder, overwrite=args.overwrite) as tm:
 			while True:
