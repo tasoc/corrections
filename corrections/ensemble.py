@@ -126,7 +126,7 @@ class EnsembleCorrector(BaseCorrector):
         # List of star indexes to be included in the ensemble
         temp_list = []
         # Initial number of closest stars to consider and variable to increase number
-        initial_num_stars = 4
+        initial_num_stars = 10
         star_count = initial_num_stars
         # (Alternate param) Initial distance at which to consider stars around the target
         # initial_search_radius = -1
@@ -196,13 +196,13 @@ class EnsembleCorrector(BaseCorrector):
                     # 2 sigma
                     ens2sig = 2 * np.std(mens_flux)
                     targ2sig = 2 * np.std(mtarget_flux)
-                    # absolute value
+                    
+                    # absolute balue
                     abstarg = np.absolute(mtarget_flux)
                     absens = np.absolute(mens_flux)
 
-                    if debug:
-                        logger.info("2 sigma")
-                        logger.info(str(ens2sig) + " , " + str(targ2sig))
+                    logger.info("2 sigma")
+                    logger.info(str(ens2sig) + " , " + str(targ2sig))
 
                     # sigma clip the flux used to fit, but don't use that flux again
                     clip_target_flux = np.where(
@@ -288,7 +288,6 @@ class EnsembleCorrector(BaseCorrector):
                     logger.info(np.asarray(lc_ensemble).shape[0])
                     break
 
-        logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
         
         logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
         
