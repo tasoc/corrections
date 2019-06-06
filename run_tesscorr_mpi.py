@@ -17,12 +17,11 @@ Example
 To run the program using four processes (one master and three workers) you can
 execute the following command:
 
->>> mpiexec -n 4 python run_mpi_scheduler.py
+>>> mpiexec -n 4 python run_tesscorr_mpi.py
 
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
-from __future__ import with_statement, print_function
 from mpi4py import MPI
 import argparse
 import logging

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 Command-line utility to run TESS detrend correction from command-line.
@@ -13,8 +14,6 @@ Structure inspired by `tessphot` by Rasmus Handberg <rasmush@phys.au.dk>
 
 """
 
-# photometry runs under Python 2, so compatibility is an issue without this
-from __future__ import with_statement, print_function
 import os
 import argparse
 import logging
@@ -38,16 +37,6 @@ if __name__ == '__main__':
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 #	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
-	
-	
-#	args.camera = 3
-#	args.ccd = 3
-#	args.starid = 38634217
-#	args.method = 'cbv'
-#	args.all = True
-#	args.plot = True
-#	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
-
 
 	# Make sure at least one setting is given:
 	if not args.all and args.starid is None and not args.random:
@@ -98,11 +87,10 @@ if __name__ == '__main__':
 				if args.random:
 					task = tm.get_random_task()
 				else:
-					task = tm.get_task(starid=args.starid, datasource=args.datasource) #camera=args.camera, ccd=args.ccd, 
-				
+					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+
 				if task is None: break
-				
-				
+
 				# Run the correction:
 				result = corr.correct(task, output_folder=output_folder)
 
