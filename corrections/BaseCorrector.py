@@ -425,7 +425,7 @@ class BaseCorrector(object):
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
 			if output_folder != self.input_folder:
 				save_file = os.path.join(output_folder, 'corr-' + os.path.basename(fname))
-			else:	
+			else:
 				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 
