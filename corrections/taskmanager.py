@@ -8,7 +8,6 @@ A TaskManager which keeps track of which targets to process.
 .. codeauthor:: Filipe Pereira
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import os.path
 import sqlite3
 import logging
@@ -19,24 +18,25 @@ class TaskManager(object):
 	A TaskManager which keeps track of which targets to process.
 	"""
 
-	def __init__(self, todo_file, cleanup=False):
+	def __init__(self, todo_file, cleanup=False, overwrite=False):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
 		Parameters:
 			todo_file (string): Path to the TODO-file.
-			cleanup (boolean): Perform cleanup/optimization of TODO-file before
+			cleanup (boolean, optional): Perform cleanup/optimization of TODO-file before
 				during initialization. Default=False.
+			overwrite (boolean, optional): Overwrite any previously calculated results. Default=False.
 
 		Raises:
-			IOError: If TODO-file could not be found.
+			FileNotFoundError: If TODO-file could not be found.
 		"""
 
 		if os.path.isdir(todo_file):
 			todo_file = os.path.join(todo_file, 'todo.sqlite')
 
 		if not os.path.exists(todo_file):
-			raise IOError('Could not find TODO-file')
+			raise FileNotFoundError('Could not find TODO-file')
 
 		# Load the SQLite file:
 		self.conn = sqlite3.connect(todo_file)
@@ -60,10 +60,10 @@ class TaskManager(object):
 			self.conn.commit()
 
 		# Reset the status of everything for a new run:
-		# TODO: This should obviously be removed once we start running for real
-		self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
-		self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
-		self.conn.commit()
+		if overwrite:
+			self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
+			self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
+			self.conn.commit()
 
 		# Create table for diagnostics:
 		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
@@ -73,7 +73,8 @@ class TaskManager(object):
 			variance DOUBLE PRECISION,
 			rms_hour DOUBLE PRECISION,
 			ptp DOUBLE PRECISION,
-			errors TEXT
+			errors TEXT,
+			FOREIGN KEY (priority) REFERENCES todolist(priority) ON DELETE CASCADE ON UPDATE CASCADE
 		);""")
 		self.conn.commit()
 
@@ -120,7 +121,7 @@ class TaskManager(object):
 		if ccd is not None:
 			constraints.append('todolist.ccd=%d' % ccd)
 		if datasource is not None:
-			constraints.append('todolist.datasource="%s"' % datasource)	
+			constraints.append('todolist.datasource="%s"' % datasource)
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
@@ -149,7 +150,7 @@ class TaskManager(object):
 			))
 
 			# Save additional diagnostics:
-			self.cursor.execute("INSERT INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
+			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
 				result['priority'],
 				result['lightcurve_corr'],
 				result['elaptime_corr'],
@@ -162,7 +163,6 @@ class TaskManager(object):
 		except:
 			self.conn.rollback()
 			raise
-
 
 	def start_task(self, taskid):
 		"""

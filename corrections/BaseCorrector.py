@@ -9,7 +9,6 @@ All other specific correction classes will inherit from BaseCorrector.
 .. codeauthor:: Filipe Pereira
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import six
 import os.path
 import shutil
@@ -158,6 +157,7 @@ class BaseCorrector(object):
 
 		Parameters:
 			task (dict): Dictionary defining a task/lightcurve to process.
+			output_folder (string, optional): Path to directory where lightcurve should be saved.
 
 		Returns:
 			dict: Result dictionary containing information about the processing.
@@ -177,7 +177,7 @@ class BaseCorrector(object):
 			lc = self.load_lightcurve(task)
 
 			# Run the correction on this lightcurve:
-			lc, status = self.do_correction(lc)
+			lc_corr, status = self.do_correction(lc)
 
 		except (KeyboardInterrupt, SystemExit):
 			status = STATUS.ABORT
@@ -197,15 +197,15 @@ class BaseCorrector(object):
 
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
-			details['variance'] = nanvar(lc.flux, ddof=1)
-			details['rms_hour'] = rms_timescale(lc, timescale=3600/86400)
-			details['ptp'] = nanmedian(np.abs(np.diff(lc.flux)))
+			details['variance'] = nanvar(lc_corr.flux, ddof=1)
+			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
+			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
-			save_file = self.save_lightcurve(lc, output_folder=output_folder)
+			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
 
 			# Construct result dictionary from the original task
-			result = lc.meta['task'].copy()
+			result = lc_corr.meta['task'].copy()
 
 		# Update results:
 		t2 = default_timer()

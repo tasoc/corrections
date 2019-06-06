@@ -31,6 +31,7 @@ if __name__ == '__main__':
 	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
 	parser.add_argument('-a', '--all', help='Run correction on all targets.', action='store_true')
+	parser.add_argument('-o', '--overwrite', help='Overwrite previous runs and start over.', action='store_true')
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
@@ -84,7 +85,7 @@ if __name__ == '__main__':
 	# Initialize the corrector class:
 	with CorrClass(input_folder, plot=args.plot) as corr:
 		# Start the TaskManager:
-		with corrections.TaskManager(input_folder) as tm:
+		with corrections.TaskManager(input_folder, overwrite=args.overwrite) as tm:
 			while True:
 				if args.random:
 					task = tm.get_random_task()
