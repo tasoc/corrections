@@ -25,6 +25,7 @@ from lightkurve import TessLightCurve
 from .version import get_version
 from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
+from .manual_filters import manual_exclude
 
 __version__ = get_version()
 
@@ -76,8 +77,23 @@ class BaseCorrector(object):
 
 		# Save inputs:
 		self.input_folder = input_folder
-		self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		self.plot = plot
+
+		# Find the auxillary data directory based on which corrector is running:
+		if self.__class__.__name__ == 'BaseCorrector':
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
+		else:
+			CorrMethod = {
+				'EnsembleCorrector': 'ensemble',
+				'CBVCorrector': 'cbv',
+				'KASOCFilterCorrector': 'kasoc_filter'
+			}.get(self.__class__.__name__)
+
+			# Create a data folder specific to this corrector:
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
+
+			# Make sure that the folder exists:
+			os.makedirs(self.data_folder, exist_ok=True)
 
 		# The path to the TODO list:
 		todo_file = os.path.join(input_folder, 'todo.sqlite')
@@ -136,7 +152,7 @@ class BaseCorrector(object):
 		raise NotImplementedError("A helpful error message goes here") # TODO
 
 
-	def correct(self, task):
+	def correct(self, task, output_folder=None):
 		"""
 		Run correction.
 
@@ -186,7 +202,7 @@ class BaseCorrector(object):
 			details['ptp'] = nanmedian(np.abs(np.diff(lc.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
-			save_file = self.save_lightcurve(lc)
+			save_file = self.save_lightcurve(lc, output_folder=output_folder)
 
 			# Construct result dictionary from the original task
 			result = lc.meta['task'].copy()
@@ -322,7 +338,8 @@ class BaseCorrector(object):
 				sector=2,
 				#ra=0,
 				#dec=0,
-				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
+				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+				meta={}
 			)
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
@@ -354,8 +371,13 @@ class BaseCorrector(object):
 					sector=hdu[0].header.get('SECTOR'),
 					ra=hdu[0].header.get('RA_OBJ'),
 					dec=hdu[0].header.get('DEC_OBJ'),
-					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
+					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+					meta={}
 				)
+
+				# Apply manual exclude flag:
+				manexcl = manual_exclude(lc)
+				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
 
 		else:
 			raise ValueError("Invalid file format")
@@ -401,8 +423,10 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
-			#if output_folder != self.input_folder:
-			save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
+			if output_folder != self.input_folder:
+				save_file = os.path.join(output_folder, 'corr-' + os.path.basename(fname))
+			else:	
+				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 
 			# Open the FITS file to overwrite the corrected flux columns:
@@ -422,7 +446,7 @@ class BaseCorrector(object):
 						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
 
 				# Save the updated FITS file:
-				hdu.flush()
+#				hdu.flush()
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":

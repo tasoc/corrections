@@ -35,8 +35,19 @@ if __name__ == '__main__':
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
-	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
+	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
+#	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
+	
+	
+#	args.camera = 3
+#	args.ccd = 3
+#	args.starid = 38634217
+#	args.method = 'cbv'
+#	args.all = True
+#	args.plot = True
+#	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
+
 
 	# Make sure at least one setting is given:
 	if not args.all and args.starid is None and not args.random:
@@ -81,19 +92,19 @@ if __name__ == '__main__':
 
 	# Initialize the corrector class:
 	with CorrClass(input_folder, plot=args.plot) as corr:
-
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder) as tm:
 			while True:
-				
 				if args.random:
 					task = tm.get_random_task()
 				else:
-					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd)
+					task = tm.get_task(starid=args.starid, datasource=args.datasource) #camera=args.camera, ccd=args.ccd, 
 				
 				if task is None: break
+				
+				
 				# Run the correction:
-				result = corr.correct(task)
+				result = corr.correct(task, output_folder=output_folder)
 
 				# Construct results to return to TaskManager:
 				tm.save_results(result)

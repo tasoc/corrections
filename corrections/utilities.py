@@ -9,13 +9,13 @@ the corrections package.
 
 from __future__ import division, with_statement, print_function, absolute_import
 import numpy as np
-import six.moves.cPickle as pickle
+from six.moves import cPickle as pickle
 import gzip
 from bottleneck import nanmedian, nanmean
 from scipy.stats import binned_statistic
 
 # Constants:
-mad_to_sigma = 1.482602218505602 # Constant is 1/norm.ppf(3/4)
+mad_to_sigma = 1.482602218505602 #: Conversion constant from MAD to Sigma. Constant is 1/norm.ppf(3/4)
 
 PICKLE_DEFAULT_PROTOCOL = 2 #: Default protocol to use for saving pickle files.
 
