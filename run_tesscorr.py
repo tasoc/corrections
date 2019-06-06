@@ -35,7 +35,7 @@ if __name__ == '__main__':
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
-#	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
+	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
@@ -71,7 +71,9 @@ if __name__ == '__main__':
 		else:
 			input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
 
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+	output_folder = args.output_folder
+	if output_folder is None:
+		output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
 
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
