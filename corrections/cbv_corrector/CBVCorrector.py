@@ -116,7 +116,7 @@ class CBVCorrector(BaseCorrector):
 
 		else:
 			# Find the median of the variabilities:
-			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource="%s', 'cbv_area=%i' %(self.datasource,cbv_area)], select='variability')], dtype='float64')
+			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource="%s', 'cbv_area=%d' %(self.datasource,cbv_area)], select='variability')], dtype='float64')
 			median_variability = nanmedian(variability)
 
 			# Plot the distribution of variability for all stars:
@@ -130,7 +130,7 @@ class CBVCorrector(BaseCorrector):
 			plt.close(fig)
 
 			# Get the list of star that we are going to load in the lightcurves for:
-			stars = self.search_database(search=['datasource=%s', 'cbv_area=%i' %(self.datasource,cbv_area), 'variability < %f' %(self.threshold_variability*median_variability)])
+			stars = self.search_database(search=['datasource=%s', 'cbv_area=%d' %(self.datasource,cbv_area), 'variability < %f' %(self.threshold_variability*median_variability)])
 
 			# Number of stars returned:
 			Nstars = len(stars)
