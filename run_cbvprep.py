@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	
-	args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
+	#args.input_folder = '/media/mikkelnl/Elements/TESS/S01_tests/lightcurves-combined'
 #	args.area = [413]
 	
 	
