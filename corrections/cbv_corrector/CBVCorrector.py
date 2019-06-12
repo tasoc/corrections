@@ -116,7 +116,7 @@ class CBVCorrector(BaseCorrector):
 
 		else:
 			# Find the median of the variabilities:
-			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource=%s' %self.datasource, 'cbv_area=%i' %cbv_area], select='variability')], dtype='float64')
+			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource="%s"' %self.datasource, 'cbv_area=%i' %cbv_area], select='variability')], dtype='float64')
 			median_variability = nanmedian(variability)
 
 			# Plot the distribution of variability for all stars:
@@ -130,7 +130,7 @@ class CBVCorrector(BaseCorrector):
 			plt.close(fig)
 
 			# Get the list of star that we are going to load in the lightcurves for:
-			stars = self.search_database(search=['datasource=%s' %self.datasource, 'cbv_area=%i' %cbv_area, 'variability < %f' %(self.threshold_variability*median_variability)])
+			stars = self.search_database(search=['datasource="%s"' %self.datasource, 'cbv_area=%i' %cbv_area, 'variability < %f' %(self.threshold_variability*median_variability)])
 
 			# Number of stars returned:
 			Nstars = len(stars)
@@ -533,7 +533,7 @@ class CBVCorrector(BaseCorrector):
 			logger.info("Initial co-trending for light curves in %s CBV area%d" %(self.datasource,cbv_area))
 
 		# Load stars from data base
-		stars = self.search_database(search=['datasource=%s', 'cbv_area=%i' %(self.datasource,cbv_area)])
+		stars = self.search_database(search=['datasource="%s"' %self.datasource, 'cbv_area=%i' %cbv_area])
 
 		# Load the cbv from file:
 		cbv = CBV(self.data_folder, cbv_area, self.datasource, self.threshold_snrtest)
@@ -655,7 +655,7 @@ class CBVCorrector(BaseCorrector):
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0 = np.zeros([n_stars, 3])
 		for jj, star in enumerate(results[:,0]):
-			star_single = self.search_database(search=['datasource=%s', 'cbv_area=%i' %(self.datasource,cbv_area), 'todolist.starid=%i' %int(star)])
+			star_single = self.search_database(search=['datasource="%s"' %self.datasource, 'cbv_area=%i' %cbv_area, 'todolist.starid=%i' %int(star)])
 			pos_mag0[jj, 0] = star_single[0]['pos_row']
 			pos_mag0[jj, 1] = star_single[0]['pos_column']
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
