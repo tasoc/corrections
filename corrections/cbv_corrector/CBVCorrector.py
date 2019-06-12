@@ -130,7 +130,7 @@ class CBVCorrector(BaseCorrector):
 			plt.close(fig)
 
 			# Get the list of star that we are going to load in the lightcurves for:
-			stars = self.search_database(search=['datasource=%s' %self.datasource, 'cbv_area=%i' %cbv_area), 'variability < %f' %(self.threshold_variability*median_variability)])
+			stars = self.search_database(search=['datasource=%s' %self.datasource, 'cbv_area=%i' %cbv_area, 'variability < %f' %(self.threshold_variability*median_variability)])
 
 			# Number of stars returned:
 			Nstars = len(stars)
