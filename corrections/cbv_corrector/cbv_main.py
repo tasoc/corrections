@@ -133,11 +133,11 @@ class CBV(object):
 	"""
 
 	#--------------------------------------------------------------------------
-	def __init__(self, data_folder, cbv_area, threshold_snrtest=5):
+	def __init__(self, data_folder, cbv_area, datasource, threshold_snrtest=5):
 		logger = logging.getLogger(__name__)
 		
-		filepath = os.path.join(data_folder, 'cbv-%d.npy' % cbv_area)
-		filepath_s = os.path.join(data_folder, 'cbv-s-%d.npy' % cbv_area)
+		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' %(datasource,cbv_area))
+		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' %(datasource,cbv_area))
 		self.cbv = np.load(filepath)
 		self.cbv_s = np.load(filepath_s)
 		
@@ -146,14 +146,14 @@ class CBV(object):
 		self.remove_cols(indx_lowsnr)
 				
 		self.priors = None
-		priorpath = os.path.join(data_folder, 'D_area%d.pkl' %cbv_area)
+		priorpath = os.path.join(data_folder, 'D_%s-area%d.pkl' %(datasource,cbv_area))
 		if os.path.exists(priorpath):
 			self.priors = loadPickle(priorpath)
 		else:
 			logger.info('Path to prior distance file does not exist', priorpath)
 		
 		self.inires = None
-		inipath = os.path.join(data_folder, 'mat-%d_free_weights.npz' %cbv_area)
+		inipath = os.path.join(data_folder, 'mat-%s-%d_free_weights.npz' %(datasource,cbv_area))
 		if os.path.exists(inipath):
 			self.inires = np.load(inipath)['res']
 			

@@ -16,12 +16,12 @@ import multiprocessing
 from corrections import CBVCorrector, BaseCorrector
 
 #------------------------------------------------------------------------------
-def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None, ip=False):
+def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None, ip=False, datasource='ffi'):
 
 	logger = logging.getLogger(__name__)
 	logger.info('running CBV for area %s', str(cbv_area))
 
-	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv) as C:
+	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv, datasource=datasource) as C:
 		C.compute_cbvs(cbv_area, ent_limit=el)
 		C.spike_sep(cbv_area)
 		
@@ -50,6 +50,8 @@ if __name__ == '__main__':
 	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
 	group.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
 	group.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV')
+
+	group.add_argument('--datasource', type=str, default='ffi', choices=('ffi', 'tpf'), help='Data source for the creation of CBVs')
 
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 
@@ -108,7 +110,7 @@ if __name__ == '__main__':
 	logger.info("Using %d processes.", threads)
 
 	# Create wrapper function which only takes a single cbv_area as input:
-	prepare_cbv_wrapper = partial(prepare_cbv, input_folder=input_folder, threshold=args.snr, ncbv=args.ncbv, el=args.el, ip=args.iniplot)
+	prepare_cbv_wrapper = partial(prepare_cbv, input_folder=input_folder, threshold=args.snr, ncbv=args.ncbv, el=args.el, ip=args.iniplot, datasource=args.datasource)
 
 	# Run the preparation:
 	if threads > 1:
