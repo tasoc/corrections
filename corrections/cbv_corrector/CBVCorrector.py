@@ -116,7 +116,7 @@ class CBVCorrector(BaseCorrector):
 
 		else:
 			# Find the median of the variabilities:
-			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource="%s' %self.datasource, 'cbv_area=%i' %cbv_area], select='variability')], dtype='float64')
+			variability = np.array([float(row['variability']) for row in self.search_database(search=['datasource=%s' %self.datasource, 'cbv_area=%i' %cbv_area], select='variability')], dtype='float64')
 			median_variability = nanmedian(variability)
 
 			# Plot the distribution of variability for all stars:
