@@ -28,7 +28,6 @@ import logging
 import traceback
 import os
 import enum
-from timeit import default_timer
 import corrections
 
 #------------------------------------------------------------------------------
@@ -137,9 +136,7 @@ def main():
 
 					if tag == tags.START:
 						# Run the correction:
-						t1 = default_timer()
 						result = corr.correct(task)
-						t2 = default_timer()
 
 						# Send the result back to the master:
 						comm.send(result, dest=0, tag=tags.DONE)

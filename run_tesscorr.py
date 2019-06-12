@@ -35,6 +35,7 @@ if __name__ == '__main__':
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
+	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default='ffi', help='Data source or cadence.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
