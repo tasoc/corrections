@@ -128,7 +128,8 @@ if __name__ == '__main__':
 	elif threads == 1:
 		# Only a single area to process, so let's not bother with
 		# starting subprocesses, but simply run it directly:
-		prepare_cbv_wrapper(cbv_areas[0])
+		for cbv_area in cbv_areas:
+			prepare_cbv_wrapper(cbv_area)
 
 	else:
 		logger.info("No cbv-areas found to be processed.")
