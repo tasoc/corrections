@@ -159,7 +159,6 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		print(constraints)
 
 		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
