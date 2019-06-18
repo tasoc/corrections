@@ -138,7 +138,7 @@ class TaskManager(object):
 		return num
 	
 
-	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
+	def get_task(self, camera=None, ccd=None, datasource=None):
 		"""
 		Get next task to be processed.
 
@@ -147,8 +147,6 @@ class TaskManager(object):
 		"""
 
 		constraints = []
-		if starid is not None:
-			constraints.append('todolist.starid=%d' % starid)
 		if camera is not None:
 			constraints.append('todolist.camera=%d' % camera)
 		if ccd is not None:
@@ -161,7 +159,9 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % (
+		print(constraints)
+
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
 			constraints
