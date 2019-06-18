@@ -105,7 +105,7 @@ class TaskManager(object):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
 		
-	def get_num_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
+	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
 		Get number of tasks due to be processed.
 
