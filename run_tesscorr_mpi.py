@@ -83,7 +83,7 @@ def main():
 					if tag == tags.DONE:
 						# The worker is done with a task
 						tm.logger.info("Got data from worker %d: %s", source, data)
-						tm.save_result(data)
+						tm.save_results(data)
 
 					if tag in (tags.DONE, tags.READY):
 						# Worker is ready, so send it a task
