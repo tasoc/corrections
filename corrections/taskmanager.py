@@ -104,6 +104,39 @@ class TaskManager(object):
 	def close(self):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
+		
+	def get_num_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
+		"""
+		Get number of tasks due to be processed.
+
+		Returns:
+			int: Number of tasks due to be processed.
+		"""
+		
+		constraints = []
+		if starid is not None:
+			constraints.append('todolist.starid=%d' % starid)
+		if camera is not None:
+			constraints.append('todolist.camera=%d' % camera)
+		if ccd is not None:
+			constraints.append('todolist.ccd=%d' % ccd)
+		if datasource is not None:
+			constraints.append('todolist.datasource="%s"' % datasource)
+
+		if constraints:
+			constraints = ' AND ' + " AND ".join(constraints)
+		else:
+			constraints = ''
+
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % (
+			STATUS.OK.value,
+			STATUS.WARNING.value,
+			constraints
+		))
+		
+		num = int(self.cursor.fetchone()['num'])
+		return num
+	
 
 	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
