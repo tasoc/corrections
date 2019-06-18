@@ -89,7 +89,10 @@ class BaseCorrector(object):
 			}.get(self.__class__.__name__)
 
 			# Create a data folder specific to this corrector:
-			self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
+			if CorrMethod == 'cbv':
+				self.data_folder = os.path.join(input_folder, 'cbv-prepare')
+			else:
+				self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
 
 			# Make sure that the folder exists:
 			os.makedirs(self.data_folder, exist_ok=True)
