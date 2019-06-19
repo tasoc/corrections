@@ -89,10 +89,7 @@ class BaseCorrector(object):
 			}.get(self.__class__.__name__)
 
 			# Create a data folder specific to this corrector:
-			if CorrMethod == 'cbv':
-				self.data_folder = os.path.join(input_folder, 'cbv-prepare')
-			else:
-				self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
 
 			# Make sure that the folder exists:
 			os.makedirs(self.data_folder, exist_ok=True)
@@ -426,10 +423,26 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
+			
+			if CorrMethod == 'CBV':
+				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
+			if CorrMethod == 'Ensemble':
+				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-ens_lc')
+			if CorrMethod == 'KASOC Filter':
+				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-kf_lc')
+			
+			
+			
 			if output_folder != self.input_folder:
-				save_file = os.path.join(output_folder, 'corr-' + os.path.basename(fname))
+				save_file = os.path.join(output_folder, filename)
 			else:
-				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
+				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
+				
+#			if output_folder != self.input_folder:
+#				save_file = os.path.join(output_folder, 'corr-' + os.path.basename(fname))
+#			else:
+#				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))	
+			
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 
 			# Open the FITS file to overwrite the corrected flux columns:
