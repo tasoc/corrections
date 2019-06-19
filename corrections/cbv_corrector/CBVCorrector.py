@@ -698,8 +698,9 @@ class CBVCorrector(BaseCorrector):
 			cbv = CBV(self.data_folder, cbv_area, self.datasource, self.threshold_snrtest)
 			self.cbvs[cbv_area] = cbv
 			
-			if cbv.priors is None:
-				raise IOError('Trying to co-trend without a defined prior')
+			if not self.simple_fit:
+				if cbv.priors is None:
+					raise IOError('Trying to co-trend without a defined prior')
 				
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1] 
@@ -743,7 +744,6 @@ class CBVCorrector(BaseCorrector):
 				status = STATUS.WARNING
 		
 		lc_corr.meta['additional_headers']['CBV_C0'] = (res[-1], 'fitted offset')
-
 		lc_corr.meta['additional_headers']['CBV_AREA'] = (cbv_area, 'CBV area of star')
 		lc_corr.meta['additional_headers']['CBV_BIC'] = (self.use_bic, 'was BIC used to select no of CBVs')
 		lc_corr.meta['additional_headers']['CBV_FIT'] = (self.simple_fit, 'CBV fitted with LLSQ?')
