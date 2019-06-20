@@ -406,6 +406,7 @@ class BaseCorrector(object):
 			string: Path to the generated file.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
 		# Find the name of the correction method based on the class name:
@@ -444,6 +445,8 @@ class BaseCorrector(object):
 #				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))	
 			
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
+			# Change permission of copied file to allow the addition of the corrected lightcurve
+			os.chmod(save_file, 0o640) 
 
 			# Open the FITS file to overwrite the corrected flux columns:
 			with fits.open(save_file, mode='update') as hdu:
