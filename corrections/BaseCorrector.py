@@ -6,9 +6,9 @@ All other specific correction classes will inherit from BaseCorrector.
 
 .. codeauthor:: Lindsey Carboneau
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+.. codeauthor:: Filipe Pereira
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import six
 import os.path
 import shutil
@@ -24,6 +24,7 @@ from lightkurve import TessLightCurve
 from .version import get_version
 from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
+from .manual_filters import manual_exclude
 
 __version__ = get_version()
 
@@ -75,8 +76,23 @@ class BaseCorrector(object):
 
 		# Save inputs:
 		self.input_folder = input_folder
-		self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		self.plot = plot
+
+		# Find the auxillary data directory based on which corrector is running:
+		if self.__class__.__name__ == 'BaseCorrector':
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
+		else:
+			CorrMethod = {
+				'EnsembleCorrector': 'ensemble',
+				'CBVCorrector': 'cbv',
+				'KASOCFilterCorrector': 'kasoc_filter'
+			}.get(self.__class__.__name__)
+
+			# Create a data folder specific to this corrector:
+			self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
+
+			# Make sure that the folder exists:
+			os.makedirs(self.data_folder, exist_ok=True)
 
 		# The path to the TODO list:
 		todo_file = os.path.join(input_folder, 'todo.sqlite')
@@ -135,12 +151,13 @@ class BaseCorrector(object):
 		raise NotImplementedError("A helpful error message goes here") # TODO
 
 
-	def correct(self, task):
+	def correct(self, task, output_folder=None):
 		"""
 		Run correction.
 
 		Parameters:
 			task (dict): Dictionary defining a task/lightcurve to process.
+			output_folder (string, optional): Path to directory where lightcurve should be saved.
 
 		Returns:
 			dict: Result dictionary containing information about the processing.
@@ -160,7 +177,7 @@ class BaseCorrector(object):
 			lc = self.load_lightcurve(task)
 
 			# Run the correction on this lightcurve:
-			lc, status = self.do_correction(lc)
+			lc_corr, status = self.do_correction(lc)
 
 		except (KeyboardInterrupt, SystemExit):
 			status = STATUS.ABORT
@@ -180,15 +197,15 @@ class BaseCorrector(object):
 
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
-			details['variance'] = nanvar(lc.flux, ddof=1)
-			details['rms_hour'] = rms_timescale(lc, timescale=3600/86400)
-			details['ptp'] = nanmedian(np.abs(np.diff(lc.flux)))
+			details['variance'] = nanvar(lc_corr.flux, ddof=1)
+			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
+			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
-			save_file = self.save_lightcurve(lc)
+			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
 
 			# Construct result dictionary from the original task
-			result = lc.meta['task'].copy()
+			result = lc_corr.meta['task'].copy()
 
 		# Update results:
 		t2 = default_timer()
@@ -242,7 +259,7 @@ class BaseCorrector(object):
 
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT {distinct:s}{select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status=1 {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {distinct:s}{select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
 			distinct='DISTINCT ' if distinct else '',
 			select=select,
 			search=search,
@@ -321,7 +338,8 @@ class BaseCorrector(object):
 				sector=2,
 				#ra=0,
 				#dec=0,
-				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
+				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+				meta={}
 			)
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
@@ -353,8 +371,13 @@ class BaseCorrector(object):
 					sector=hdu[0].header.get('SECTOR'),
 					ra=hdu[0].header.get('RA_OBJ'),
 					dec=hdu[0].header.get('DEC_OBJ'),
-					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK
+					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+					meta={}
 				)
+
+				# Apply manual exclude flag:
+				manexcl = manual_exclude(lc)
+				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
 
 		else:
 			raise ValueError("Invalid file format")
@@ -383,6 +406,7 @@ class BaseCorrector(object):
 			string: Path to the generated file.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
 		# Find the name of the correction method based on the class name:
@@ -400,9 +424,25 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
-			#if output_folder != self.input_folder:
-			save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))
+			
+			if CorrMethod == 'CBV':
+				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
+			if CorrMethod == 'Ensemble':
+				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-ens_lc')
+			if CorrMethod == 'KASOC Filter':
+				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-kf_lc')
+			
+			
+			
+			if output_folder != self.input_folder:
+				save_file = os.path.join(output_folder, filename)
+			else:
+				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
+							
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
+			
+			# Change permission of copied file to allow the addition of the corrected lightcurve
+			os.chmod(save_file, 0o640) 
 
 			# Open the FITS file to overwrite the corrected flux columns:
 			with fits.open(save_file, mode='update') as hdu:
@@ -421,7 +461,7 @@ class BaseCorrector(object):
 						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
 
 				# Save the updated FITS file:
-				hdu.flush()
+#				hdu.flush()
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":

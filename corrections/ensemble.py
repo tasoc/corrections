@@ -4,111 +4,23 @@
 """
 Initial code structure for the ensemble photometry detrending program.
 
-Global Parameters:
-    __data_folder__ (str): Location of the data
-    __sector__ (str): Sector to look at
-
 Created on Thu Mar 29 09:58:55 2018
-
 .. codeauthor:: Derek Buzasi
 .. codeauthor:: Oliver J. Hall
 .. codeauthor:: Lindsey Carboneau
-.. codeauthor:: Fillipe Pereira
+.. codeauthor:: Filipe Pereira
 """
 import numpy as np
-import glob
-import os
+import matplotlib.pyplot as plt
 import scipy.interpolate
 import scipy.optimize as sciopt
-import sqlite3
-import sys
-from tqdm import tqdm
-from operator import add
 from copy import deepcopy
-from time import sleep
-
-from . import BaseCorrector
-
-
-# from star import Star
+import time
 import lightkurve
+import logging
 
-#set up output directory
-if not os.path.isdir("toutput"):
-    os.mkdir('toutput')
+from . import BaseCorrector, STATUS
 
-################################<PLACEHOLDERS>
-
-#TODO: These shouldn't be hard coded!
-# data_folder = "../TESS_Collab_Data"
-__sql_folder__ = "../../data/Rasmus"
-__data_folder__ = "../../data/Rasmus/data"
-__sector__ = "sector02"
-
-def read_todolist():
-    """
-    Function to read in the sql to do list for the globally defined sector (__sector__).
-
-    Returns:
-        star_names (ndarray): Labels of all the names of the stars in a given sector.
-        Tmag (ndarray): TESS photometry apparent magnitude for all stars.
-        variability (ndarray): A parameter describing the level of intrinsic variability for all stars.
-        eclat (ndarray): Ecliptic latitude for all stars.
-        eclon (ndarray): Ecliptic longitude for all stars.
-    """
-
-    #open sql file and find list of all stars in segment 2, camera 1, ccd 1
-    #TODO: These should not  be hard coded!
-    conn = sqlite3.connect('{}/todo-{}.sqlite'.format(__sql_folder__, __sector__))
-    # conn = sqlite3.connect('/media/derek/data/TESS/TDA-4 data/Rasmus/todo-sector02.sqlite')
-    # conn = sqlite3.connect('{}/todo-sector02.sqlite'.format(data_folder))
-    c = conn.cursor()
-    c.execute("SELECT * FROM todolist LEFT JOIN diagnostics ON todolist.priority = diagnostics.priority WHERE camera = 1 AND ccd = 1 AND mean_flux > 0 ;")
-    seg2_list = c.fetchall()
-    seg2_list = np.asarray(seg2_list)
-    conn.close()
-
-    star_names = seg2_list[:,1]
-    Tmag = seg2_list[:,6]
-    variability = seg2_list[:,15]
-    eclat = seg2_list[:,17].astype(float)
-    eclon = seg2_list[:,18].astype(float)
-
-    return star_names, Tmag, variability, eclat, eclon
-
-def read_stars(star_names):
-    """
-    Function to read in the flux timeseries for all stars in a sector given in
-    star_names. Time, flux, and some additional metadata are stored in a list of
-    class instances. For this, we use the lightkurve open-source Python package.
-
-    Parameters:
-        star_names (ndarray): Labels of all the names of the stars in a given
-            sector.
-
-    Returns:
-        star_array (ndarray): An array of lightkurve.TessLightCurve class
-            instances holding metadata on each star. (i.e. flux, time, mean
-            flux, std of flux).
-    """
-    # Read star data from each file and instanciate a Star object for each with all data
-    star_array = np.empty(star_names.size, dtype=object)
-    for name_index in tqdm(range(star_names.size)):
-        filename =  '{}/noisy_by_sectors/Star{}-{}.noisy'.format(__data_folder__, star_names[name_index], __sector__)
-        mafs = np.loadtxt(filename, usecols=range(0,2)).T
-
-        #Build lightkurve object and associated metadata
-        lc = lightkurve.TessLightCurve(mafs[0], mafs[1]).remove_nans()
-        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
-        drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-        lc.meta = { 'fmean' : np.max(lc.flux),
-                    'fstd' : np.std(np.diff(lc.flux)),
-                    'frange' : frange,
-                    'drange' : drange}
-        star_array[name_index] = lc
-    return star_array
-
-################################</PLACEHOLDERS>
 
 class EnsembleCorrector(BaseCorrector):
     """
@@ -117,244 +29,213 @@ class EnsembleCorrector(BaseCorrector):
     def __init__(self, *args, **kwargs):
         """
         Initialize the correction object
-
         Parameters:
             *args: Arguments for the BaseCorrector class
             **kwargs: Keyword Arguments for the BaseCorrector class
         """
-        #TODO: Make sure this works in tandem with basecorrector
-        # super(self.__class__, self).__init__()
+        super(self.__class__, self).__init__(*args, **kwargs)
 
-        #Construct the star array in to memory
-        #TODO: Make this a target readin function, which will save time.
-        self.star_array = read_stars(read_todolist()[0])
-
-    def do_correction(self, lc, ifile):
+    def do_correction(self, lc):
         """
         Function that takes all input stars for a sector and uses them to find a detrending
         function using ensemble photometry for a star 'star_names[ifile]', where ifile is the
         index for the star in the star_array and star_names list.
-
         Parameters:
-            lc (lightkurve.TessLightCurve object): Raw lightcurve stored
-                in a TessLightCurve object.
-            ifile (int): TEMPORARY index of the relevant star in the star_names
-                list.
-
+            lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
         Returns:
-            lc_corr (lightkurve.TessLightCurve object): Corrected light-
-                curve stored in a TessLightCurve object.
+            lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
+            The status of the correction.
         """
-        star_names, Tmag, variability, eclat, eclon = read_todolist()
+        logger = logging.getLogger(__name__)
+        # TODO: Remove in final version. Used to test execution time
+        fstart_time = time.time()
 
-        #Add metadata to the lightcurve object
-        #Build lightkurve object and associated metadata
-        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)
-        frange /= np.mean(lc.flux)
+        # Calculate extra data for the target lightcurve
+        lc = lc.remove_nans()
+        # NOTE: Is frange supposed to be missing the brackets and not join the percentiles ??
+        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
         drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-        lc.meta = { 'fmean' : np.max(lc.flux),
-                            'fstd' : np.std(np.diff(lc.flux)),
-                            'frange' : frange,
-                            'drange' : drange}
+        lc.meta.update({ 'fmean' : np.max(lc.flux),
+                        'fstd' : np.std(np.diff(lc.flux)),
+                        'frange' : frange,
+                        'drange' : drange})
 
-        #Begin
-        dist = np.zeros([2,len(star_names)])
-        dist[0] = range(len(star_names))
-        dist[1] = np.sqrt((eclat-eclat[ifile])**2+(eclon-eclon[ifile])**2)
+        # StarID, pixel positions and lightcurve filenames are retrieved from the database
+        select_params = ["todolist.starid", "pos_row", "pos_column"]
+        search_params = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0"]
+        db_raw = self.search_database(select=select_params, search=search_params)
+        starid = np.array([row['starid'] for row in db_raw])
+        pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
 
-        #artificially increase distance to the star itself, so when we sort by distance it ends up last
-        dist = np.transpose(dist)
-        #dist[ifile][1] = 10*np.pi
-        dist[ifile][1] = 10000.0
-        #sort by distance
-        sort_dist = np.sort(dist,0)
-        #set up initial search radius to build ensemble so that 20 stars are included
-        search_radius = sort_dist[19][1]; #20 works well for 20s cadence...more for longer?
+        # TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist 
+        # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance. Pixel distance used
+        idx = starid == lc.targetid
+        dist = np.sqrt((pixel_coords[:,0] - pixel_coords[idx,0])**2 + (pixel_coords[:,1] - pixel_coords[idx,1])**2)
+        distance_index = dist.argsort()
+        target_index = distance_index[0]
+        distance = dist[distance_index]
 
-        #set up start/end times for stellar time series
+        # Set up start/end times for stellar time series
         time_start = np.amin(lc.time)
         time_end = np.max(lc.time)
 
-        #set minimum range parameter...this is log10 photometric range, and stars more variable than this will be
-        #excluded from the ensemble
+        # Set minimum range parameter...this is log10 photometric range, and stars more variable than this will be excluded from the ensemble
         min_range = -2.0
         min_range0 = min_range
         flag = 1
 
-        #start loop to build ensemble
+        # Define variables to use in the loop to build the ensemble of stars
+        # List of star indexes to be included in the ensemble
+        temp_list = []
+        # Initial number of closest stars to consider and variable to increase number
+        initial_num_stars = 20
+        star_count = initial_num_stars
+        # (Alternate param) Initial distance at which to consider stars around the target
+        # initial_search_radius = -1
+
+        # Follows index of dist array to restart search after the last addded star. Starts at 1 as the first star ordered by distance is the target
+        i = 1
+        # Setup search and select params to use in loop
+        select_loop = ["todolist.starid", "camera", "ccd", "lightcurve"]
+        search_loop = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0"]
+        # Start loop to build ensemble
         while True:
-            #num_star is number of stars in ensemble
-            num_star = 0
-            #full_time,flux,weight are time,flux,weight points in the ensemble
-            full_time = np.array([])
-            full_flux = np.array([])
-            full_flag = np.array([])
-            full_weight = np.array([])
-            tflux = np.array([])
-            comp_list = np.array([])
 
-            #loop through all other stars to build ensemble
-            #exclude stars outside search radius, flagged, too active (either relatively or absolutely)
-            #excluding stars with negative flux is only required because the synthetic data have some flawed
-            #light curves that are <0. Probably can remove this with real data.
+            # First get a list of indexes of a specified number of stars to build the ensemble
+            while len(temp_list) < star_count:
+                
+                # Get lightkurve for next star closest to target
+                # NOTE: This seems needlesly complicated. Probably can just change load_lightcurve
+                next_star_index = distance_index[i]
+                search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
+                next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
+                next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
+                search_loop.pop(-1)
+                
+                # Compute the rest of its data. NOTE: Change this to the database or not ???
+                frange = np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) / np.mean(next_star_lc.flux)
+                drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
+                next_star_lc.meta.update({ 'fmean' : np.max(next_star_lc.flux),
+                                            'fstd' : np.std(np.diff(next_star_lc.flux)),
+                                            'frange' : frange,
+                                            'drange' : drange})
 
-            # #Put the selection conditions into a boolean array for all stars simultaneously
-            # sel = (dist[:,1] < search_radius) & (np.log10(drange) < min_range) & (drange < 10*drange[ifile])
-            for test_star in range(len(star_names[:])):
-                if (dist[test_star][1]<search_radius  and
-                    np.log10(self.star_array[test_star].meta['drange']) < min_range and
-                    self.star_array[test_star].meta['drange'] < 10*lc.meta['drange']):
+                # Stars are added to ensemble if they fulfill the requirements
+                if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange']):
+                    temp_list.append([next_star_index, next_star_lc.copy()])
+                i += 1
 
-                    num_star+=1
-                    #calculate relative flux for star to be added to ensemble
-                    test0 = self.star_array[test_star].time
-                    test1 = self.star_array[test_star].flux
-                    test1 = test1/self.star_array[test_star].meta['fmean']
-                    #calculate weight for star to be added to the ensemble. weight is whitened stdev relative to mean flux
-                    weight = np.ones_like(test1)
-                    weight = weight*self.star_array[test_star].meta['fmean']/self.star_array[test_star].meta['fstd']
+            ensemble_list = np.array(temp_list)
+            # Now populate the arrays of data with the stars in the ensemble
+            full_time = np.concatenate([temp_lc.time for temp_lc in ensemble_list[:,1]]).ravel()
+            tflux = np.concatenate(np.array([temp_lc.flux / temp_lc.meta['fmean'] for temp_lc in ensemble_list[:,1]])).ravel()
+            full_weight = np.concatenate(np.array([np.full(temp_lc.flux.size, temp_lc.meta['fmean'] / temp_lc.meta['fstd']) for temp_lc in ensemble_list[:,1]])).ravel()
+            full_flux = np.multiply(tflux, full_weight)
 
-                    #add time, flux, weight to ensemble light curve. flux is weighted flux
-                    full_time = np.append(full_time,test0)
-                    full_flux = np.append(full_flux,np.multiply(test1,weight))
-                    full_weight = np.append(full_weight,weight)
-                    #tflux is total unweighted flux
-                    tflux = np.append(tflux,test1)
-                    comp_list = np.append(comp_list,test_star)
+            # TODO: As of now the code begins by ensuring 20 stars are added to the ensemble and then adds one by one. Might have to change to use a search radius
+            # Fetch distance of last added star to ensemble to use as search radius to test conditions ahead
+            search_radius = distance[i-1]
 
-            #set up time array with 0.5-day resolution which spans the time range of the time series
-            #then histogram the data based on that array
+            # Set up time array with 0.5-day resolution which spans the time range of the time series then histogram the data based on that array
             gx = np.arange(time_start,time_end,0.5)
-            n = np.histogram(full_time,gx)
-            n = np.asarray(n[0])
-            n2 = np.histogram(lc.time,gx)
-            n2 = np.asarray(n2[0])
-            #if the least-populated bin has less than 2000 points, increase the size of the ensemble by first
-            #increasing the level of acceptable variability until it exceeds the variability of the star. Once that happens,
-            #increase the search radius and reset acceptable variability back to initial value. If the search radius exceeds
-            #a limiting value (pi/4 at this point), accept that we can't do any better.
-            #if np.min(n[0])<400:
-            #print np.min(n[n2>0])
-            if np.min(n[n2>0])<1000:
-                #print min_range
+            n = np.histogram(full_time, gx)[0]
+            n2 = np.histogram(lc.time, gx)[0]
+
+            # TODO: Probably should change the condition that adds stars to the algorithm
+            # If the least-populated bin has less than 2000 points, increase the size of the ensemble by first
+            # increasing the level of acceptable variability until it exceeds the variability of the star. Once that happens,
+            # increase the search radius and reset acceptable variability back to initial value. If the search radius exceeds
+            # a limiting value (pi/4 at this point), accept that we can't do any better.
+            # if np.min(n[0])<400:
+            # print np.min(n[n2>0])
+            if np.min(n[n2>0]) < 1000:
                 min_range = min_range+0.3
                 if min_range > np.log10(np.max(lc.meta['drange'])):
-                    #if (search_radius < 0.5):
                     if (search_radius < 100):
-                        #search_radius = search_radius+0.1
-                        search_radius = search_radius+10
+                        # search_radius += 10
+                        star_count += 1
+                        search_radius = distance[i]
                     else:
-                        search_radius = search_radius*1.1
+                        # search_radius *= 1.1
                         min_range = min_range0
+                        star_count += 1
+                        search_radius = distance[i]
 
-                #if search_radius > np.pi/4:
+                # if search_radius > np.pi/4:
                 if search_radius > 400:
                     break
             else:
                     break
-        #clean up ensemble points by removing NaNs
-        full_time = full_time[~np.isnan(full_flux)]
-        full_weight = full_weight[~np.isnan(full_flux)]
-        full_flux = full_flux[~np.isnan(full_flux)]
-        tflux = tflux[~np.isnan(full_flux)]
 
-        #sort ensemble into time order
-        idx = np.argsort(full_time)
+        
+        # Ensemble is now built. Clean up ensemble points by removing NaNs
+        not_nan_idx = ~np.isnan(full_flux) # Since index is same for all arrays save it first to use cached version
+        full_time = full_time[not_nan_idx]
+        full_weight = full_weight[not_nan_idx]
+        full_flux = full_flux[not_nan_idx]
+        tflux = tflux[not_nan_idx]
+
+        # Sort ensemble into time order
+        time_idx = np.argsort(full_time)
+        full_time = full_time[time_idx]
+        full_flux = full_flux[time_idx]
+        full_weight = full_weight[time_idx]
+
+        # Simplify by discarding ensemble points outside the temporal range of the stellar time series
+        idx = (full_time>time_start) & (full_time<time_end)
         full_time = full_time[idx]
         full_flux = full_flux[idx]
         full_weight = full_weight[idx]
-
-        #temporary copies of ensemble components
-        full_time0 = full_time
-        full_flux0 = full_flux
-        full_weight0 = full_weight
-
-        #set up temporary files
 
         temp_time = full_time
         temp_flux = full_flux
         temp_weight = full_weight
 
-        #simplify by discarding ensemble points outside the temporal range of the stellar time series
-        temp_time = full_time[(full_time>time_start) & (full_time<time_end)]
-        temp_flux = full_flux[(full_time>time_start) & (full_time<time_end)]
-        temp_weight = full_weight[(full_time>time_start) & (full_time<time_end)]
-
-        full_time = temp_time
-        full_flux = temp_flux
-        full_weight = temp_weight
-
-        #identify locations where there is a break in the time series. If there is at least one break, identify
-        #segments and label ensemble points by segment; bidx2 is the label. If there are no breaks, then identify
-        #only one segment and label accordingly
-        break_locs = np.where(np.diff(full_time)>0.1)
-        if np.size(break_locs)>0:
-            if (break_locs[0][-1] < np.size(full_time)):
-                break_locs = np.append(break_locs, np.size(full_time)-1)
-                break_locs = np.insert(break_locs,0,0)
-                cts, bin_edges = np.histogram(full_time,full_time[break_locs])
-                bidx2 = np.digitize(full_time,full_time[break_locs])
-                num_segs = np.size(break_locs)-1
-        else:
-                cts, bin_edges = np.histogram(full_time,np.squeeze(np.append(full_time[0],full_time[-1])))
-                bidx2 = np.digitize(full_time,np.squeeze(np.append(full_time[0],full_time[-1]+1)))
-                num_segs = 1;
-                break_locs = np.append(0,np.size(full_time)-1)
-
-        #pp will be components of spline fit to ensemble for each segment
-        pp_ensemble = []
-        #set up influx, inweight,intime as flux/weight/time of ensemble segment-by-segment
-        for iseg in range(num_segs):
-            influx = full_flux[bidx2-1==iseg]
-            inweight = full_weight[bidx2-1==iseg]
-            intime = full_time[bidx2-1==iseg]
-
-            intime0 = intime;
-            influx0 = influx;
-
-        #initialize bin size in days. We will fit the ensemble with splines
+        # TODO: Remove in final version. Used to test execution time
+        start_time = time.time()
+        # Initialize bin size in days. We will fit the ensemble with splines
         bin_size = 4.0
         for ib in range(6):
-            #decrease bin size and bin data
+            # Decrease bin size and bin data
             clip_c = 6 - ib*0.75
-            gx = np.arange(time_start-0.5*bin_size,time_end+bin_size,bin_size)
-            #bidx  = np.digitize(full_time,gx)
-            bidx  = np.digitize(temp_time,gx)
-            bidx = bidx-1
-            #n, bin_edges = np.histogram(full_time,gx) #bin data
-            n, bin_edges = np.histogram(temp_time,gx) #bin data
-            #if there are too few points in the least-populated bin after the first couple of iterations, break out
-            #and stop decreasing the size of the bins
-            #if np.nanmin(n) < 10 and ib > 2:
-            #    break
-            ttflux = []
-            ttweight = []
-            ttime = []
-            #bin by bin build temporary arrays for weight, time, flux
-            for ix in range(len(n)):
-                ttweight = np.append(ttweight,np.nanmean(temp_weight[bidx==ix]))
-                ttime = np.append(ttime,np.nanmean(temp_time[bidx==ix]))
-                ttflux = np.append(ttflux,np.nanmedian(np.divide(temp_flux[bidx==ix],temp_weight[bidx==ix])))
-            ottime = ttime #keep track of originals since we will modify the tt arrays
-            otflux = ttflux
-            #clean up any NaNs
-            ttime = np.asarray(ttime)
-            ttflux = np.asarray(ttflux)
-            w1 = ttime[~np.isnan(ttflux)]
-            w2 = ttflux[~np.isnan(ttflux)]
+            # Define bins to divide the data and get index of bin where each time measure falls into
+            gx = np.arange(time_start - 0.5 * bin_size, time_end + bin_size, bin_size)
+            bidx  = np.digitize(temp_time, gx) - 1
+            n, bin_edges = np.histogram(temp_time, gx)
 
-            counter = len(ttime)
+            # If there are too few points in the least-populated bin after the first couple of iterations, break out and stop decreasing the size of the bins
+            # if np.nanmin(n) < 10 and ib > 2:
+                # break
+
+            # Average time and flux/weight for each bin defined for the lightcurve, clean nan and use it as weights for the spline
+            # NOTE --------- Implementation 1: Uses all bins and handles when there is an empty array with a RuntimeWarning -------NOTE
+            # num_bins = len(gx)-1
+            # bin_weight = np.array([np.nanmean(temp_weight[bidx==b]) for b in range(num_bins)])
+            # bin_time = np.array([np.nanmean(temp_time[bidx==b]) for b in range(num_bins)])
+            # bin_flux = np.array([np.nanmedian(np.divide(temp_flux[bidx==b], temp_weight[bidx==b])) for b in range(num_bins)])
+            # w1 = bin_time[~np.isnan(bin_flux)]
+            # w2 = bin_flux[~np.isnan(bin_flux)]
+            # NOTE --------- Implementation 2: Uses result from extra histogram to pick the non empty bins. -----------------------NOTE
+            # NOTE --------- Seems to accommplish the same without the warnings but needs testing to confirm ----------------------NOTE
+            bins_idx = np.where(n>0)[0]
+            bin_weight = np.array([np.mean(temp_weight[bidx==b]) for b in bins_idx])
+            w1 = np.array([np.mean(temp_time[bidx==b]) for b in bins_idx])
+            w2 = np.array([np.median(np.divide(temp_flux[bidx==b], temp_weight[bidx==b])) for b in bins_idx])
+            # NOTE --------------------------------------------------------------------------------------------------------------- NOTE
+
+            pp = scipy.interpolate.pchip(w1,w2)
+
+            counter = bin_weight.size
             while counter > 0:
-                pp = scipy.interpolate.pchip(w1,w2)
-                diff1 = np.divide(temp_flux,temp_weight)-pp(temp_time)
-                sdiff = clip_c*np.nanstd(diff1)
+                diff1 = np.divide(temp_flux, temp_weight) - pp(temp_time)
+                sdiff = clip_c * np.nanstd(diff1)
                 counter = len(diff1[np.abs(diff1)>sdiff])
                 temp_time = temp_time[np.abs(diff1)<sdiff]
                 temp_flux = temp_flux[np.abs(diff1)<sdiff]
                 temp_weight = temp_weight[np.abs(diff1)<sdiff]
 
-            pp = scipy.interpolate.pchip(w1,w2)
-
+            # NOTE Currently not used for anything. tscale is ignored
+            # Calculates the scale for the lightcurve
             break_locs = np.where(np.diff(lc.time)>0.1) #find places where there is a break in time
             break_locs = np.array(break_locs)
             if break_locs.size>0: #set up boundaries to correspond with breaks
@@ -404,29 +285,20 @@ class EnsembleCorrector(BaseCorrector):
 
             bin_size = bin_size/2
 
+        # TODO: Remove in final version. Used to test execution time
+        logger.info("Spline Fit, Time: {}".format(time.time()-start_time))
+
         #Correct the lightcurve
         lc_corr = deepcopy(lc)
         scale = 1.0
         lc_corr /= scale*pp(lc.time)
 
-        return lc_corr
+        # TODO: Remove in final version. Used to test execution time
+        logger.info("Full correction function, Time: {}".format(time.time()-fstart_time))
 
-if __name__ == "__main__":
-    star_names, Tmag, variability, eclat, eclon = read_todolist()
+        if self.plot:
+            ax = lc.plot(marker='o', label="Original LC")
+            lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
+            plt.show()
 
-    C = EnsembleCorrector(BaseCorrector)
-    star_array = C.star_array
-
-    '''Get the correction, apply the correction, output the data.'''
-    for ifile in tqdm(range(len(star_names[:15]))):
-
-        ax = star_array[ifile].plot()
-        lc_corr = C.do_correction(star_array[ifile], ifile)
-        lc_corr.plot(ax=ax)
-        plt.show()
-
-        outfile = '../../data/Rasmus/toutput2/'+str(star_names[ifile])+'.noisy_detrend'
-        file = open(outfile,'w')
-        #np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, fcorr2[ifile])), fmt = '%f')
-        np.savetxt(file,np.column_stack((star_array[ifile].time,star_array[ifile].flux, lc_corr.flux)), fmt = '%f')
-        file.close()
+        return lc_corr, STATUS.OK

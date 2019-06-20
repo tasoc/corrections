@@ -83,6 +83,9 @@ class CorrectorQualityFlags(QualityFlagsBase):
 
 	# Default bitmask
 	DEFAULT_BITMASK = (FlaggedBadData | ManualExclude)
+	
+	# Preferred bitmask for CBV corrections
+	CBV_BITMASK = (ManualExclude)
 
 	# Pretty string descriptions for each flag
 	STRINGS = {
@@ -117,6 +120,9 @@ class TESSQualityFlags(QualityFlagsBase):
 	# Which is the recommended QUALITY mask to identify bad data?
 	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint |
 					   Desat | ApertureCosmic | ManualExclude)
+	
+	# Preferred bitmask for CBV corrections
+	CBV_BITMASK = (SafeMode | EarthPoint | Desat | ManualExclude)
 
 	# This bitmask includes flags that are known to identify both good and bad cadences.
 	# Use it wisely.
