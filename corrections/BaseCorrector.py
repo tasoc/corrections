@@ -438,13 +438,9 @@ class BaseCorrector(object):
 				save_file = os.path.join(output_folder, filename)
 			else:
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
-				
-#			if output_folder != self.input_folder:
-#				save_file = os.path.join(output_folder, 'corr-' + os.path.basename(fname))
-#			else:
-#				save_file = os.path.join(output_folder, os.path.dirname(fname), 'corr-' + os.path.basename(fname))	
-			
+							
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
+			
 			# Change permission of copied file to allow the addition of the corrected lightcurve
 			os.chmod(save_file, 0o640) 
 
