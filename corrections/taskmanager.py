@@ -138,7 +138,7 @@ class TaskManager(object):
 		return num
 	
 
-	def get_task(self, camera=None, ccd=None, datasource=None):
+	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
 		Get next task to be processed.
 
@@ -147,6 +147,8 @@ class TaskManager(object):
 		"""
 
 		constraints = []
+		if starid is not None:
+			constraints.append('todolist.starid=%d' % starid)
 		if camera is not None:
 			constraints.append('todolist.camera=%d' % camera)
 		if ccd is not None:
