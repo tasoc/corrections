@@ -128,9 +128,10 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
+			STATUS.ERROR.value,
 			constraints
 		))
 		
@@ -162,9 +163,10 @@ class TaskManager(object):
 			constraints = ''
 
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
+			STATUS.ERROR.value,
 			constraints
 		))
 		task = self.cursor.fetchone()
