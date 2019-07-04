@@ -2,7 +2,7 @@
 
 # -*- coding: utf-8 -*-
 """
-Initial code structure for the ensemble photometry detrending program.
+The ensemble photometry detrending class.
 
 Created on Thu Mar 29 09:58:55 2018
 .. codeauthor:: Derek Buzasi
@@ -18,6 +18,8 @@ from copy import deepcopy
 import time
 import lightkurve
 import logging
+from scipy.optimize import minimize
+from scipy.optimize import minimize_scalar
 
 from . import BaseCorrector, STATUS
 
@@ -35,6 +37,27 @@ class EnsembleCorrector(BaseCorrector):
         """
         super(self.__class__, self).__init__(*args, **kwargs)
 
+    def fast_median(self, lc_ensemble):
+        """
+        A small utility function for calculating the ensemble median for use in
+        correcting the target light curve
+        Parameters:
+            lc_ensemble: an array-like collection of each light curve in the ensemble
+        Returns:
+            lc_medians: an array-like (list) that represents the median value of
+                    each light curve in the ensemble at each cadence 
+        """
+        lc_medians = []
+        col, row = np.asarray(lc_ensemble).shape
+        for i in range(row):
+            # find the median of the ensemble
+            temp =[]
+            for j in range(col):
+                temp.append(lc_ensemble[j][i])
+            lc_medians.append(np.median(temp))
+        
+        return lc_medians
+
     def do_correction(self, lc):
         """
         Function that takes all input stars for a sector and uses them to find a detrending
@@ -47,29 +70,43 @@ class EnsembleCorrector(BaseCorrector):
             The status of the correction.
         """
         logger = logging.getLogger(__name__)
-        # TODO: Remove in final version. Used to test execution time
-        fstart_time = time.time()
+        logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
 
-        # Calculate extra data for the target lightcurve
+        # TODO: Remove in final version. Used to test execution time
+        full_start = time.time()
+
+        # Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
+        og_time = lc.time.copy()
         lc = lc.remove_nans()
-        # NOTE: Is frange supposed to be missing the brackets and not join the percentiles ??
-        frange = np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) / np.mean(lc.flux)
+        lc_quality_mask = (lc.quality == 0)
+        # lc.time = lc.time[lc_quality_mask]
+        # lc.flux = lc.flux[lc_quality_mask]
+        # lc.flux_err = lc.flux_err[lc_quality_mask]
+
+        # Set up basic statistical parameters for the light curves. 
+        # frange is the light curve range from the 5th to the 95th percentile,
+        # drange is the relative standard deviation of the differenced light curve (to whiten the noise)
+        frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) )/ np.mean(lc.flux)
+
         drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-        lc.meta.update({ 'fmean' : np.max(lc.flux),
+        lc.meta.update({ 'fmean' : np.median(lc.flux),
                         'fstd' : np.std(np.diff(lc.flux)),
                         'frange' : frange,
                         'drange' : drange})
 
+        logger.info(lc.meta.get("drange"))
+        logger.info(" ")
+
         # StarID, pixel positions and lightcurve filenames are retrieved from the database
         select_params = ["todolist.starid", "pos_row", "pos_column"]
-        search_params = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0"]
+        search_params = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0", "datasource='{:s}'".format(lc.meta["task"]["datasource"])]
         db_raw = self.search_database(select=select_params, search=search_params)
         starid = np.array([row['starid'] for row in db_raw])
         pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
 
         # TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist 
         # Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance. Pixel distance used
-        idx = starid == lc.targetid
+        idx = (starid == lc.targetid)
         dist = np.sqrt((pixel_coords[:,0] - pixel_coords[idx,0])**2 + (pixel_coords[:,1] - pixel_coords[idx,1])**2)
         distance_index = dist.argsort()
         target_index = distance_index[0]
@@ -80,15 +117,16 @@ class EnsembleCorrector(BaseCorrector):
         time_end = np.max(lc.time)
 
         # Set minimum range parameter...this is log10 photometric range, and stars more variable than this will be excluded from the ensemble
-        min_range = -2.0
+        min_range = 0.0
+        # min_range can be changed later on, so we establish a min_range0 for when we want to reset min_range back to its initial value
         min_range0 = min_range
-        flag = 1
+        #flag = 1
 
         # Define variables to use in the loop to build the ensemble of stars
         # List of star indexes to be included in the ensemble
         temp_list = []
         # Initial number of closest stars to consider and variable to increase number
-        initial_num_stars = 20
+        initial_num_stars = 10
         star_count = initial_num_stars
         # (Alternate param) Initial distance at which to consider stars around the target
         # initial_search_radius = -1
@@ -97,208 +135,201 @@ class EnsembleCorrector(BaseCorrector):
         i = 1
         # Setup search and select params to use in loop
         select_loop = ["todolist.starid", "camera", "ccd", "lightcurve"]
-        search_loop = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0"]
+        search_loop = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0", "datasource='{:s}'".format(lc.meta["task"]["datasource"])]
         # Start loop to build ensemble
-        while True:
+        ensemble_start = time.time()
+        lc_ensemble = []
+        target_flux = deepcopy(lc.flux)
+        sum_ensemble = np.zeros(len(target_flux)) # to check for a large enough ensemble for dimmer stars
+        mtarget_flux = target_flux - np.median(target_flux)
 
-            # First get a list of indexes of a specified number of stars to build the ensemble
-            while len(temp_list) < star_count:
-                
-                # Get lightkurve for next star closest to target
-                # NOTE: This seems needlesly complicated. Probably can just change load_lightcurve
+        logger.info(str(np.median(target_flux)))
+
+        # First get a list of indexes of a specified number of stars to build the ensemble
+        while len(temp_list) < star_count:
+            
+            # Get lightkurve for next star closest to target
+            # NOTE: This seems needlessly complicated. Probably can just change load_lightcurve
+            try:
                 next_star_index = distance_index[i]
-                search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
-                next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
-                next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
-                search_loop.pop(-1)
+            except IndexError:
+                return None, STATUS.SKIPPED
+            search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
+            next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
+            next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
+            search_loop.pop(-1)
+            
+            next_star_lc_quality_mask = (next_star_lc.quality == 0)
+            # next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
+            # next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
+            # next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
+
+            # Compute the rest of the statistical parameters for the next star to be added to the ensemble.
+            frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) )/ np.mean(next_star_lc.flux)
+            drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
+            
+            next_star_lc.meta.update({ 'fmean' : np.median(next_star_lc.flux),
+                                        'fstd' : np.std(np.diff(next_star_lc.flux)),
+                                        'frange' : frange,
+                                        'drange' : drange})
+
+            logger.info(next_star_lc.meta.get("drange"))
+            # Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the 
+            # drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
+            if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange'] and next_star_lc.meta['frange'] < 0.4):
                 
-                # Compute the rest of its data. NOTE: Change this to the database or not ???
-                frange = np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) / np.mean(next_star_lc.flux)
-                drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
-                next_star_lc.meta.update({ 'fmean' : np.max(next_star_lc.flux),
-                                            'fstd' : np.std(np.diff(next_star_lc.flux)),
-                                            'frange' : frange,
-                                            'drange' : drange})
+                ###################################################################
+                # median subtracted flux of target and ensemble candidate
+                temp_lc = deepcopy(next_star_lc)
+                time_ens = temp_lc.time
+                ens_flux = temp_lc.flux
+                if self.debug:
+                    plt.plot(time_ens, ens_flux)
+                    plt.show(block=True)
+                
+                #ens_flux = ens_flux[np.isin(next_star_lc.time, lc.time, assume_unique=True)]
+                mens_flux = ens_flux - np.median(ens_flux)
+                
+                #logger.info(str(len(mtarget_flux)) +" "+ str(len(mens_flux))))
 
-                # Stars are added to ensemble if they fulfill the requirements
-                if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange']):
-                    temp_list.append([next_star_index, next_star_lc.copy()])
-                i += 1
+                # 2 sigma
+                ens2sig = 2 * np.std(mens_flux)
+                targ2sig = 2 * np.std(mtarget_flux)
+                
+                # absolute balue
+                abstarg = np.absolute(mtarget_flux)
+                absens = np.absolute(mens_flux)
 
-            ensemble_list = np.array(temp_list)
-            # Now populate the arrays of data with the stars in the ensemble
-            full_time = np.concatenate([temp_lc.time for temp_lc in ensemble_list[:,1]]).ravel()
-            tflux = np.concatenate(np.array([temp_lc.flux / temp_lc.meta['fmean'] for temp_lc in ensemble_list[:,1]])).ravel()
-            full_weight = np.concatenate(np.array([np.full(temp_lc.flux.size, temp_lc.meta['fmean'] / temp_lc.meta['fstd']) for temp_lc in ensemble_list[:,1]])).ravel()
-            full_flux = np.multiply(tflux, full_weight)
+                logger.info("2 sigma")
+                logger.info(str(ens2sig) + " , " + str(targ2sig))
 
-            # TODO: As of now the code begins by ensuring 20 stars are added to the ensemble and then adds one by one. Might have to change to use a search radius
-            # Fetch distance of last added star to ensemble to use as search radius to test conditions ahead
-            search_radius = distance[i-1]
+                # sigma clip the flux used to fit, but don't use that flux again
+                clip_target_flux = np.where(
+                    np.where(abstarg < targ2sig, True, False)
+                    & 
+                    np.where(absens < ens2sig, True, False),
+                    mtarget_flux, 1)
+                clip_ens_flux = np.where(
+                    np.where(abstarg < targ2sig, True, False)
+                    & 
+                    np.where(absens < ens2sig, True, False),
+                    mens_flux, 1)
 
-            # Set up time array with 0.5-day resolution which spans the time range of the time series then histogram the data based on that array
-            gx = np.arange(time_start,time_end,0.5)
-            n = np.histogram(full_time, gx)[0]
-            n2 = np.histogram(lc.time, gx)[0]
+                logger.info(str(np.median(target_flux)))
+                logger.info(str(np.median(ens_flux)))
 
-            # TODO: Probably should change the condition that adds stars to the algorithm
-            # If the least-populated bin has less than 2000 points, increase the size of the ensemble by first
-            # increasing the level of acceptable variability until it exceeds the variability of the star. Once that happens,
-            # increase the search radius and reset acceptable variability back to initial value. If the search radius exceeds
-            # a limiting value (pi/4 at this point), accept that we can't do any better.
-            # if np.min(n[0])<400:
-            # print np.min(n[n2>0])
-            if np.min(n[n2>0]) < 1000:
-                min_range = min_range+0.3
-                if min_range > np.log10(np.max(lc.meta['drange'])):
-                    if (search_radius < 100):
-                        # search_radius += 10
-                        star_count += 1
-                        search_radius = distance[i]
-                    else:
-                        # search_radius *= 1.1
-                        min_range = min_range0
-                        star_count += 1
-                        search_radius = distance[i]
+                #this is where I'll try adding the background correction portion
+                #first get scaled target flux
+                scale_target_flux = clip_target_flux/np.median(target_flux)
 
-                # if search_radius > np.pi/4:
-                if search_radius > 400:
-                    break
-            else:
-                    break
+                args = tuple((clip_ens_flux+np.median(ens_flux),clip_target_flux+np.median(target_flux)))
+
+
+                def func1(scaleK,*args):
+                    temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
+                    temp = (args[1]/np.median(args[1])) - ((args[0]+scaleK)/np.median(args[0]+scaleK))
+                    temp = temp - np.median(temp)
+                    return np.sum(np.square(temp))
+                
+                scale0 = 100    
+                res = minimize(func1,scale0,args,method='Powell')
+
+                logger.info("Fit param1: {}".format(res.x))
+                logger.info(str(np.median(ens_flux)))
+                logger.info(str(res.x))
+                
+                ens_flux = ens_flux+res.x
+                mens_flux = mens_flux+res.x
+                clip_ens_flux = clip_ens_flux+res.x
+
+                if self.debug: 
+                    plt.plot(ens_flux/np.median(ens_flux))
+                    plt.show(block=True)
+                next_star_lc.flux = (ens_flux/np.median(ens_flux))
+                temp_list.append([next_star_index, next_star_lc.copy()])
+                lc_ensemble.append(ens_flux/np.median(ens_flux))
+                sum_ensemble = sum_ensemble + np.array(ens_flux)
+                logger.info(str(next_star_lc.targetid)+'\n')
+                ###################################################################
+            i += 1
+        
+        logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
+        
+        
+        lc_medians = self.fast_median(lc_ensemble)
+        
+        
+        if self.debug:
+            plt.plot(lc.time, lc_medians)
+            plt.plot(lc.time, (lc.flux/np.median(lc.flux)))
+            plt.show(block=True)
+            plt.plot(lc.time, lc_medians)
+            plt.show(block=True)
+        lc_medians = np.asarray(lc_medians)
+
+
+        args = tuple((lc.flux, lc_medians))
+        def func2(scalef,*args):
+            num1 = np.sum(np.abs(np.diff(np.divide(args[0],args[1]+scalef))))
+            denom1 = np.median(np.divide(args[0],args[1]+scalef))
+            return num1/denom1
+
+        scale0 = 1.0
+        res = minimize(func2,scale0,args)
+
+        logger.info("Fit param: {}".format(res.x))
+    
+        #fitf2 = 1+((lc_medians-1)*res.x)
+
+        # Correct the lightcurve
+        lc_corr = lc.copy()
+
+        k_corr = res.x
+
+        median_only_flux = np.divide(lc_corr.flux, lc_medians)
+        lc_corr.flux = np.divide(lc_corr.flux, (k_corr+lc_medians))
+        lc_corr.flux = np.divide(lc_corr.flux, np.median(lc_corr.flux))
+        lc_corr.flux = lc_corr.flux*np.median(lc.flux)
 
         
-        # Ensemble is now built. Clean up ensemble points by removing NaNs
-        not_nan_idx = ~np.isnan(full_flux) # Since index is same for all arrays save it first to use cached version
-        full_time = full_time[not_nan_idx]
-        full_weight = full_weight[not_nan_idx]
-        full_flux = full_flux[not_nan_idx]
-        tflux = tflux[not_nan_idx]
-
-        # Sort ensemble into time order
-        time_idx = np.argsort(full_time)
-        full_time = full_time[time_idx]
-        full_flux = full_flux[time_idx]
-        full_weight = full_weight[time_idx]
-
-        # Simplify by discarding ensemble points outside the temporal range of the stellar time series
-        idx = (full_time>time_start) & (full_time<time_end)
-        full_time = full_time[idx]
-        full_flux = full_flux[idx]
-        full_weight = full_weight[idx]
-
-        temp_time = full_time
-        temp_flux = full_flux
-        temp_weight = full_weight
+        if self.debug:
+            plt.scatter(lc_corr.time, median_only_flux, marker='.', label="Median Only")
+            plt.scatter(lc_corr.time, lc_corr.flux, marker='.', label="Corrected LC")
+            plt.show(block=True)
+        #######################################################################################################
 
         # TODO: Remove in final version. Used to test execution time
-        start_time = time.time()
-        # Initialize bin size in days. We will fit the ensemble with splines
-        bin_size = 4.0
-        for ib in range(6):
-            # Decrease bin size and bin data
-            clip_c = 6 - ib*0.75
-            # Define bins to divide the data and get index of bin where each time measure falls into
-            gx = np.arange(time_start - 0.5 * bin_size, time_end + bin_size, bin_size)
-            bidx  = np.digitize(temp_time, gx) - 1
-            n, bin_edges = np.histogram(temp_time, gx)
+        logger.info("Full do_correction, Time: {}".format(time.time()-full_start))
 
-            # If there are too few points in the least-populated bin after the first couple of iterations, break out and stop decreasing the size of the bins
-            # if np.nanmin(n) < 10 and ib > 2:
-                # break
+        # We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well. 
+        
+        logger.info(temp_list)
+        
+        #sys.exit()
+        # Replace removed points with NaN's so the info can be saved to the FITS
+        lc_corr.time = lc_corr.time[lc_quality_mask]
+        lc_corr.flux = lc_corr.flux[lc_quality_mask]
+        lc_corr.flux_err = lc_corr.flux_err[lc_quality_mask]
+        if len(lc_corr.flux) != len(og_time):
+            fix_flux = np.asarray(lc_corr.flux.copy())
+            indices = np.array(np.where(np.isin(og_time, lc_corr.time, assume_unique=True, invert=True)))[0]
+            indices.tolist()
 
-            # Average time and flux/weight for each bin defined for the lightcurve, clean nan and use it as weights for the spline
-            # NOTE --------- Implementation 1: Uses all bins and handles when there is an empty array with a RuntimeWarning -------NOTE
-            # num_bins = len(gx)-1
-            # bin_weight = np.array([np.nanmean(temp_weight[bidx==b]) for b in range(num_bins)])
-            # bin_time = np.array([np.nanmean(temp_time[bidx==b]) for b in range(num_bins)])
-            # bin_flux = np.array([np.nanmedian(np.divide(temp_flux[bidx==b], temp_weight[bidx==b])) for b in range(num_bins)])
-            # w1 = bin_time[~np.isnan(bin_flux)]
-            # w2 = bin_flux[~np.isnan(bin_flux)]
-            # NOTE --------- Implementation 2: Uses result from extra histogram to pick the non empty bins. -----------------------NOTE
-            # NOTE --------- Seems to accommplish the same without the warnings but needs testing to confirm ----------------------NOTE
-            bins_idx = np.where(n>0)[0]
-            bin_weight = np.array([np.mean(temp_weight[bidx==b]) for b in bins_idx])
-            w1 = np.array([np.mean(temp_time[bidx==b]) for b in bins_idx])
-            w2 = np.array([np.median(np.divide(temp_flux[bidx==b], temp_weight[bidx==b])) for b in bins_idx])
-            # NOTE --------------------------------------------------------------------------------------------------------------- NOTE
+            for ind in indices:
+                fix_flux = np.insert(fix_flux, ind, np.nan)
 
-            pp = scipy.interpolate.pchip(w1,w2)
-
-            counter = bin_weight.size
-            while counter > 0:
-                diff1 = np.divide(temp_flux, temp_weight) - pp(temp_time)
-                sdiff = clip_c * np.nanstd(diff1)
-                counter = len(diff1[np.abs(diff1)>sdiff])
-                temp_time = temp_time[np.abs(diff1)<sdiff]
-                temp_flux = temp_flux[np.abs(diff1)<sdiff]
-                temp_weight = temp_weight[np.abs(diff1)<sdiff]
-
-            # NOTE Currently not used for anything. tscale is ignored
-            # Calculates the scale for the lightcurve
-            break_locs = np.where(np.diff(lc.time)>0.1) #find places where there is a break in time
-            break_locs = np.array(break_locs)
-            if break_locs.size>0: #set up boundaries to correspond with breaks
-                break_locs = np.array(break_locs)+1
-                break_locs.astype(int)
-                if (np.max(break_locs) < len(lc.time)):
-                    break_locs = np.append(break_locs, len(lc.time)-1)
-                digit_bounds = lc.time
-                digit_bounds = np.array(digit_bounds)
-                digit_bounds = digit_bounds[break_locs]
-                if digit_bounds[0] > np.min(full_time):
-                    digit_bounds = np.append(np.min(full_time)-1e-5, digit_bounds)
-                if digit_bounds[-1] < np.max(full_time):
-                    digit_bounds = np.append(digit_bounds,np.max(full_time)+1e-5)
-                if digit_bounds[0] > np.min(lc.time):
-                    digit_bounds = np.append(np.min(lc.time)-1e-5, digit_bounds)
-                if digit_bounds[-1] < np.max(lc.time):
-                    digit_bounds = np.append(digit_bounds,np.max(lc.time)+1e-5)
-
-                bincts, edges = np.histogram(lc.time,digit_bounds)
-                bidx = np.digitize(lc.time, digit_bounds) #binning for star
-                bidx = bidx-1
-                bincts2, edges = np.histogram(full_time,full_time[break_locs])
-                bidx2 = np.digitize(full_time, full_time[break_locs]) #binning for ensemble
-                bidx2 = bidx2-1
-                num_segs = len(break_locs)
-            else:
-                bincts, edges = np.histogram(lc.time,[lc.time[0],lc.time[-1]])
-                bidx = np.digitize(lc.time, [lc.time[0],lc.time[-1]]) #binning for star
-                bidx = bidx-1
-                bincts2, edges = np.histogram(full_time,[full_time[0],full_time[-1]])
-                bidx2 = np.digitize(full_time, [full_time[0],full_time[-1]]) #binning for ensemble
-                bidx2 = bidx2-1
-                num_segs = 1
-
-            tscale = []
-            for iseg in range(num_segs):
-                influx = np.array(lc.flux)
-                intime = np.array(lc.time)
-                influx = influx[bidx==iseg]
-                intime = intime[bidx==iseg]
-
-                #fun = lambda x: np.sum(np.square(np.divide(influx,np.median(influx))-x*scipy.interpolate.splev(intime,pp)))
-                fun = lambda x: np.sum(np.square(np.divide(influx,np.median(influx))-x*pp(intime)))
-                tscale = np.append(tscale,sciopt.fminbound(fun,0.9,1.5)) #this is a last fix to scaling, not currently used
-                tbidx = deepcopy(bidx)
-
-            bin_size = bin_size/2
-
-        # TODO: Remove in final version. Used to test execution time
-        logger.info("Spline Fit, Time: {}".format(time.time()-start_time))
-
-        #Correct the lightcurve
-        lc_corr = deepcopy(lc)
-        scale = 1.0
-        lc_corr /= scale*pp(lc.time)
-
-        # TODO: Remove in final version. Used to test execution time
-        logger.info("Full correction function, Time: {}".format(time.time()-fstart_time))
+            lc_corr.flux = fix_flux.tolist()
+            lc_corr.time = og_time
+            
+        
 
         if self.plot:
             ax = lc.plot(marker='o', label="Original LC")
             lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-            plt.show()
-
+            #plt.show() #block=True)
+            plt.savefig("./temp/" + str(lc.targetid) + "_testrun.png")
+            logger.info(np.nanstd(lc.flux))
+            logger.info(np.nanstd(lc_corr.flux))
+            logger.info(np.nanmedian(lc.flux))
+            logger.info(np.nanmedian(lc_corr.flux))
         return lc_corr, STATUS.OK
