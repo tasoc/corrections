@@ -120,7 +120,6 @@ class EnsembleCorrector(BaseCorrector):
         min_range = 0.0
         # min_range can be changed later on, so we establish a min_range0 for when we want to reset min_range back to its initial value
         min_range0 = min_range
-        #flag = 1
 
         # Define variables to use in the loop to build the ensemble of stars
         # List of star indexes to be included in the ensemble
@@ -149,7 +148,6 @@ class EnsembleCorrector(BaseCorrector):
         while len(temp_list) < star_count:
             
             # Get lightkurve for next star closest to target
-            # NOTE: This seems needlessly complicated. Probably can just change load_lightcurve
             try:
                 next_star_index = distance_index[i]
             except IndexError:
@@ -185,13 +183,10 @@ class EnsembleCorrector(BaseCorrector):
                 ens_flux = temp_lc.flux
                 if self.debug:
                     plt.plot(time_ens, ens_flux)
-                    plt.show(block=True)
+                    plt.show()#block=True)
                 
-                #ens_flux = ens_flux[np.isin(next_star_lc.time, lc.time, assume_unique=True)]
                 mens_flux = ens_flux - np.median(ens_flux)
                 
-                #logger.info(str(len(mtarget_flux)) +" "+ str(len(mens_flux))))
-
                 # 2 sigma
                 ens2sig = 2 * np.std(mens_flux)
                 targ2sig = 2 * np.std(mtarget_flux)
@@ -295,7 +290,7 @@ class EnsembleCorrector(BaseCorrector):
         if self.debug:
             plt.scatter(lc_corr.time, median_only_flux, marker='.', label="Median Only")
             plt.scatter(lc_corr.time, lc_corr.flux, marker='.', label="Corrected LC")
-            plt.show(block=True)
+            plt.show()#block=True)
         #######################################################################################################
 
         # TODO: Remove in final version. Used to test execution time
@@ -305,7 +300,6 @@ class EnsembleCorrector(BaseCorrector):
         
         logger.info(temp_list)
         
-        #sys.exit()
         # Replace removed points with NaN's so the info can be saved to the FITS
         lc_corr.time = lc_corr.time[lc_quality_mask]
         lc_corr.flux = lc_corr.flux[lc_quality_mask]
@@ -326,10 +320,11 @@ class EnsembleCorrector(BaseCorrector):
         if self.plot:
             ax = lc.plot(marker='o', label="Original LC")
             lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-            #plt.show() #block=True)
-            plt.savefig("./temp/" + str(lc.targetid) + "_testrun.png")
-            logger.info(np.nanstd(lc.flux))
-            logger.info(np.nanstd(lc_corr.flux))
-            logger.info(np.nanmedian(lc.flux))
-            logger.info(np.nanmedian(lc_corr.flux))
+            plt.show() #block=True)
+            if self.debug:
+                #plt.savefig("./temp/" + str(lc.targetid) + "_testrun.png")
+                logger.info(np.nanstd(lc.flux))
+                logger.info(np.nanstd(lc_corr.flux))
+                logger.info(np.nanmedian(lc.flux))
+                logger.info(np.nanmedian(lc_corr.flux))
         return lc_corr, STATUS.OK
