@@ -57,7 +57,7 @@ class BaseCorrector(object):
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
-	def __init__(self, input_folder, plot=False):
+	def __init__(self, input_folder, output_folder, plot=False, debug=False):
 		"""
 		Initialize the corrector.
 
@@ -76,7 +76,10 @@ class BaseCorrector(object):
 
 		# Save inputs:
 		self.input_folder = input_folder
+		self.output_folder = output_folder
+		self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		self.plot = plot
+		self.debug = debug
 
 		# Find the auxillary data directory based on which corrector is running:
 		if self.__class__.__name__ == 'BaseCorrector':
@@ -130,7 +133,7 @@ class BaseCorrector(object):
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
-		lcfile = os.path.join(self.input_folder, lc.meta['task']['lightcurve'])
+		lcfile = os.path.join(self.output_folder, lc.meta['task']['lightcurve'])
 		plot_folder = os.path.join(os.path.dirname(lcfile), 'plots', '%011d' % lc.targetid)
 		return plot_folder
 
@@ -177,7 +180,7 @@ class BaseCorrector(object):
 			lc = self.load_lightcurve(task)
 
 			# Run the correction on this lightcurve:
-			lc_corr, status = self.do_correction(lc)
+			lc_corr, status = self.do_correction(lc.copy())
 
 		except (KeyboardInterrupt, SystemExit):
 			status = STATUS.ABORT
@@ -198,7 +201,7 @@ class BaseCorrector(object):
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
-			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
+			#details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
 			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
@@ -296,6 +299,7 @@ class BaseCorrector(object):
 			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (task, ))
 			task = self.cursor.fetchone()
 			if task is None:
+				logger.info('Task could not be loaded')
 				raise ValueError("Priority could not be found in the TODO list")
 			task = dict(task)
 
@@ -372,7 +376,9 @@ class BaseCorrector(object):
 					ra=hdu[0].header.get('RA_OBJ'),
 					dec=hdu[0].header.get('DEC_OBJ'),
 					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
-					meta={}
+					meta={
+						'Tmag' : hdu[0].header.get('TESSMAG')
+					}
 				)
 
 				# Apply manual exclude flag:
@@ -392,10 +398,10 @@ class BaseCorrector(object):
 		if logger.isEnabledFor(logging.DEBUG):
 			lc.show_properties()
 
-		return lc
+		return lc.copy()
 
 
-	def save_lightcurve(self, lc, output_folder=None):
+	def save_lightcurve(self, lc):
 		"""
 		Save generated lightcurve to file.
 
@@ -408,6 +414,7 @@ class BaseCorrector(object):
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
+		logger = logging.getLogger(__name__)
 
 		# Find the name of the correction method based on the class name:
 		CorrMethod = {
@@ -417,8 +424,10 @@ class BaseCorrector(object):
 		}.get(self.__class__.__name__)
 
 		# Decide where to save the finished lightcurve:
-		if output_folder is None:
+		if self.output_folder is None:
 			output_folder = self.input_folder
+		else:
+			output_folder = self.output_folder
 
 		# Get the filename of the original file from the task:
 		fname = lc.meta.get('task').get('lightcurve')
@@ -445,11 +454,11 @@ class BaseCorrector(object):
 			os.chmod(save_file, 0o640) 
 
 			# Open the FITS file to overwrite the corrected flux columns:
-			with fits.open(save_file, mode='update') as hdu:
+			with fits.open(os.path.join(self.input_folder,fname), mode='update') as hdu:
 				# Overwrite the corrected flux columns:
 				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
-				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
-				hdu['LIGHTCURVE'].data['QUALITY'] = lc.quality
+				#hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
+				#hdu['LIGHTCURVE'].data['QUALITY'] = lc.quality
 
 				# Set headers about the correction:
 				hdu['LIGHTCURVE'].header['CORRMET'] = (CorrMethod, 'Lightcurve correction method')
@@ -461,7 +470,7 @@ class BaseCorrector(object):
 						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
 
 				# Save the updated FITS file:
-#				hdu.flush()
+				# hdu.flush()
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":

@@ -34,6 +34,7 @@ if __name__ == '__main__':
 	parser.add_argument('-o', '--overwrite', help='Overwrite previous runs and start over.', action='store_true')
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
+	parser.add_argument('--source', type=str, choices=('ffi','tpf'), default=None, help='TESS source file. Default is to choose the first in the database.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default='ffi', help='Data source or cadence.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
@@ -84,7 +85,8 @@ if __name__ == '__main__':
 	CorrClass = corrections.corrclass(args.method)
 
 	# Initialize the corrector class:
-	with CorrClass(input_folder, plot=args.plot) as corr:
+	with CorrClass(input_folder, output_folder, plot=args.plot, debug=args.debug) as corr:
+
 		# Start the TaskManager:
 		with corrections.TaskManager(input_folder, overwrite=args.overwrite) as tm:
 			while True:
