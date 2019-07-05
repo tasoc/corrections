@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 Command-line utility to run TESS detrend correction from command-line.
@@ -13,8 +14,6 @@ Structure inspired by `tessphot` by Rasmus Handberg <rasmush@phys.au.dk>
 
 """
 
-# photometry runs under Python 2, so compatibility is an issue without this
-from __future__ import with_statement, print_function
 import os
 import argparse
 import logging
@@ -32,11 +31,14 @@ if __name__ == '__main__':
 	parser.add_argument('-r', '--random', help='Run on random target from TODO-list.', action='store_true')
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
 	parser.add_argument('-a', '--all', help='Run correction on all targets.', action='store_true')
+	parser.add_argument('-o', '--overwrite', help='Overwrite previous runs and start over.', action='store_true')
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--source', type=str, choices=('ffi','tpf'), default=None, help='TESS source file. Default is to choose the first in the database.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
-	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
+	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default='ffi', help='Data source or cadence.')
+	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
+	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
@@ -72,7 +74,9 @@ if __name__ == '__main__':
 		else:
 			input_folder = os.environ.get('TESSCORR_INPUT', test_folder)
 
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+	output_folder = args.output_folder
+	if output_folder is None:
+		output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
 
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
@@ -82,19 +86,18 @@ if __name__ == '__main__':
 
 	# Initialize the corrector class:
 	with CorrClass(input_folder, plot=args.plot) as corr:
-
 		# Start the TaskManager:
-		with corrections.TaskManager(input_folder) as tm:
+		with corrections.TaskManager(input_folder, overwrite=args.overwrite) as tm:
 			while True:
-				
 				if args.random:
 					task = tm.get_random_task()
 				else:
-					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd, source=args.source)
-				
+					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+
 				if task is None: break
+
 				# Run the correction:
-				result = corr.correct(task)
+				result = corr.correct(task, output_folder=output_folder)
 
 				# Construct results to return to TaskManager:
 				tm.save_results(result)

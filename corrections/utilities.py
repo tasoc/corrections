@@ -7,17 +7,16 @@ the corrections package.
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import numpy as np
-import six.moves.cPickle as pickle
+import pickle
 import gzip
-from bottleneck import nanmedian, nanmean
+from bottleneck import nanmedian, nanmean, allnan
 from scipy.stats import binned_statistic
 
 # Constants:
-mad_to_sigma = 1.482602218505602 # Constant is 1/norm.ppf(3/4)
+mad_to_sigma = 1.482602218505602 #: Conversion constant from MAD to Sigma. Constant is 1/norm.ppf(3/4)
 
-PICKLE_DEFAULT_PROTOCOL = 2 #: Default protocol to use for saving pickle files.
+PICKLE_DEFAULT_PROTOCOL = 4 #: Default protocol to use for saving pickle files.
 
 #------------------------------------------------------------------------------
 def savePickle(fname, obj):
@@ -105,9 +104,17 @@ def rms_timescale(lc, timescale=3600/86400):
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
+	if len(lc.flux) == 0 or allnan(lc.flux):
+		return np.nan
+
+	time_min = np.nanmin(lc.time)
+	time_max = np.nanmax(lc.time)
+	if not np.isfinite(time_min) or not np.isfinite(time_max) or time_max - time_min <= 0:
+		raise ValueError("Invalid time-vector specified")
+
 	# Construct the bin edges seperated by the timescale:
-	bins = np.arange(np.nanmin(lc.time), np.nanmax(lc.time), timescale)
-	bins = np.append(bins, np.nanmax(lc.time))
+	bins = np.arange(time_min, time_max, timescale)
+	bins = np.append(bins, time_max)
 
 	# Bin the timeseries to one hour:
 	indx = np.isfinite(lc.flux)

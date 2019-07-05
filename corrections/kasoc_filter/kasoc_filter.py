@@ -21,8 +21,7 @@ import numpy as np
 from numpy import zeros, empty, argsort, diff, mod, isfinite, array, append, searchsorted, NaN, Inf
 from scipy.stats import norm
 from copy import deepcopy as dc
-import matplotlib
-import matplotlib.pylab as plt
+from ..plots import plt, matplotlib
 import os.path
 from bottleneck import nanmedian, nanstd, median, nanargmax, nansum, allnan, nanmin, nanmax
 # Import our fast (Cython) routines:

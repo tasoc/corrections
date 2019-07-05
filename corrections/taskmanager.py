@@ -8,7 +8,6 @@ A TaskManager which keeps track of which targets to process.
 .. codeauthor:: Filipe Pereira
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import os.path
 import sqlite3
 import logging
@@ -19,24 +18,25 @@ class TaskManager(object):
 	A TaskManager which keeps track of which targets to process.
 	"""
 
-	def __init__(self, todo_file, cleanup=False):
+	def __init__(self, todo_file, cleanup=False, overwrite=False):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
 		Parameters:
 			todo_file (string): Path to the TODO-file.
-			cleanup (boolean): Perform cleanup/optimization of TODO-file before
+			cleanup (boolean, optional): Perform cleanup/optimization of TODO-file before
 				during initialization. Default=False.
+			overwrite (boolean, optional): Overwrite any previously calculated results. Default=False.
 
 		Raises:
-			IOError: If TODO-file could not be found.
+			FileNotFoundError: If TODO-file could not be found.
 		"""
 
 		if os.path.isdir(todo_file):
 			todo_file = os.path.join(todo_file, 'todo.sqlite')
 
 		if not os.path.exists(todo_file):
-			raise IOError('Could not find TODO-file')
+			raise FileNotFoundError('Could not find TODO-file')
 
 		# Load the SQLite file:
 		self.conn = sqlite3.connect(todo_file)
@@ -60,10 +60,10 @@ class TaskManager(object):
 			self.conn.commit()
 
 		# Reset the status of everything for a new run:
-		# TODO: This should obviously be removed once we start running for real
-		self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
-		self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
-		self.conn.commit()
+		if overwrite:
+			self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
+			self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
+			self.conn.commit()
 
 		# Create table for diagnostics:
 		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
@@ -73,7 +73,8 @@ class TaskManager(object):
 			variance DOUBLE PRECISION,
 			rms_hour DOUBLE PRECISION,
 			ptp DOUBLE PRECISION,
-			errors TEXT
+			errors TEXT,
+			FOREIGN KEY (priority) REFERENCES todolist(priority) ON DELETE CASCADE ON UPDATE CASCADE
 		);""")
 		self.conn.commit()
 
@@ -103,8 +104,42 @@ class TaskManager(object):
 	def close(self):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
+		
+	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
+		"""
+		Get number of tasks due to be processed.
 
-	def get_task(self, starid=None, camera=None, ccd=None, source=None):
+		Returns:
+			int: Number of tasks due to be processed.
+		"""
+		
+		constraints = []
+		if starid is not None:
+			constraints.append('todolist.starid=%d' % starid)
+		if camera is not None:
+			constraints.append('todolist.camera=%d' % camera)
+		if ccd is not None:
+			constraints.append('todolist.ccd=%d' % ccd)
+		if datasource is not None:
+			constraints.append('todolist.datasource="%s"' % datasource)
+
+		if constraints:
+			constraints = ' AND ' + " AND ".join(constraints)
+		else:
+			constraints = ''
+
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) %s ORDER BY todolist.priority LIMIT 1;" % (
+			STATUS.OK.value,
+			STATUS.WARNING.value,
+			STATUS.ERROR.value,
+			constraints
+		))
+		
+		num = int(self.cursor.fetchone()['num'])
+		return num
+	
+
+	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
 		Get next task to be processed.
 
@@ -119,17 +154,19 @@ class TaskManager(object):
 			constraints.append('todolist.camera=%d' % camera)
 		if ccd is not None:
 			constraints.append('todolist.ccd=%d' % ccd)
-		if source is not None:
-			constraints.append('todolist.datasource="%s"' % source)
+		if datasource is not None:
+			constraints.append('todolist.datasource="%s"' % datasource)
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND corr_status IS NULL %s ORDER BY priority LIMIT 1;" % (
+
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
+			STATUS.ERROR.value,
 			constraints
 		))
 		task = self.cursor.fetchone()
@@ -149,7 +186,7 @@ class TaskManager(object):
 			))
 
 			# Save additional diagnostics:
-			self.cursor.execute("INSERT INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
+			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
 				result['priority'],
 				result['lightcurve_corr'],
 				result['elaptime_corr'],
@@ -162,7 +199,6 @@ class TaskManager(object):
 		except:
 			self.conn.rollback()
 			raise
-
 
 	def start_task(self, taskid):
 		"""
