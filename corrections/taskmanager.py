@@ -104,7 +104,7 @@ class TaskManager(object):
 	def close(self):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
-		
+
 	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
 		Get number of tasks due to be processed.
@@ -112,7 +112,7 @@ class TaskManager(object):
 		Returns:
 			int: Number of tasks due to be processed.
 		"""
-		
+
 		constraints = []
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
@@ -134,10 +134,10 @@ class TaskManager(object):
 			STATUS.ERROR.value,
 			constraints
 		))
-		
+
 		num = int(self.cursor.fetchone()['num'])
 		return num
-	
+
 
 	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
@@ -188,8 +188,8 @@ class TaskManager(object):
 			# Save additional diagnostics:
 			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
 				result['priority'],
-				result['lightcurve_corr'],
-				result['elaptime_corr'],
+				result.get('lightcurve_corr', None),
+				result.get('elaptime_corr', None),
 				details.get('variance', None),
 				details.get('rms_hour', None),
 				details.get('ptp', None),
