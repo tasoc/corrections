@@ -101,11 +101,11 @@ class TaskManager(object):
 		# If we are going to output summary, make sure to fill it up:
 		if self.summary_file:
 			# Extract information from database:
-			self.cursor.execute("SELECT status,COUNT(*) AS cnt FROM todolist GROUP BY status;")
+			self.cursor.execute("SELECT corr_status,COUNT(*) AS cnt FROM todolist GROUP BY corr_status;")
 			for row in self.cursor.fetchall():
 				self.summary['numtasks'] += row['cnt']
-				if row['status'] is not None:
-					self.summary[STATUS(row['status']).name] = row['cnt']
+				if row['corr_status'] is not None:
+					self.summary[STATUS(row['corr_status']).name] = row['cnt']
 			# Write summary to file:
 			self.write_summary()
 
@@ -220,7 +220,7 @@ class TaskManager(object):
 			# Save additional diagnostics:
 			error_msg = details.get('errors', None)
 			if error_msg:
-				error_msg = '\n'.join(error_msg)
+#				error_msg = '\n'.join(error_msg)
 				self.summary['last_error'] = error_msg
 
 			# Save additional diagnostics:
