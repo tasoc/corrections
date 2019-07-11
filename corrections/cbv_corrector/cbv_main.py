@@ -138,6 +138,12 @@ class CBV(object):
 		
 		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' %(datasource,cbv_area))
 		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' %(datasource,cbv_area))
+		
+		if not os.path.exists(filepath):
+			raise FileNotFoundError("Could not find CBV file")
+		if not os.path.exists(filepath_s):
+			raise FileNotFoundError("Could not find CBV spike file")	
+			
 		self.cbv = np.load(filepath)
 		self.cbv_s = np.load(filepath_s)
 		

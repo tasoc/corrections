@@ -65,8 +65,14 @@ class KASOCFilterCorrector(BaseCorrector):
 		logger.debug(periods)
 
 		jumps = None
-		filter_timescale_long = 3.0
-		filter_timescale_short = 1.0/24.0
+
+		cadence = 86400*np.median(np.diff(lc.time))
+		if cadence > 1000:
+			filter_timescale_long = 6.0
+			filter_timescale_short = 0.5
+		else:
+			filter_timescale_long = 3.0
+			filter_timescale_short = 1.0/24.0
 		filter_phase_smooth_factor = 200
 		filter_sigma_clip = 4.5
 		filter_turnover_clip = 5.0
