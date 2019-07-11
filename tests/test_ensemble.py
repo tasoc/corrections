@@ -32,7 +32,7 @@ def test_ensemble_basics():
 		assert ec.input_folder == INPUT_DIR, "Incorrect input folder"
 		assert ec.plot == True, "Plot parameter passed appropriately"
 
-@pytest.mark.skipif(os.environ["USER"] == 'travis',
+@pytest.mark.skipif(os.environ.get('CI') == 'true' and os.environ.get('TRAVIS') == 'true', 
 					reason="This requires a sector of data. Impossible to run with Travis")
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
