@@ -239,7 +239,7 @@ class TaskManager(object):
 			raise
 		
 		# Calculate mean elapsed time using "streaming mean":
-		self.summary['mean_elaptime'] += (result['time'] - self.summary['mean_elaptime']) / self.summary['tasks_run']
+		self.summary['mean_elaptime'] += (result['elaptime_corr'] - self.summary['mean_elaptime']) / self.summary['tasks_run']
 		
 		# Write summary file:
 		if self.summary_file and self.summary['tasks_run'] % self.summary_interval == 0:
