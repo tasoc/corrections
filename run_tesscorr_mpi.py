@@ -138,8 +138,18 @@ def main():
 					tag = status.Get_tag()
 
 					if tag == tags.START:
+						result = task.copy()
+
 						# Run the correction:
-						result = corr.correct(task)
+						try:
+							result = corr.correct(task)
+						except:
+							# Something went wrong
+							error_msg = traceback.format_exc().strip()
+							result.update({
+								'status_corr': corrections.STATUS.ERROR,
+								'details': {'errors': error_msg}
+							})
 
 						# Send the result back to the master:
 						comm.send(result, dest=0, tag=tags.DONE)

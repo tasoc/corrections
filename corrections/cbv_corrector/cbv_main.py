@@ -138,6 +138,12 @@ class CBV(object):
 		
 		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' %(datasource,cbv_area))
 		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' %(datasource,cbv_area))
+		
+		if not os.path.exists(filepath):
+			raise FileNotFoundError("Could not find CBV file")
+		if not os.path.exists(filepath_s):
+			raise FileNotFoundError("Could not find CBV spike file")	
+			
 		self.cbv = np.load(filepath)
 		self.cbv_s = np.load(filepath_s)
 		
@@ -173,12 +179,14 @@ class CBV(object):
 		
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
 		F = flux[idx]
-
-		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
-
-
-		# Another (but slover) implementation
-#		C = slin.lstsq(X, flux[idx])[0]
+		
+#		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
+		try:
+			C = (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
+		except:
+			# Another (but slover) implementation
+			C = np.linalg.lstsq(X, F)[0]
+		
 		return C
 	
 	#--------------------------------------------------------------------------
@@ -423,7 +431,6 @@ class CBV(object):
 					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, wscale, N_neigh, method=method, start=start)
 				else:
 					res = self.fitting_lh(fluxi, Ncbvs)
-
 
 				# Break if nothing changes
 				if iters==1:
