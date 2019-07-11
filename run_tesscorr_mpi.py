@@ -64,7 +64,7 @@ def main():
 
 	if rank == 0:
 		try:
-			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite) as tm: #, summary=os.path.join(output_folder, 'summary.json')) as tm:
+			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite, summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
 				# Get list of tasks:
 				numtasks = tm.get_number_tasks(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
 				tm.logger.info("%d tasks to be run", numtasks)
