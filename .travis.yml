@@ -22,6 +22,7 @@ jobs:
 
 # command to install dependencies
 install:
+  - pip install --upgrade pip
   - pip uninstall numpy Bottleneck -y
   - pip install -r requirements.txt --no-cache-dir
 script:
