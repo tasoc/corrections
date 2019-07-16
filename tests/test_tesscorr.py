@@ -23,7 +23,7 @@ def test_corrclass_type():
     assert repr(CorrClass) == "<class 'corrections.ensemble.EnsembleCorrector'>"
 
     CorrClass = corrclass('cbv')
-    assert repr(CorrClass) == "<class 'corrections.ensemble.CBVCorrector'>"
+    assert repr(CorrClass) == "<class 'corrections.cbv_corrector.CBVCorrector.CBVCorrector'>"
 
     CorrClass = corrclass('kasoc_filter')
     assert repr(CorrClass) == "<class 'corrections.KASOCFilterCorrector.KASOCFilterCorrector'>"
