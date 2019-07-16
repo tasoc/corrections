@@ -8,6 +8,7 @@ Created on Thu Dec  6 17:42:49 2018
 
 import os
 import numpy as np
+import math as m
 import logging
 from tqdm import tqdm
 from bottleneck import nanmean, nanmedian
@@ -17,23 +18,105 @@ import sqlite3
 import six
 from lightkurve import TessLightCurve
 from astropy.io import fits
-
+from astropy.stats import LombScargle
 
 from .cbv_main import lc_matrix_calc
 from ..plots import plt
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
-from .manual_filters import manual_exclude
+from ..manual_filters import manual_exclude
+
+import matplotlib.pyplot as pl
 
 # =============================================================================
 # 
 # =============================================================================
 
-def wn(ori_flux, corrected_flux):
-	"""Calculate added white nosie between two light curves"""
+def psd_scargle(time, flux, Nsample = 10.):
+	"""
+	   Calculate the power spectral density using the Lomb-Scargle (L-S) periodogram
+	   
+	   Parameters:
+	        time (numpy array, float): time stamps of the light curve
+	        flux (numpy array, float): the flux variations of the light curve
+	        Nsample (optional, float): oversampling rate for the periodogram. Default value = 10.
+	   
+	   Returns:
+	        fr (numpy array, float): evaluated frequency values in the domain of the periodogram
+	        sc (numpy array, float): the PSD values of the L-S periodogram
 	
-	pass
+	.. codeauthor:: Timothy Van Reeth <timothy.vanreeth@kuleuven.be>
+	"""
+	ndata = len(time)                                            # The number of data points
+	fnyq = 0.5/np.median(time[1:]-time[:-1])                     # the Nyquist frequency
+	fres = 1./(time[-1]-time[0])                                 # the frequency resolution
+	fr = np.arange(0.,fnyq,fres/float(Nsample))                  # the frequencies
+	sc1 = LombScargle(time, flux).power(fr, normalization='psd')   # The non-normalized Lomb-Scargle "power"
+	
+	# Computing the appropriate rescaling factors (to convert to astrophysical units)
+	fct = m.sqrt(4./ndata)
+	T = time.ptp()
+	sc = fct**2. * sc1 * T
+	
+	# Ensuring the output does not contain nans
+	if(np.isnan(sc).any()):
+	    fr = fr[~np.isnan(sc)]
+	    sc = sc[~np.isnan(sc)]
+	
+	return fr, sc
 
-	# Check Kepler PDC Eq. 8.4-8.5
+
+
+def wn(ori_lc, corrected_lc, alpha_n = 1.):
+	"""
+	   Calculate added white noise between two light curves.
+	   Based on Eq. 8.4-8.5 in the Kepler PDC 
+	   
+	   Parameters:
+	        ori_lc (light kurve object): the uncorrected TESS light curve
+	        corrected_lc (light kurve object): the corrected TESS light curve
+	        alpha_n (optional, float): scaling factor. Default value = 1.
+	        
+	   Returns:
+	        Gn (float): goodness metric for the added white noise.
+	                    In the limit where ori_lc and corrected_lc are identical, Gn approaches 0.
+	                    In the (improbable?) case where noise is removed instead of added, Gn = -1.
+	                    
+	
+	.. codeauthor:: Timothy Van Reeth <timothy.vanreeth@kuleuven.be>
+	"""
+	
+	# Excluding nans from the input LCs to avoid problems
+	ori_time0 = ori_lc.time[~np.isnan(ori_lc.flux)]
+	ori_flux0 = ori_lc.flux[~np.isnan(ori_lc.flux)]
+	corr_time0 = corrected_lc.time[~np.isnan(corrected_lc.flux)]
+	corr_flux0 = corrected_lc.flux[~np.isnan(corrected_lc.flux)]
+	
+	# Calculating the Noise floor of both LCs, defined as the differences between adjacent flux values
+	ori_time = ori_time0[:-1]
+	ori_Nf = ori_flux0[1:] - ori_flux0[:-1]
+	
+	corr_time = corr_time0[:-1]
+	corr_Nf = corr_flux0[1:] - corr_flux0[:-1]
+	
+	# Computing the PSDs of the noise floors
+	corr_fr,corr_psd = psd_scargle(corr_time, corr_Nf - np.mean(corr_Nf))
+	ori_fr,ori_psd = psd_scargle(ori_time, ori_Nf - np.mean(ori_Nf))
+	
+	# Ensuring both PSDs are evaluated for the same frequencies
+	int_corr_psd = np.interp(ori_fr, corr_fr, corr_psd)
+	
+	# Integrate the log of the ratio of PSDs, ensuring the integral exists
+	if(np.r_[int_corr_psd < ori_psd].all()):
+	    Gn = -1.
+	else:
+	    integrand = np.log10(int_corr_psd/ori_psd)
+	    integrand[np.r_[int_corr_psd < ori_psd]] = 0.
+	    Gn = alpha_n * np.trapz(integrand, x=ori_fr)
+	
+	return Gn
+
+
+
 
 
 class LCValidation(object):
@@ -184,6 +267,7 @@ class LCValidation(object):
 			lc.show_properties()
 
 		return lc
+
 
 	def search_database(self, select=None, search=None, order_by=None, limit=None, distinct=False):
 		"""
@@ -352,6 +436,7 @@ class LCValidation(object):
 	def added_noise(self):
 		
 		#call wn on loaded targets
+		
 		pass
 	
 	
