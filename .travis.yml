@@ -22,10 +22,25 @@ jobs:
 
 # command to install dependencies
 install:
-  - pip install -r requirements.txt
+  - pip uninstall numpy Bottleneck -y
+  - pip install -r requirements.txt --no-cache-dir
 script:
   - pytest
 branches:
   only:
     - master
     - devel
+	- /^v\d+\.\d+.+$/
+
+# Deploy to GitHub Releases, making a release of the
+# code whenever a new tag is added on the master branch
+deploy:
+  provider: releases
+  api_key: $GITHUB_TOKEN
+  skip_cleanup: true
+  draft: true
+  on:
+    branch:
+      - master
+      - /^v\d+\.\d+.+$/
+    tags: true
