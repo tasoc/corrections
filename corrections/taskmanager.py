@@ -74,6 +74,7 @@ class TaskManager(object):
 			priority INT PRIMARY KEY NOT NULL,
 			lightcurve TEXT,
 			elaptime REAL NOT NULL,
+			worker_wait_time REAL NOT NULL,
 			variance DOUBLE PRECISION,
 			rms_hour DOUBLE PRECISION,
 			ptp DOUBLE PRECISION,
@@ -224,10 +225,11 @@ class TaskManager(object):
 				self.summary['last_error'] = error_msg
 
 			# Save additional diagnostics:
-			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
+			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, worker_wait_time, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?,?);", (
 				result['priority'],
 				result.get('lightcurve_corr', None),
 				result.get('elaptime_corr', None),
+				result.get('worker_wait_time', None),
 				details.get('variance', None),
 				details.get('rms_hour', None),
 				details.get('ptp', None),

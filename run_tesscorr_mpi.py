@@ -29,6 +29,7 @@ import traceback
 import os
 import enum
 import corrections
+from timeit import default_timer
 
 #------------------------------------------------------------------------------
 def main():
@@ -130,12 +131,14 @@ def main():
 			with CorrClass(input_folder, plot=args.plot) as corr:
 
 				# Send signal that we are ready for task:
+				tic = default_timer()
 				comm.send(None, dest=0, tag=tags.READY)
 
 				while True:
 					# Receive a task from the master:
 					task = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
 					tag = status.Get_tag()
+					toc = default_timer()
 
 					if tag == tags.START:
 						result = task.copy()
@@ -148,7 +151,8 @@ def main():
 							error_msg = traceback.format_exc().strip()
 							result.update({
 								'status_corr': corrections.STATUS.ERROR,
-								'details': {'errors': error_msg}
+								'details': {'errors': error_msg},
+								'worker_wait_time': toc-tic
 							})
 
 						# Send the result back to the master:
