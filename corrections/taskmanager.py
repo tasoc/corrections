@@ -60,7 +60,7 @@ class TaskManager(object):
 		self.cursor.execute("PRAGMA table_info(todolist)")
 		if 'corr_status' not in [r['name'] for r in self.cursor.fetchall()]:
 			self.logger.debug("Adding corr_status column to todolist")
-			self.cursor.execute("ALTER TABLE todolist ADD COLUMN corr_status INT DEFAULT NULL")
+			self.cursor.execute("ALTER TABLE todolist ADD COLUMN corr_status INTEGER DEFAULT NULL")
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
 
@@ -76,7 +76,7 @@ class TaskManager(object):
 
 		# Create table for diagnostics:
 		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
-			priority INT PRIMARY KEY NOT NULL,
+			priority INTEGER PRIMARY KEY ASC NOT NULL,
 			lightcurve TEXT,
 			elaptime REAL,
 			worker_wait_time REAL NOT NULL,
