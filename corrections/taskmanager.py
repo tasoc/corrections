@@ -43,6 +43,7 @@ class TaskManager(object):
 		self.conn = sqlite3.connect(todo_file)
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
+		self.cursor.execute("PRAGMA foreign_keys=ON;")
 
 		self.summary_file = summary
 		self.summary_interval = summary_interval
@@ -62,6 +63,10 @@ class TaskManager(object):
 			self.cursor.execute("ALTER TABLE todolist ADD COLUMN corr_status INT DEFAULT NULL")
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
+
+		# Create indicies
+		self.cursor.execute("CREATE INDEX IF NOT EXISTS datavalidation_raw_approved_idx ON datavalidation_raw (approved);")
+		self.conn.commit()
 
 		# Reset the status of everything for a new run:
 		if overwrite:
@@ -88,14 +93,18 @@ class TaskManager(object):
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
 		self.conn.commit()
-		
+
+		# Analyze the tables for better query planning:
+		self.cursor.execute("ANALYZE;")
+
 		# Prepare summary object:
 		self.summary = {
 			'slurm_jobid': os.environ.get('SLURM_JOB_ID', None),
 			'numtasks': 0,
 			'tasks_run': 0,
 			'last_error': None,
-			'mean_elaptime': 0.0
+			'mean_elaptime': None,
+			'mean_worker_waittime': None
 		}
 		# Make sure to add all the different status to summary:
 		for s in STATUS: self.summary[s.name] = 0
@@ -188,7 +197,6 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-
 		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
@@ -203,7 +211,7 @@ class TaskManager(object):
 
 		# Extract details dictionary:
 		details = result.get('details', {})
-		
+
 		# The status of this target returned by the photometry:
 		my_status = result['status_corr']
 
@@ -213,15 +221,14 @@ class TaskManager(object):
 				result['status_corr'].value,
 				result['priority']
 			))
-			
+
 			self.summary['tasks_run'] += 1
 			self.summary[my_status.name] += 1
 			self.summary['STARTED'] -= 1
-	
+
 			# Save additional diagnostics:
 			error_msg = details.get('errors', None)
 			if error_msg:
-#				error_msg = '\n'.join(error_msg)
 				self.summary['last_error'] = error_msg
 
 			# Save additional diagnostics:
@@ -239,13 +246,22 @@ class TaskManager(object):
 		except:
 			self.conn.rollback()
 			raise
-		
-		# Calculate mean elapsed time using "streaming mean":
-		self.summary['mean_elaptime'] += (result['elaptime_corr'] - self.summary['mean_elaptime']) / self.summary['tasks_run']
-		
+
+		# Calculate mean elapsed time using "streaming weighted mean" with (alpha=0.1):
+		# https://dev.to/nestedsoftware/exponential-moving-average-on-streaming-data-4hhl
+		if self.summary['mean_elaptime'] is None:
+			self.summary['mean_elaptime'] = result['elaptime_corr']
+		else:
+			self.summary['mean_elaptime'] += 0.1 * (result['elaptime_corr'] - self.summary['mean_elaptime'])
+
+		if self.summary['mean_worker_waittime'] is None:
+			self.summary['mean_worker_waittime'] = result['worker_wait_time']
+		else:
+			self.summary['mean_worker_waittime'] += 0.1 * (result['worker_wait_time'] - self.summary['mean_worker_waittime'])
+
 		# Write summary file:
 		if self.summary_file and self.summary['tasks_run'] % self.summary_interval == 0:
-			self.write_summary()	
+			self.write_summary()
 
 	def start_task(self, taskid):
 		"""
@@ -254,8 +270,8 @@ class TaskManager(object):
 		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (STATUS.STARTED.value, taskid))
 		self.conn.commit()
 		self.summary['STARTED'] += 1
-		
-		
+
+
 	def get_random_task(self):
 		"""
 		Get random task to be processed.
