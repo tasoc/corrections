@@ -251,12 +251,12 @@ class TaskManager(object):
 		# https://dev.to/nestedsoftware/exponential-moving-average-on-streaming-data-4hhl
 		if self.summary['mean_elaptime'] is None:
 			self.summary['mean_elaptime'] = result['elaptime_corr']
-		else:
+		elif result.get('elaptime_corr') is not None:
 			self.summary['mean_elaptime'] += 0.1 * (result['elaptime_corr'] - self.summary['mean_elaptime'])
 
 		if self.summary['mean_worker_waittime'] is None:
 			self.summary['mean_worker_waittime'] = result['worker_wait_time']
-		else:
+		elif result.get('worker_wait_time') is not None:
 			self.summary['mean_worker_waittime'] += 0.1 * (result['worker_wait_time'] - self.summary['mean_worker_waittime'])
 
 		# Write summary file:
