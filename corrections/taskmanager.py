@@ -89,7 +89,7 @@ class TaskManager(object):
 		self.conn.commit()
 
 		# Reset calculations with status STARTED or ABORT:
-		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value)
+		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' +  str(STATUS.ERROR.value)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
 		self.conn.commit()
@@ -163,10 +163,9 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
-			STATUS.ERROR.value,
 			constraints
 		))
 
@@ -197,10 +196,9 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND (corr_status IS NULL OR corr_status = %d) AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
-			STATUS.ERROR.value,
 			constraints
 		))
 		task = self.cursor.fetchone()
