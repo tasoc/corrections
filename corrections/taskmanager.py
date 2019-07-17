@@ -78,7 +78,7 @@ class TaskManager(object):
 		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
 			priority INT PRIMARY KEY NOT NULL,
 			lightcurve TEXT,
-			elaptime REAL NOT NULL,
+			elaptime REAL,
 			worker_wait_time REAL NOT NULL,
 			variance DOUBLE PRECISION,
 			rms_hour DOUBLE PRECISION,
