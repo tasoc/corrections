@@ -152,9 +152,10 @@ def main():
 							result.update({
 								'status_corr': corrections.STATUS.ERROR,
 								'details': {'errors': error_msg},
-								'worker_wait_time': toc-tic
 							})
 
+	
+						result.update({'worker_wait_time': toc-tic})
 						# Send the result back to the master:
 						comm.send(result, dest=0, tag=tags.DONE)
 
