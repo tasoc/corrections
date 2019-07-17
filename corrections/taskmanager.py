@@ -11,6 +11,7 @@ A TaskManager which keeps track of which targets to process.
 import os.path
 import sqlite3
 import logging
+import json
 from . import STATUS
 
 class TaskManager(object):
@@ -18,7 +19,7 @@ class TaskManager(object):
 	A TaskManager which keeps track of which targets to process.
 	"""
 
-	def __init__(self, todo_file, cleanup=False, overwrite=False):
+	def __init__(self, todo_file, cleanup=False, overwrite=False, summary=None, summary_interval=100):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
@@ -42,6 +43,9 @@ class TaskManager(object):
 		self.conn = sqlite3.connect(todo_file)
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
+
+		self.summary_file = summary
+		self.summary_interval = summary_interval
 
 		# Setup logging:
 		formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -70,6 +74,7 @@ class TaskManager(object):
 			priority INT PRIMARY KEY NOT NULL,
 			lightcurve TEXT,
 			elaptime REAL NOT NULL,
+			worker_wait_time REAL NOT NULL,
 			variance DOUBLE PRECISION,
 			rms_hour DOUBLE PRECISION,
 			ptp DOUBLE PRECISION,
@@ -83,6 +88,27 @@ class TaskManager(object):
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
 		self.conn.commit()
+		
+		# Prepare summary object:
+		self.summary = {
+			'slurm_jobid': os.environ.get('SLURM_JOB_ID', None),
+			'numtasks': 0,
+			'tasks_run': 0,
+			'last_error': None,
+			'mean_elaptime': 0.0
+		}
+		# Make sure to add all the different status to summary:
+		for s in STATUS: self.summary[s.name] = 0
+		# If we are going to output summary, make sure to fill it up:
+		if self.summary_file:
+			# Extract information from database:
+			self.cursor.execute("SELECT corr_status,COUNT(*) AS cnt FROM todolist GROUP BY corr_status;")
+			for row in self.cursor.fetchall():
+				self.summary['numtasks'] += row['cnt']
+				if row['corr_status'] is not None:
+					self.summary[STATUS(row['corr_status']).name] = row['cnt']
+			# Write summary to file:
+			self.write_summary()
 
 		# Run a cleanup/optimization of the database before we get started:
 		if cleanup:
@@ -177,6 +203,9 @@ class TaskManager(object):
 
 		# Extract details dictionary:
 		details = result.get('details', {})
+		
+		# The status of this target returned by the photometry:
+		my_status = result['status_corr']
 
 		try:
 			# Update the status in the TODO list:
@@ -184,12 +213,23 @@ class TaskManager(object):
 				result['status_corr'].value,
 				result['priority']
 			))
+			
+			self.summary['tasks_run'] += 1
+			self.summary[my_status.name] += 1
+			self.summary['STARTED'] -= 1
+	
+			# Save additional diagnostics:
+			error_msg = details.get('errors', None)
+			if error_msg:
+#				error_msg = '\n'.join(error_msg)
+				self.summary['last_error'] = error_msg
 
 			# Save additional diagnostics:
-			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?);", (
+			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, worker_wait_time, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?,?);", (
 				result['priority'],
 				result.get('lightcurve_corr', None),
 				result.get('elaptime_corr', None),
+				result.get('worker_wait_time', None),
 				details.get('variance', None),
 				details.get('rms_hour', None),
 				details.get('ptp', None),
@@ -199,6 +239,13 @@ class TaskManager(object):
 		except:
 			self.conn.rollback()
 			raise
+		
+		# Calculate mean elapsed time using "streaming mean":
+		self.summary['mean_elaptime'] += (result['elaptime_corr'] - self.summary['mean_elaptime']) / self.summary['tasks_run']
+		
+		# Write summary file:
+		if self.summary_file and self.summary['tasks_run'] % self.summary_interval == 0:
+			self.write_summary()	
 
 	def start_task(self, taskid):
 		"""
@@ -206,7 +253,9 @@ class TaskManager(object):
 		"""
 		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (STATUS.STARTED.value, taskid))
 		self.conn.commit()
-
+		self.summary['STARTED'] += 1
+		
+		
 	def get_random_task(self):
 		"""
 		Get random task to be processed.
@@ -217,3 +266,12 @@ class TaskManager(object):
 		task = self.cursor.fetchone()
 		if task: return dict(task)
 		return None
+
+	def write_summary(self):
+		"""Write summary of progress to file. The summary file will be in JSON format."""
+		if self.summary_file:
+			try:
+				with open(self.summary_file, 'w') as fid:
+					json.dump(self.summary, fid)
+			except:
+				self.logger.exception("Could not write summary file")

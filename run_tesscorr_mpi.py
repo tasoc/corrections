@@ -29,6 +29,7 @@ import traceback
 import os
 import enum
 import corrections
+from timeit import default_timer
 
 #------------------------------------------------------------------------------
 def main():
@@ -64,7 +65,7 @@ def main():
 
 	if rank == 0:
 		try:
-			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite) as tm: #, summary=os.path.join(output_folder, 'summary.json')) as tm:
+			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite, summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
 				# Get list of tasks:
 				numtasks = tm.get_number_tasks(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
 				tm.logger.info("%d tasks to be run", numtasks)
@@ -134,8 +135,10 @@ def main():
 
 				while True:
 					# Receive a task from the master:
+					tic = default_timer()
 					task = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
 					tag = status.Get_tag()
+					toc = default_timer()
 
 					if tag == tags.START:
 						result = task.copy()
@@ -148,9 +151,11 @@ def main():
 							error_msg = traceback.format_exc().strip()
 							result.update({
 								'status_corr': corrections.STATUS.ERROR,
-								'details': {'errors': error_msg}
+								'details': {'errors': error_msg},
 							})
 
+	
+						result.update({'worker_wait_time': toc-tic})
 						# Send the result back to the master:
 						comm.send(result, dest=0, tag=tags.DONE)
 
