@@ -131,11 +131,11 @@ def main():
 			with CorrClass(input_folder, plot=args.plot) as corr:
 
 				# Send signal that we are ready for task:
-				tic = default_timer()
 				comm.send(None, dest=0, tag=tags.READY)
 
 				while True:
 					# Receive a task from the master:
+					tic = default_timer()
 					task = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
 					tag = status.Get_tag()
 					toc = default_timer()
