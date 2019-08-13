@@ -20,12 +20,12 @@ matrix:
       script:
         - flake8
 
-	# Allow some newer versions of Python to fail for now
-	# This will be changed once the required packages starts
-	# supporting the newer versions of Python:
-	fast_finish: true
-	allow_failures:
-	  - name: "Flake8"
+  # Allow some newer versions of Python to fail for now
+  # This will be changed once the required packages starts
+  # supporting the newer versions of Python:
+  fast_finish: true
+  allow_failures:
+    - name: "Flake8"
 
 # command to install dependencies
 install:
