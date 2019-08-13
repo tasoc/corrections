@@ -35,7 +35,7 @@ install:
   - pip install -r requirements.txt
   - pip install codecov pytest-cov
 script:
-  - pytest --cov=photometry/
+  - pytest --cov=corrections/
 after_success:
   - codecov
 
