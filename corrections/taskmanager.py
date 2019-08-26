@@ -249,12 +249,12 @@ class TaskManager(object):
 
 		# Calculate mean elapsed time using "streaming weighted mean" with (alpha=0.1):
 		# https://dev.to/nestedsoftware/exponential-moving-average-on-streaming-data-4hhl
-		if self.summary['mean_elaptime'] is None:
+		if self.summary['mean_elaptime'] is None and result.get('elaptime_corr') is not None:
 			self.summary['mean_elaptime'] = result['elaptime_corr']
 		elif result.get('elaptime_corr') is not None:
 			self.summary['mean_elaptime'] += 0.1 * (result['elaptime_corr'] - self.summary['mean_elaptime'])
 
-		if self.summary['mean_worker_waittime'] is None:
+		if self.summary['mean_worker_waittime'] is None and result.get('worker_wait_time') is not None:
 			self.summary['mean_worker_waittime'] = result['worker_wait_time']
 		elif result.get('worker_wait_time') is not None:
 			self.summary['mean_worker_waittime'] += 0.1 * (result['worker_wait_time'] - self.summary['mean_worker_waittime'])
