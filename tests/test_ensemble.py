@@ -1,15 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Tests of Ensemble.
+Tests of Ensemble Corrector.
 
 .. codeauthor:: Oliver James Hall <ojh251@student.bham.ac.uk>
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 .. codeauthor:: Lindsey Carboneau <lmcarboneau@gmail.com>
-
 """
 
-from __future__ import division, print_function, with_statement, absolute_import
 import sys
 import os
 import pytest
@@ -20,10 +18,11 @@ import numpy as np
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
 # TODO: Check the frange and etc algebraically
-starid = 281703991
-camera = 3
-ccd = 1
-sector =1
+starid = 29281992
+camera = 1
+ccd = 4
+sector = 1
+
 #----------------------------------------------------------------------
 def test_ensemble_basics():
 	"""Check that the Ensemblecorrector can be initiated at all"""
