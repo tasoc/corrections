@@ -91,7 +91,7 @@ class BaseCorrector(object):
 			# Create a data folder specific to this corrector:
 			if CorrMethod == 'cbv':
 				self.data_folder = os.path.join(self.input_folder, 'cbv-prepare')
-			else:	
+			else:
 				self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
 
 			# Make sure that the folder exists:
@@ -103,11 +103,10 @@ class BaseCorrector(object):
 		if not os.path.exists(todo_file):
 			raise ValueError("TODO file not found")
 
-		# Open the SQLite file:
-		self.conn = sqlite3.connect(todo_file)
+		# Open the SQLite file in read-only mode:
+		self.conn = sqlite3.connect('file:' + todo_file + '?mode=ro', uri=True)
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
-
 
 	def __enter__(self):
 		return self
@@ -427,25 +426,25 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
-			
+
 			if CorrMethod == 'CBV':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
 			if CorrMethod == 'Ensemble':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-ens_lc')
 			if CorrMethod == 'KASOC Filter':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-kf_lc')
-			
-			
-			
+
+
+
 			if output_folder != self.input_folder:
 				save_file = os.path.join(output_folder, filename)
 			else:
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
-							
+
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
-			
+
 			# Change permission of copied file to allow the addition of the corrected lightcurve
-			os.chmod(save_file, 0o640) 
+			os.chmod(save_file, 0o640)
 
 			# Open the FITS file to overwrite the corrected flux columns:
 			with fits.open(save_file, mode='update') as hdu:
