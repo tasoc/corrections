@@ -40,12 +40,6 @@ if __name__ == '__main__':
 	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
 
-
-	args.input_folder = '/media/mikkelnl/Elements/TESS/TASOC_DR04/S01/'
-	args.starid = 79155460
-	args.method = 'cbv'
-
-
 	# Make sure at least one setting is given:
 	if not args.all and args.starid is None and not args.random:
 		parser.error("Please select either a specific STARID or RANDOM.")

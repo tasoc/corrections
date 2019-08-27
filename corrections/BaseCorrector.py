@@ -295,7 +295,12 @@ class BaseCorrector(object):
 
 		# Find the relevant information in the TODO-list:
 		if not isinstance(task, dict) or task.get("lightcurve") is None:
-			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (task, ))
+			if isinstance(task, dict):
+				priority = int(task['priority'])
+			else:
+				priority = int(task)
+
+			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (priority, ))
 			task = self.cursor.fetchone()
 			if task is None:
 				raise ValueError("Priority could not be found in the TODO list")
