@@ -3,21 +3,22 @@
 """
 The ensemble photometry detrending class.
 
-Created on Thu Mar 29 09:58:55 2018
 .. codeauthor:: Derek Buzasi
 .. codeauthor:: Oliver J. Hall
 .. codeauthor:: Lindsey Carboneau
 .. codeauthor:: Filipe Pereira
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
 import numpy as np
 #import scipy.interpolate
 #import scipy.optimize as sciopt
 from copy import deepcopy
-import time
+from timeit import default_timer
 import logging
 from scipy.optimize import minimize
 #from scipy.optimize import minimize_scalar
+from sklearn.neighbors import NearestNeighbors
 from .plots import plt
 from . import BaseCorrector, STATUS
 
@@ -26,6 +27,8 @@ class EnsembleCorrector(BaseCorrector):
 	"""
 	DOCSTRING
 	"""
+
+	#----------------------------------------------------------------------------------------------
 	def __init__(self, *args, **kwargs):
 		"""
 		Initialize the correction object
@@ -38,6 +41,70 @@ class EnsembleCorrector(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		self.debug = logger.isEnabledFor(logging.DEBUG)
 
+		# Cache of NearestNeighbors objects that will be filled by the get_nearest_neighbors method:
+		self._nearest_neighbors = {}
+
+	#----------------------------------------------------------------------------------------------
+	def get_nearest_neighbors(self, lc, n_neighbors):
+		"""
+		Find the nearest neighbors to the given target in pixel-space.
+
+		Parameters:
+			lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			n_neighbors (integer): Number of targets to return.
+
+		Returns:
+			list: List of `priority` identifiers of the `n_neighbors` nearest stars.
+				Thest values can be passed directly to :func:`load_lightcurve` to load the lightcurves of the targets.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
+
+		camera = lc.camera
+		ccd = lc.ccd
+		ds = 'ffi' if lc.meta["task"]["datasource"] == 'ffi' else 'tpf'
+		key = (ds, camera, ccd)
+
+		# Check if the NearestNeighbors object already exists for this camera and CCD.
+		# If not create it, and store it for later use.
+		if key not in self._nearest_neighbors:
+			# StarID, pixel positions are retrieved from the database:
+			select_params = ["todolist.priority", "pos_row", "pos_column"]
+			search_params = ["camera={:d}".format(camera), "ccd={:d}".format(ccd), "mean_flux>0"]
+			if ds == 'ffi':
+				search_params.append("datasource = 'ffi'")
+			else:
+				search_params.append("datasource != 'ffi'")
+			db_raw = self.search_database(select=select_params, search=search_params)
+			priority = np.asarray([row['priority'] for row in db_raw], dtype='int64')
+			pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
+
+			# Create the NearestNeighbors object:
+			nn = NearestNeighbors(n_neighbors=n_neighbors+1, metric='euclidean')
+			nn.fit(pixel_coords)
+
+			# Save the
+			self._nearest_neighbors[key] = {'nn': nn, 'priority': priority}
+
+		# Get the NearestNeighbor object for the given Camera and CCD:
+		nn = self._nearest_neighbors[key]['nn']
+		priority = self._nearest_neighbors[key]['priority']
+
+		# Pixel coordinates of the target:
+		X = np.array([[lc.meta['task']['pos_row'], lc.meta['task']['pos_column']]])
+
+		# Use the NearestNeighbor object to find the targets closest to the main target:
+		distance_index = nn.kneighbors(X, n_neighbors=n_neighbors+1, return_distance=False)
+		nearby_stars = priority[distance_index.flatten()]
+
+		# Remove the main target from the list, if it is included:
+		indx = (nearby_stars != lc.meta['task']['priority'])
+		nearby_stars = nearby_stars[indx]
+
+		# Return the list of nearby stars:
+		return nearby_stars
+
+	#----------------------------------------------------------------------------------------------
 	def fast_median(self, lc_ensemble):
 		"""
 		A small utility function for calculating the ensemble median for use in
@@ -59,22 +126,23 @@ class EnsembleCorrector(BaseCorrector):
 
 		return lc_medians
 
+	#----------------------------------------------------------------------------------------------
 	def do_correction(self, lc):
 		"""
 		Function that takes all input stars for a sector and uses them to find a detrending
 		function using ensemble photometry for a star 'star_names[ifile]', where ifile is the
 		index for the star in the star_array and star_names list.
+
 		Parameters:
 			lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
+		
 		Returns:
-			lc_corr (``lightkurve.TessLightCurve``): Corrected lightcurve stored in a TessLightCurve object.
-			The status of the correction.
+			``lightkurve.TessLightCurve``: Corrected lightcurve stored in a TessLightCurve object.
+			``corrections.STATUS``: The status of the correction.
 		"""
+		
 		logger = logging.getLogger(__name__)
-		logger.info("Data Source: {}".format(lc.meta['task']['datasource']))
-
-		# TODO: Remove in final version. Used to test execution time
-		full_start = time.time()
+		logger.info("Data Source: %s", lc.meta['task']['datasource'])
 
 		# Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
 		og_time = lc.time.copy()
@@ -90,54 +158,35 @@ class EnsembleCorrector(BaseCorrector):
 		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) )/ np.mean(lc.flux)
 
 		drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
-		lc.meta.update({ 'fmean' : np.median(lc.flux),
-						'fstd' : np.std(np.diff(lc.flux)),
+		lc.meta.update({ 'fstd' : np.std(np.diff(lc.flux)),
 						'frange' : frange,
 						'drange' : drange})
 
 		logger.info(lc.meta.get("drange"))
 		logger.info(" ")
 
-		# StarID, pixel positions and lightcurve filenames are retrieved from the database
-		select_params = ["todolist.starid", "pos_row", "pos_column"]
-		search_params = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0", "datasource='{:s}'".format(lc.meta["task"]["datasource"])]
-		db_raw = self.search_database(select=select_params, search=search_params)
-		starid = np.array([row['starid'] for row in db_raw])
-		pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
-
-		# TODO: We can leave the target star for the distance comparison and get its exact index for free. Just need to be careful with the entry 0 of dist
-		# Determine distance of all stars to target. Array of star indexes by distance to target and array of the distance. Pixel distance used
-		idx = (starid == lc.targetid)
-		dist = np.sqrt((pixel_coords[:,0] - pixel_coords[idx,0])**2 + (pixel_coords[:,1] - pixel_coords[idx,1])**2)
-		distance_index = dist.argsort()
-		target_index = distance_index[0]
-		distance = dist[distance_index]
-
 		# Set up start/end times for stellar time series
-		time_start = np.amin(lc.time)
-		time_end = np.max(lc.time)
+		#time_start = np.amin(lc.time)
+		#time_end = np.max(lc.time)
 
 		# Set minimum range parameter...this is log10 photometric range, and stars more variable than this will be excluded from the ensemble
 		min_range = 0.0
 		# min_range can be changed later on, so we establish a min_range0 for when we want to reset min_range back to its initial value
-		min_range0 = min_range
+		#min_range0 = min_range
 
 		# Define variables to use in the loop to build the ensemble of stars
 		# List of star indexes to be included in the ensemble
 		temp_list = []
 		# Initial number of closest stars to consider and variable to increase number
-		initial_num_stars = 10
-		star_count = initial_num_stars
+		star_count = 10
 		# (Alternate param) Initial distance at which to consider stars around the target
 		# initial_search_radius = -1
 
-		# Follows index of dist array to restart search after the last addded star. Starts at 1 as the first star ordered by distance is the target
-		i = 1
-		# Setup search and select params to use in loop
-		select_loop = ["todolist.starid", "camera", "ccd", "lightcurve"]
-		search_loop = ["camera={:d}".format(lc.camera), "ccd={:d}".format(lc.ccd), "mean_flux>0", "datasource='{:s}'".format(lc.meta["task"]["datasource"])]
+		nearby_stars = self.get_nearest_neighbors(lc, 2*star_count)
+		logger.debug("Nearby stars: %s", nearby_stars)
+
 		# Start loop to build ensemble
-		ensemble_start = time.time()
+		ensemble_start = default_timer()
 		lc_ensemble = []
 		target_flux = deepcopy(lc.flux)
 		sum_ensemble = np.zeros(len(target_flux)) # to check for a large enough ensemble for dimmer stars
@@ -146,19 +195,19 @@ class EnsembleCorrector(BaseCorrector):
 		logger.info(str(np.median(target_flux)))
 
 		# First get a list of indexes of a specified number of stars to build the ensemble
+		i = 0
 		while len(temp_list) < star_count:
-
-			# Get lightkurve for next star closest to target
+			# Get lightkurve for next star closest to target:
 			try:
-				next_star_index = distance_index[i]
+				next_star_index = nearby_stars[i]
 			except IndexError:
-				return None, STATUS.SKIPPED
-			search_loop.append("todolist.starid={:}".format(starid[next_star_index]))
-			next_star_task = self.search_database(search=search_loop, select=select_loop)[0]
-			next_star_lc = self.load_lightcurve(next_star_task).remove_nans()
-			search_loop.pop(-1)
+				logger.error("Ran out of targets")
+				return None, STATUS.ERROR
 
-			next_star_lc_quality_mask = (next_star_lc.quality == 0)
+			logger.debug(next_star_index)
+			next_star_lc = self.load_lightcurve(nearby_stars[i]).remove_nans()
+
+			# next_star_lc_quality_mask = (next_star_lc.quality == 0)
 			# next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
 			# next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
 			# next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
@@ -167,15 +216,15 @@ class EnsembleCorrector(BaseCorrector):
 			frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) )/ np.mean(next_star_lc.flux)
 			drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
 
-			next_star_lc.meta.update({ 'fmean' : np.median(next_star_lc.flux),
-										'fstd' : np.std(np.diff(next_star_lc.flux)),
+			next_star_lc.meta.update({ 'fstd' : np.std(np.diff(next_star_lc.flux)),
 										'frange' : frange,
 										'drange' : drange})
 
-			logger.info(next_star_lc.meta.get("drange"))
+			logger.debug("drange=%f, frange=%f", drange, frange)
+
 			# Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
-			if (np.log10(next_star_lc.meta['drange']) < min_range and next_star_lc.meta['drange'] < 10*lc.meta['drange'] and next_star_lc.meta['frange'] < 0.4):
+			if np.log10(drange) < min_range and drange < 10*lc.meta['drange'] and frange < 0.4:
 
 				###################################################################
 				# median subtracted flux of target and ensemble candidate
@@ -184,7 +233,7 @@ class EnsembleCorrector(BaseCorrector):
 				ens_flux = temp_lc.flux
 				if self.debug:
 					plt.plot(time_ens, ens_flux)
-					plt.show()#block=True)
+					plt.show()
 
 				mens_flux = ens_flux - np.median(ens_flux)
 
@@ -216,19 +265,18 @@ class EnsembleCorrector(BaseCorrector):
 
 				#this is where I'll try adding the background correction portion
 				#first get scaled target flux
-				scale_target_flux = clip_target_flux/np.median(target_flux)
+				#scale_target_flux = clip_target_flux/np.median(target_flux)
 
 				args = tuple((clip_ens_flux+np.median(ens_flux),clip_target_flux+np.median(target_flux)))
 
-
-				def func1(scaleK,*args):
+				def func1(scaleK, *args):
 					temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
 					temp = (args[1]/np.median(args[1])) - ((args[0]+scaleK)/np.median(args[0]+scaleK))
 					temp = temp - np.median(temp)
 					return np.sum(np.square(temp))
 
 				scale0 = 100
-				res = minimize(func1,scale0,args,method='Powell')
+				res = minimize(func1, scale0, args, method='Powell')
 
 				logger.info("Fit param1: {}".format(res.x))
 				logger.info(str(np.median(ens_flux)))
@@ -249,11 +297,10 @@ class EnsembleCorrector(BaseCorrector):
 				###################################################################
 			i += 1
 
-		logger.info("Build ensemble, Time: {}".format(time.time()-ensemble_start))
-
+		logger.info("Build ensemble, Time: %f", default_timer()-ensemble_start)
 
 		lc_medians = self.fast_median(lc_ensemble)
-
+		#lc_medians = np.nanmedian(lc_ensemble, axis=2)
 
 		if self.debug:
 			plt.plot(lc.time, lc_medians)
@@ -271,7 +318,8 @@ class EnsembleCorrector(BaseCorrector):
 			return num1/denom1
 
 		scale0 = 1.0
-		res = minimize(func2,scale0,args)
+		res = minimize(func2, scale0, args)
+		k_corr = res.x
 
 		logger.info("Fit param: {}".format(res.x))
 
@@ -280,25 +328,19 @@ class EnsembleCorrector(BaseCorrector):
 		# Correct the lightcurve
 		lc_corr = lc.copy()
 
-		k_corr = res.x
-
 		median_only_flux = np.divide(lc_corr.flux, lc_medians)
-		lc_corr.flux = np.divide(lc_corr.flux, (k_corr+lc_medians))
-		lc_corr.flux = np.divide(lc_corr.flux, np.median(lc_corr.flux))
-		lc_corr.flux = lc_corr.flux*np.median(lc.flux)
-
+		lc_corr /= k_corr + lc_medians
+		lc_corr /= np.median(lc_corr.flux)
+		lc_corr *= np.median(lc.flux)
 
 		if self.debug:
+			plt.figure()
 			plt.scatter(lc_corr.time, median_only_flux, marker='.', label="Median Only")
 			plt.scatter(lc_corr.time, lc_corr.flux, marker='.', label="Corrected LC")
-			plt.show()#block=True)
+			plt.show()
 		#######################################################################################################
 
-		# TODO: Remove in final version. Used to test execution time
-		logger.info("Full do_correction, Time: {}".format(time.time()-full_start))
-
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
-
 		logger.info(temp_list)
 
 		# Replace removed points with NaN's so the info can be saved to the FITS
@@ -321,11 +363,12 @@ class EnsembleCorrector(BaseCorrector):
 		if self.plot:
 			ax = lc.plot(marker='o', label="Original LC")
 			lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-			plt.show() #block=True)
+			plt.show()
 			if self.debug:
 				#plt.savefig("./temp/" + str(lc.targetid) + "_testrun.png")
 				logger.info(np.nanstd(lc.flux))
 				logger.info(np.nanstd(lc_corr.flux))
 				logger.info(np.nanmedian(lc.flux))
 				logger.info(np.nanmedian(lc_corr.flux))
+
 		return lc_corr, STATUS.OK
