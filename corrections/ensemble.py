@@ -11,6 +11,8 @@ The ensemble photometry detrending class.
 """
 
 import numpy as np
+import os.path
+from bottleneck import nanmedian
 #import scipy.interpolate
 #import scipy.optimize as sciopt
 from copy import deepcopy
@@ -19,7 +21,7 @@ import logging
 from scipy.optimize import minimize
 #from scipy.optimize import minimize_scalar
 from sklearn.neighbors import NearestNeighbors
-from .plots import plt
+from .plots import plt, save_figure
 from . import BaseCorrector, STATUS
 
 
@@ -135,19 +137,19 @@ class EnsembleCorrector(BaseCorrector):
 
 		Parameters:
 			lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
-		
+
 		Returns:
 			``lightkurve.TessLightCurve``: Corrected lightcurve stored in a TessLightCurve object.
 			``corrections.STATUS``: The status of the correction.
 		"""
-		
+
 		logger = logging.getLogger(__name__)
 		logger.info("Data Source: %s", lc.meta['task']['datasource'])
 
 		# Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
-		og_time = lc.time.copy()
+		lc_corr = lc.copy()
 		lc = lc.remove_nans()
-		lc_quality_mask = (lc.quality == 0)
+		# lc_quality_mask = (lc.quality == 0)
 		# lc.time = lc.time[lc_quality_mask]
 		# lc.flux = lc.flux[lc_quality_mask]
 		# lc.flux_err = lc.flux_err[lc_quality_mask]
@@ -155,7 +157,7 @@ class EnsembleCorrector(BaseCorrector):
 		# Set up basic statistical parameters for the light curves.
 		# frange is the light curve range from the 5th to the 95th percentile,
 		# drange is the relative standard deviation of the differenced light curve (to whiten the noise)
-		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5) )/ np.mean(lc.flux)
+		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5))/ np.mean(lc.flux)
 
 		drange = np.std(np.diff(lc.flux)) / np.mean(lc.flux)
 		lc.meta.update({ 'fstd' : np.std(np.diff(lc.flux)),
@@ -182,14 +184,14 @@ class EnsembleCorrector(BaseCorrector):
 		# (Alternate param) Initial distance at which to consider stars around the target
 		# initial_search_radius = -1
 
-		nearby_stars = self.get_nearest_neighbors(lc, 2*star_count)
+		nearby_stars = self.get_nearest_neighbors(lc, 2000)
 		logger.debug("Nearby stars: %s", nearby_stars)
 
 		# Start loop to build ensemble
 		ensemble_start = default_timer()
 		lc_ensemble = []
 		target_flux = deepcopy(lc.flux)
-		sum_ensemble = np.zeros(len(target_flux)) # to check for a large enough ensemble for dimmer stars
+		#sum_ensemble = np.zeros(len(target_flux)) # to check for a large enough ensemble for dimmer stars
 		mtarget_flux = target_flux - np.median(target_flux)
 
 		logger.info(str(np.median(target_flux)))
@@ -204,7 +206,6 @@ class EnsembleCorrector(BaseCorrector):
 				logger.error("Ran out of targets")
 				return None, STATUS.ERROR
 
-			logger.debug(next_star_index)
 			next_star_lc = self.load_lightcurve(nearby_stars[i]).remove_nans()
 
 			# next_star_lc_quality_mask = (next_star_lc.quality == 0)
@@ -213,8 +214,8 @@ class EnsembleCorrector(BaseCorrector):
 			# next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
-			frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5) )/ np.mean(next_star_lc.flux)
-			drange = np.std(np.diff(next_star_lc.flux)) / np.mean(next_star_lc.flux)
+			frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5)) / next_star_lc.meta['task']['mean_flux']
+			drange = np.std(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
 
 			next_star_lc.meta.update({ 'fstd' : np.std(np.diff(next_star_lc.flux)),
 										'frange' : frange,
@@ -226,16 +227,16 @@ class EnsembleCorrector(BaseCorrector):
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
 			if np.log10(drange) < min_range and drange < 10*lc.meta['drange'] and frange < 0.4:
 
-				###################################################################
-				# median subtracted flux of target and ensemble candidate
-				temp_lc = deepcopy(next_star_lc)
-				time_ens = temp_lc.time
-				ens_flux = temp_lc.flux
-				if self.debug:
-					plt.plot(time_ens, ens_flux)
-					plt.show()
+				# Median subtracted flux of target and ensemble candidate
+				ens_flux = next_star_lc.flux
+				#temp_lc = deepcopy(next_star_lc)
+				#time_ens = temp_lc.time
+				#ens_flux = temp_lc.flux
+				#if self.debug:
+				#	plt.plot(time_ens, ens_flux)
+				#	plt.show()
 
-				mens_flux = ens_flux - np.median(ens_flux)
+				mens_flux = ens_flux - nanmedian(ens_flux)
 
 				# 2 sigma
 				ens2sig = 2 * np.std(mens_flux)
@@ -278,97 +279,79 @@ class EnsembleCorrector(BaseCorrector):
 				scale0 = 100
 				res = minimize(func1, scale0, args, method='Powell')
 
-				logger.info("Fit param1: {}".format(res.x))
+				logger.info("Fit param1: %f", res.x)
 				logger.info(str(np.median(ens_flux)))
-				logger.info(str(res.x))
 
-				ens_flux = ens_flux+res.x
-				mens_flux = mens_flux+res.x
-				clip_ens_flux = clip_ens_flux+res.x
+				ens_flux = ens_flux + res.x
+				#mens_flux = mens_flux + res.x
+				#clip_ens_flux = clip_ens_flux + res.x
 
-				if self.debug:
-					plt.plot(ens_flux/np.median(ens_flux))
-					plt.show(block=True)
-				next_star_lc.flux = (ens_flux/np.median(ens_flux))
-				temp_list.append([next_star_index, next_star_lc.copy()])
-				lc_ensemble.append(ens_flux/np.median(ens_flux))
-				sum_ensemble = sum_ensemble + np.array(ens_flux)
-				logger.info(str(next_star_lc.targetid)+'\n')
+				#if self.debug:
+				#	plt.plot(ens_flux/np.median(ens_flux))
+				#	plt.show(block=True)
+
+				#next_star_lc.flux = (ens_flux/np.median(ens_flux))
+				temp_list.append(next_star_index) # , next_star_lc.copy()
+				lc_ensemble.append(ens_flux/nanmedian(ens_flux))
+				#sum_ensemble = sum_ensemble + np.array(ens_flux)
+				#logger.info(str(next_star_lc.targetid))
 				###################################################################
 			i += 1
 
 		logger.info("Build ensemble, Time: %f", default_timer()-ensemble_start)
 
-		lc_medians = self.fast_median(lc_ensemble)
-		#lc_medians = np.nanmedian(lc_ensemble, axis=2)
+		lc_medians = nanmedian(np.asarray(lc_ensemble), axis=0)
 
-		if self.debug:
-			plt.plot(lc.time, lc_medians)
-			plt.plot(lc.time, (lc.flux/np.median(lc.flux)))
-			plt.show(block=True)
-			plt.plot(lc.time, lc_medians)
-			plt.show(block=True)
-		lc_medians = np.asarray(lc_medians)
-
-
-		args = tuple((lc.flux, lc_medians))
-		def func2(scalef,*args):
+		def func2(scalef, *args):
 			num1 = np.sum(np.abs(np.diff(np.divide(args[0],args[1]+scalef))))
 			denom1 = np.median(np.divide(args[0],args[1]+scalef))
 			return num1/denom1
 
 		scale0 = 1.0
-		res = minimize(func2, scale0, args)
+		res = minimize(func2, scale0, args=(lc.flux, lc_medians))
 		k_corr = res.x
 
-		logger.info("Fit param: {}".format(res.x))
+		logger.info("Fit param: %f", k_corr)
 
 		#fitf2 = 1+((lc_medians-1)*res.x)
 
-		# Correct the lightcurve
-		lc_corr = lc.copy()
+		# Correct the lightcurve:
 
-		median_only_flux = np.divide(lc_corr.flux, lc_medians)
+		median_only_flux = np.divide(lc.flux, lc_medians)
+
 		lc_corr /= k_corr + lc_medians
-		lc_corr /= np.median(lc_corr.flux)
-		lc_corr *= np.median(lc.flux)
+		lc_corr /= nanmedian(lc_corr.flux)
+		lc_corr *= nanmedian(lc.flux)
 
-		if self.debug:
-			plt.figure()
-			plt.scatter(lc_corr.time, median_only_flux, marker='.', label="Median Only")
-			plt.scatter(lc_corr.time, lc_corr.flux, marker='.', label="Corrected LC")
-			plt.show()
-		#######################################################################################################
+		# Convert to parts-per-million:
+		median_only_flux= 1e6*(median_only_flux/nanmedian(median_only_flux) - 1)
+		lc = 1e6*(lc/nanmedian(lc.flux) - 1)
+		lc_corr = 1e6*(lc_corr/nanmedian(lc_corr.flux) - 1)
 
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
 
-		# Replace removed points with NaN's so the info can be saved to the FITS
-		lc_corr.time = lc_corr.time[lc_quality_mask]
-		lc_corr.flux = lc_corr.flux[lc_quality_mask]
-		lc_corr.flux_err = lc_corr.flux_err[lc_quality_mask]
-		if len(lc_corr.flux) != len(og_time):
-			fix_flux = np.asarray(lc_corr.flux.copy())
-			indices = np.array(np.where(np.isin(og_time, lc_corr.time, assume_unique=True, invert=True)))[0]
-			indices.tolist()
+		#######################################################################################################
+		if self.plot and self.debug:
+			fig = plt.figure()
+			ax = fig.add_subplot(111)
+			ax.plot(lc.time, lc_medians, label='Medians')
+			#ax.plot(lc.time, lc.flux/nanmedian(lc.flux), label='Original')
+			save_figure(os.path.join(self.plot_folder(lc), 'ensemble_lc_medians'), fig=fig)
+			plt.close(fig)
 
-			for ind in indices:
-				fix_flux = np.insert(fix_flux, ind, np.nan)
+			fig = plt.figure()
+			ax = fig.add_subplot(111)
+			lc_corr.plot(ax=ax, normalize=False, color='orange', marker='o', ls='--', label="Corrected LC", ylabel='Relative Flux [ppm]')
+			ax.scatter(lc_corr.time, median_only_flux, marker='.', label="Median Only")
+			ax.legend()
+			save_figure(os.path.join(self.plot_folder(lc), 'ensemble_median_only'), fig=fig)
+			plt.close(fig)
 
-			lc_corr.flux = fix_flux.tolist()
-			lc_corr.time = og_time
-
-
-
-		if self.plot:
-			ax = lc.plot(marker='o', label="Original LC")
-			lc_corr.plot(ax=ax, color='orange', marker='o', ls='--', label="Corrected LC")
-			plt.show()
-			if self.debug:
-				#plt.savefig("./temp/" + str(lc.targetid) + "_testrun.png")
-				logger.info(np.nanstd(lc.flux))
-				logger.info(np.nanstd(lc_corr.flux))
-				logger.info(np.nanmedian(lc.flux))
-				logger.info(np.nanmedian(lc_corr.flux))
+		if self.debug:
+			logger.info(np.nanstd(lc.flux))
+			logger.info(np.nanstd(lc_corr.flux))
+			logger.info(np.nanmedian(lc.flux))
+			logger.info(np.nanmedian(lc_corr.flux))
 
 		return lc_corr, STATUS.OK
