@@ -446,14 +446,12 @@ class BaseCorrector(object):
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
 
-			if CorrMethod == 'CBV':
+			if self.CorrMethod == 'cbv':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
-			if CorrMethod == 'Ensemble':
+			if self.CorrMethod == 'ensemble':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-ens_lc')
-			if CorrMethod == 'KASOC Filter':
+			if self.CorrMethod == 'kasoc_filter':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-kf_lc')
-
-
 
 			if output_folder != self.input_folder:
 				save_file = os.path.join(output_folder, filename)
