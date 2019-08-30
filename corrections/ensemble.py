@@ -15,7 +15,6 @@ import os.path
 from bottleneck import nanmedian
 #import scipy.interpolate
 #import scipy.optimize as sciopt
-from copy import deepcopy
 from timeit import default_timer
 import logging
 from scipy.optimize import minimize
@@ -107,28 +106,6 @@ class EnsembleCorrector(BaseCorrector):
 		return nearby_stars
 
 	#----------------------------------------------------------------------------------------------
-	def fast_median(self, lc_ensemble):
-		"""
-		A small utility function for calculating the ensemble median for use in
-		correcting the target light curve
-		Parameters:
-			lc_ensemble: an array-like collection of each light curve in the ensemble
-		Returns:
-			lc_medians: an array-like (list) that represents the median value of
-					each light curve in the ensemble at each cadence
-		"""
-		lc_medians = []
-		col, row = np.asarray(lc_ensemble).shape
-		for i in range(row):
-			# find the median of the ensemble
-			temp =[]
-			for j in range(col):
-				temp.append(lc_ensemble[j][i])
-			lc_medians.append(np.median(temp))
-
-		return lc_medians
-
-	#----------------------------------------------------------------------------------------------
 	def do_correction(self, lc):
 		"""
 		Function that takes all input stars for a sector and uses them to find a detrending
@@ -146,13 +123,13 @@ class EnsembleCorrector(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		logger.info("Data Source: %s", lc.meta['task']['datasource'])
 
-		# Set minimum range parameter...this is log10 photometric range, and stars more variable than this will be excluded from the ensemble
-		min_range = 0.0
-
-		frange_lim = 0.4
-
-		# Initial number of closest stars to consider and variable to increase number
-		star_count = 10
+		# Settings:
+		drange_lim = 1.0 # Limit on differenced range - not in log10!
+		drange_relfactor = 10 # Limit on differenced range, relative to target d.range.
+		frange_lim = 0.4 # Limit on flux range.
+		star_count = 20 # Number of stars wanted for ensemble.
+		min_star_count = 10 # Minimum number of stars to have in the ensemble.
+		max_neighbors = 2000 # Maximal number of neighbors to check.
 
 		# Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
 		lc_corr = lc.copy()
@@ -165,45 +142,30 @@ class EnsembleCorrector(BaseCorrector):
 		# Set up basic statistical parameters for the light curves.
 		# frange is the light curve range from the 5th to the 95th percentile,
 		# drange is the relative standard deviation of the differenced light curve (to whiten the noise)
-		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)) / lc.meta['task']['mean_flux']
-		drange = np.std(np.diff(lc.flux)) / lc.meta['task']['mean_flux']
+		target_flux_median = lc.meta['task']['mean_flux']
+		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)) / target_flux_median
+		drange = np.std(np.diff(lc.flux)) / target_flux_median
 		lc.meta.update({'frange': frange, 'drange': drange})
 
 		logger.debug("Main target: drange=%f, frange=%f", drange, frange)
 
-		# min_range can be changed later on, so we establish a min_range0 for when we want to reset min_range back to its initial value
-		#min_range0 = min_range
+		# Query for a list of the nearest neigbors to test:
+		nearby_stars = self.get_nearest_neighbors(lc, max_neighbors)
+		logger.debug("Nearby stars: %s", nearby_stars)
 
 		# Define variables to use in the loop to build the ensemble of stars
 		# List of star indexes to be included in the ensemble
 		temp_list = []
 
-		# (Alternate param) Initial distance at which to consider stars around the target
-		# initial_search_radius = -1
-
-		nearby_stars = self.get_nearest_neighbors(lc, 2000)
-		logger.debug("Nearby stars: %s", nearby_stars)
-
 		# Start loop to build ensemble
 		ensemble_start = default_timer()
 		lc_ensemble = []
-		target_flux = deepcopy(lc.flux)
-		#sum_ensemble = np.zeros(len(target_flux)) # to check for a large enough ensemble for dimmer stars
-		mtarget_flux = target_flux - np.median(target_flux)
+		mtarget_flux = lc.flux - target_flux_median
 
-		logger.info(str(np.median(target_flux)))
-
-		# First get a list of indexes of a specified number of stars to build the ensemble
-		i = 0
-		while len(temp_list) < star_count:
+		# Loop through the neighbors to build the ensemble:
+		for next_star_index in nearby_stars:
 			# Get lightkurve for next star closest to target:
-			try:
-				next_star_index = nearby_stars[i]
-			except IndexError:
-				logger.error("Ran out of targets")
-				return None, STATUS.ERROR
-
-			next_star_lc = self.load_lightcurve(nearby_stars[i]).remove_nans()
+			next_star_lc = self.load_lightcurve(next_star_index).remove_nans()
 
 			# next_star_lc_quality_mask = (next_star_lc.quality == 0)
 			# next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
@@ -220,7 +182,7 @@ class EnsembleCorrector(BaseCorrector):
 
 			# Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
-			if np.log10(drange) < min_range and drange < 10*lc.meta['drange'] and frange < frange_lim:
+			if drange < drange_lim and drange < drange_relfactor*lc.meta['drange'] and frange < frange_lim:
 
 				# Median subtracted flux of target and ensemble candidate
 				ens_flux = next_star_lc.flux
@@ -249,10 +211,9 @@ class EnsembleCorrector(BaseCorrector):
 					np.where(absens < ens2sig, True, False),
 					mens_flux, 1)
 
-				logger.info(str(np.median(target_flux)))
 				logger.info(str(np.median(ens_flux)))
 
-				args = tuple((clip_ens_flux + nanmedian(ens_flux), clip_target_flux + nanmedian(target_flux)))
+				args = tuple((clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median))
 
 				def func1(scaleK, *args):
 					temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
@@ -261,7 +222,7 @@ class EnsembleCorrector(BaseCorrector):
 					return np.sum(np.square(temp))
 
 				scale0 = 100
-				res = minimize(func1, scale0, args, method='Powell')
+				res = minimize(func1, scale0, args=args, method='Powell')
 
 				logger.info("Fit param1: %f", res.x)
 				logger.info(str(np.median(ens_flux)))
@@ -271,11 +232,18 @@ class EnsembleCorrector(BaseCorrector):
 				temp_list.append(next_star_index) # , next_star_lc.copy()
 				lc_ensemble.append(ens_flux/nanmedian(ens_flux))
 
-				###################################################################
-			i += 1
+				# Stop the loop if we have reached the desired number of stars:
+				if len(temp_list) >= star_count:
+					break
+
+		# Ensure that we reached the minimum number of stars in the ensemble:
+		if len(temp_list) < min_star_count:
+			logger.error("Not enough stars for ensemble")
+			return None, STATUS.ERROR
 
 		logger.info("Build ensemble, Time: %f", default_timer()-ensemble_start)
 
+		# Calculate the median of all the ensemble lightcurves for each timestamp:
 		lc_medians = nanmedian(np.asarray(lc_ensemble), axis=0)
 
 		def func2(scalef, *args):
@@ -290,7 +258,6 @@ class EnsembleCorrector(BaseCorrector):
 		logger.info("Fit param: %f", k_corr)
 
 		# Correct the lightcurve:
-
 		if self.plot and self.debug:
 			median_only_flux = lc.flux / lc_medians
 			median_only_flux= 1e6*(median_only_flux/nanmedian(median_only_flux) - 1)
@@ -307,8 +274,9 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Set additional headers for FITS output:
 		lc_corr.meta['additional_headers']['ENS_NUM'] = (len(temp_list), 'Number of targets in ensemble')
-		lc_corr.meta['additional_headers']['ENS_DLIM'] = (min_range, 'Number of targets in ensemble')
-		lc_corr.meta['additional_headers']['ENS_FLIM'] = (frange_lim, 'Number of targets in ensemble')
+		lc_corr.meta['additional_headers']['ENS_DLIM'] = (drange_lim, 'Limit on differenced range metric')
+		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
+		lc_corr.meta['additional_headers']['ENS_RLIM'] = (frange_lim, 'Limit on flux range metric')
 
 		#######################################################################################################
 		if self.plot and self.debug:
