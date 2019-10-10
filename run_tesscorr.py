@@ -80,6 +80,9 @@ if __name__ == '__main__':
 	logger.info("Loading input data from '%s'", input_folder)
 	logger.info("Putting output data in '%s'", output_folder)
 
+	# Make sure the output directory exists:
+	os.makedirs(output_folder, exist_ok=True)
+
 	# Get the class for the selected method:
 	CorrClass = corrections.corrclass(args.method)
 
