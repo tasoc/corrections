@@ -21,6 +21,7 @@ from timeit import default_timer
 from bottleneck import nanmedian, nanvar
 from astropy.io import fits
 from lightkurve import TessLightCurve
+from .plots import plt, save_figure
 from .version import get_version
 from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
@@ -78,21 +79,22 @@ class BaseCorrector(object):
 		self.input_folder = input_folder
 		self.plot = plot
 
+		self.CorrMethod = {
+			'BaseCorrector': 'base',
+			'EnsembleCorrector': 'ensemble',
+			'CBVCorrector': 'cbv',
+			'KASOCFilterCorrector': 'kasoc_filter'
+		}.get(self.__class__.__name__)
+
 		# Find the auxillary data directory based on which corrector is running:
-		if self.__class__.__name__ == 'BaseCorrector':
+		if self.CorrMethod == 'base':
 			self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		else:
-			CorrMethod = {
-				'EnsembleCorrector': 'ensemble',
-				'CBVCorrector': 'cbv',
-				'KASOCFilterCorrector': 'kasoc_filter'
-			}.get(self.__class__.__name__)
-
 			# Create a data folder specific to this corrector:
-			if CorrMethod == 'cbv':
+			if self.CorrMethod == 'cbv':
 				self.data_folder = os.path.join(self.input_folder, 'cbv-prepare')
 			else:
-				self.data_folder = os.path.join(os.path.dirname(__file__), 'data', CorrMethod)
+				self.data_folder = os.path.join(os.path.dirname(__file__), 'data', self.CorrMethod)
 
 			# Make sure that the folder exists:
 			os.makedirs(self.data_folder, exist_ok=True)
@@ -150,7 +152,7 @@ class BaseCorrector(object):
 		Raises:
 			NotImplementedError
 		"""
-		raise NotImplementedError("A helpful error message goes here") # TODO
+		raise NotImplementedError("A helpful error message goes here")
 
 
 	def correct(self, task, output_folder=None):
@@ -205,6 +207,18 @@ class BaseCorrector(object):
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
 			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
+
+			# Plot the final lightcurve:
+			if self.plot:
+				fig = plt.figure(dpi=200)
+				ax = fig.add_subplot(111)
+				ax.scatter(lc.time, 1e6*(lc.flux/nanmedian(lc.flux)-1), s=2, alpha=0.3, marker='o', label="Original")
+				ax.scatter(lc_corr.time, lc_corr.flux, s=2, alpha=0.3, marker='o', label="Corrected")
+				ax.set_xlabel('Time (TBJD)')
+				ax.set_ylabel('Relative flux (ppm)')
+				ax.legend()
+				save_figure(os.path.join(self.plot_folder(lc), self.CorrMethod + '_final'), fig=fig)
+				plt.close(fig)
 
 			# Construct result dictionary from the original task
 			result = lc_corr.meta['task'].copy()
@@ -295,7 +309,12 @@ class BaseCorrector(object):
 
 		# Find the relevant information in the TODO-list:
 		if not isinstance(task, dict) or task.get("lightcurve") is None:
-			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (task, ))
+			if isinstance(task, dict):
+				priority = int(task['priority'])
+			else:
+				priority = int(task)
+
+			self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE todolist.priority=? LIMIT 1;", (priority, ))
 			task = self.cursor.fetchone()
 			if task is None:
 				raise ValueError("Priority could not be found in the TODO list")
@@ -427,14 +446,12 @@ class BaseCorrector(object):
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
 
-			if CorrMethod == 'CBV':
+			if self.CorrMethod == 'cbv':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
-			if CorrMethod == 'Ensemble':
+			if self.CorrMethod == 'ensemble':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-ens_lc')
-			if CorrMethod == 'KASOC Filter':
+			if self.CorrMethod == 'kasoc_filter':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-kf_lc')
-
-
 
 			if output_folder != self.input_folder:
 				save_file = os.path.join(output_folder, filename)
@@ -461,6 +478,20 @@ class BaseCorrector(object):
 				if lc.meta['additional_headers']:
 					for key, value in lc.meta['additional_headers'].items():
 						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
+
+				# For Ensemble, also add the ensemble list to the FITS file:
+				if self.CorrMethod == 'ensemble' and hasattr(self, 'ensemble_starlist'):
+					# Create binary table to hold the list of ensemble stars:
+					c1 = fits.Column(name='TIC', format='K', array=self.ensemble_starlist['starids'])
+
+					wm = fits.BinTableHDU.from_columns([c1, ], name='ENSEMBLE')
+
+					wm.header['TTYPE1'] = ('TIC', 'column title: TIC identifier')
+					wm.header['TFORM1'] = ('K', 'column format: signed 64-bit integer')
+					wm.header['TDISP1'] = ('I10', 'column display format')
+
+					# Add the new table to the list of HDUs:
+					hdu.append(wm)
 
 				# Save the updated FITS file:
 #				hdu.flush()

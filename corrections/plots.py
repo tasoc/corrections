@@ -175,7 +175,7 @@ def plot_image_fit_residuals(fig, image, fit, residuals):
 	return ax_list
 
 
-def save_figure(path, format='png', **kwargs):
+def save_figure(path, fig=None, format='png', **kwargs):
 	"""
 	Write current figure to file. Creates directory to place it in if needed.
 
@@ -192,5 +192,9 @@ def save_figure(path, format='png', **kwargs):
 	if not path.endswith('.' + format):
 		path += '.' + format
 
+	os.makedirs(os.path.dirname(path), exist_ok=True)
+
 	# Write current figure to file if it doesn't exist:
-	plt.savefig(path, format=format, bbox_inches='tight', **kwargs)
+	if fig is None:
+		fig = plt.gcf()
+	fig.savefig(path, format=format, bbox_inches='tight', **kwargs)

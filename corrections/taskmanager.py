@@ -81,7 +81,7 @@ class TaskManager(object):
 			priority INTEGER PRIMARY KEY ASC NOT NULL,
 			lightcurve TEXT,
 			elaptime REAL,
-			worker_wait_time REAL NOT NULL,
+			worker_wait_time REAL,
 			variance DOUBLE PRECISION,
 			rms_hour DOUBLE PRECISION,
 			ptp DOUBLE PRECISION,
