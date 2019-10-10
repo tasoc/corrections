@@ -127,7 +127,7 @@ class EnsembleCorrector(BaseCorrector):
 		drange_lim = 1.0 # Limit on differenced range - not in log10!
 		drange_relfactor = 10 # Limit on differenced range, relative to target d.range.
 		frange_lim = 0.4 # Limit on flux range.
-		star_count = 20 # Number of stars wanted for ensemble.
+		star_count = 10 # Number of stars wanted for ensemble.
 		min_star_count = 10 # Minimum number of stars to have in the ensemble.
 		max_neighbors = 2000 # Maximal number of neighbors to check.
 
