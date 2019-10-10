@@ -479,6 +479,20 @@ class BaseCorrector(object):
 					for key, value in lc.meta['additional_headers'].items():
 						hdu['LIGHTCURVE'].header[key] = (value, lc.meta['additional_headers'].comments[key])
 
+				# For Ensemble, also add the ensemble list to the FITS file:
+				if self.CorrMethod == 'ensemble' and hasattr(self, 'ensemble_starlist'):
+					# Create binary table to hold the list of ensemble stars:
+					c1 = fits.Column(name='TIC', format='K', array=self.ensemble_starlist['starids'])
+
+					wm = fits.BinTableHDU.from_columns([c1, ], name='ENSEMBLE')
+
+					wm.header['TTYPE1'] = ('TIC', 'column title: TIC identifier')
+					wm.header['TFORM1'] = ('K', 'column format: signed 64-bit integer')
+					wm.header['TDISP1'] = ('I10', 'column display format')
+
+					# Add the new table to the list of HDUs:
+					hdu.append(wm)
+
 				# Save the updated FITS file:
 #				hdu.flush()
 

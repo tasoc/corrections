@@ -271,6 +271,9 @@ class EnsembleCorrector(BaseCorrector):
 
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
+		self.ensemble_starlist = {
+			'starids': temp_list
+		}
 
 		# Set additional headers for FITS output:
 		lc_corr.meta['additional_headers']['ENS_NUM'] = (len(temp_list), 'Number of targets in ensemble')
