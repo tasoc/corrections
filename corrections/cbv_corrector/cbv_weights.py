@@ -1,11 +1,9 @@
-s#!/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
-from six.moves import range
 import numpy as np
 import sqlite3
 import os
@@ -33,15 +31,8 @@ from ..plots import plt
 import matplotlib.colors as colors
 from ..utilities import savePickle
 from .cbv_util import *#compute_entopy, _move_median_central_1d, move_median_central, compute_scores, rms, MAD_model
-plt.ioff()
 
-# =============================================================================
-#
-# =============================================================================
-
-
-
-
+#--------------------------------------------------------------------------------------------------
 def compute_weight_interpolations(filepath_todo, sector, dimensions=['row', 'col', 'tmag'], do_plot=True):
 
 	# Open the TODO file for that sector:
@@ -207,7 +198,7 @@ def compute_weight_interpolations(filepath_todo, sector, dimensions=['row', 'col
 
 
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 
 # TODO: include removal of simple trend in nd median filtering
 # TODO: Do nd median filtering before binning
@@ -488,19 +479,3 @@ if __name__ == '__main__':
 #
 ##	print(minlat, maxlat)
 #	plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

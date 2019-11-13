@@ -1,21 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+KASOC Filter for Asteroseismic Data Preparation - Utility functions
 
-"""KASOC Filter for Asteroseismic Data Preparation - Utility functions
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+"""
 
-@version: $Revision$
-@author:  Rasmus Handberg & Mikkel N. Lund
-@date:    $Date$"""
-
-#==============================================================================
-# Required Packages:
-#==============================================================================
-from __future__ import division, with_statement, print_function
 import numpy as np
 from numpy import zeros_like, diff, append, NaN
 from bottleneck import nanmedian, median, move_median, nanmean, nansum, move_mean
-#import blist
-from six.moves import range
 
 #==============================================================================
 def smooth(x, window):
@@ -39,7 +33,7 @@ def smooth_cyclic(x, window):
 	if window%2==0: window+=1
 	wh = window//2
 	if wh >= len(x): return zeros_like(x) + nanmean(x)
-	# Stich ends onto the array:
+	# Stitch ends onto the array:
 	N = len(x)
 	xny = np.concatenate((x[-wh-1:N-1], x, x[1:wh+1]))
 	# Smooth the full array:

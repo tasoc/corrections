@@ -6,7 +6,6 @@ Lightcurve correction using the KASOC Filter (Handberg et al. 2015).
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import numpy as np
 import logging
 import psycopg2 as psql

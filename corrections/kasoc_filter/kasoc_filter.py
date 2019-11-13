@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-"""KASOC Filter for Asteroseismic Data Preparation
+"""
+KASOC Filter for Asteroseismic Data Preparation
 
 Corrects Kepler/K2 data for instrumental effects and planetary signals
 to create new datasets optimized for asteroseismic analysis.
@@ -10,12 +10,6 @@ to create new datasets optimized for asteroseismic analysis.
 .. codeauthor:: Mikkel N. Lund
 """
 
-#==============================================================================
-# Required Packages:
-#==============================================================================
-
-from __future__ import division, with_statement, print_function
-from six.moves import range
 import logging
 import numpy as np
 from numpy import zeros, empty, argsort, diff, mod, isfinite, array, append, searchsorted, NaN, Inf
@@ -24,12 +18,8 @@ from copy import deepcopy as dc
 from ..plots import plt, matplotlib
 import os.path
 from bottleneck import nanmedian, nanstd, median, nanargmax, nansum, allnan, nanmin, nanmax
-# Import our fast (Cython) routines:
-#from . import cython_import
-#from .TRF_filters import gap_fill, theil_sen
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
-#from scipy.interpolate import LSQUnivariateSpline
 import scipy.misc
 import scipy
 scipy.factorial = scipy.misc.factorial
