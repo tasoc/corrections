@@ -40,6 +40,9 @@ def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 
 #------------------------------------------------------------------------------
 def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
+	"""
+	Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
+	"""
 	logger = logging.getLogger(__name__)
 
 	# Calculate the principle components:
@@ -48,14 +51,14 @@ def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
 	U, _, _ = pca._fit(Matrix)
 
 	Ent = compute_entopy(U)
-	logger.info('Entropy start: ' + str(Ent))
+	logger.info('Entropy start: %f', Ent)
 
 	targets_removed = 0
 	components = np.arange(n_components)
 
 	with np.errstate(invalid='ignore'):
-		while np.any(Ent<ent_limit):
-			com = components[(Ent<ent_limit)][0]
+		while np.any(Ent < ent_limit):
+			com = components[(Ent < ent_limit)][0]
 
 			# Remove highest relative weight target
 			m = nanmedian(U[:, com])
@@ -72,18 +75,17 @@ def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
 
 			targets_removed += 1
 
-			if targets_removed>targ_limit:
+			if targets_removed > targ_limit:
 				break
 
 			Ent = compute_entopy(U)
 
-	logger.info('Entropy end:'  + str(Ent))
-	logger.info('Targets removed ' + str(int(targets_removed)))
+	logger.info('Entropy end: %f', Ent)
+	logger.info('Targets removed: %d', targets_removed)
 	return Matrix
 
 #------------------------------------------------------------------------------
 def AlmightyCorrcoefEinsumOptimized(O, P):
-
 	"""
 	Correlation coefficients using Einstein sums
 
@@ -131,8 +133,8 @@ class CBV(object):
 	def __init__(self, data_folder, cbv_area, datasource, threshold_snrtest=5):
 		logger = logging.getLogger(__name__)
 
-		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' %(datasource, cbv_area))
-		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' %(datasource, cbv_area))
+		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' % (datasource, cbv_area))
+		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' % (datasource, cbv_area))
 
 		if not os.path.exists(filepath):
 			raise FileNotFoundError("Could not find CBV file")
@@ -157,7 +159,6 @@ class CBV(object):
 		inipath = os.path.join(data_folder, 'mat-%s-%d_free_weights.npz' %(datasource,cbv_area))
 		if os.path.exists(inipath):
 			self.inires = np.load(inipath)['res']
-
 
 	#--------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):

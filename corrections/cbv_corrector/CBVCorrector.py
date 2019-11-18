@@ -65,9 +65,9 @@ class CBVCorrector(BaseCorrector):
 		self.N_neigh = N_neigh
 		self.simple_fit = simple_fit
 		self.datasource = datasource
+
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
-
 
 	#--------------------------------------------------------------------------
 	def lc_matrix(self, cbv_area):
@@ -110,7 +110,7 @@ class CBVCorrector(BaseCorrector):
 			# This will change once more different cadences (i.e. 20s) is defined
 			if self.datasource == 'ffi':
 				search_cadence = "datasource='ffi'"
-			elif self.datasource == 'tpf':
+			else:
 				search_cadence = "datasource!='ffi'"
 
 			# Find the median of the variabilities:
@@ -286,7 +286,7 @@ class CBVCorrector(BaseCorrector):
 			mat0, _, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
 
 			# Calculate initial CBVs
-			logger.info('Computing %d CBVs' %self.ncomponents)
+			logger.info('Computing %d CBVs', self.ncomponents)
 			pca0 = PCA(self.ncomponents)
 			U0, _, _ = pca0._fit(mat0)
 
@@ -383,7 +383,8 @@ class CBVCorrector(BaseCorrector):
 		logger.info('------------------------------------')
 
 
-		if os.path.exists(os.path.join(self.data_folder, 'cbv-%s-%d.npy' %(self.datasource,cbv_area))) & os.path.exists(os.path.join(self.data_folder, 'cbv-s-%s-%d.npy' %(self.datasource,cbv_area))):
+		if os.path.exists(os.path.join(self.data_folder, 'cbv-%s-%d.npy' %(self.datasource,cbv_area))) \
+			and os.path.exists(os.path.join(self.data_folder, 'cbv-s-%s-%d.npy' %(self.datasource,cbv_area))):
 			logger.info('Separated CBVs for %s area %d already calculated' %(self.datasource,cbv_area))
 			return
 
@@ -494,7 +495,6 @@ class CBVCorrector(BaseCorrector):
 			plt.close(fig)
 			plt.close(fig2)
 
-
 	#--------------------------------------------------------------------------
 	def cotrend_ini(self, cbv_area, do_ini_plots=False):
 		"""
@@ -532,7 +532,7 @@ class CBVCorrector(BaseCorrector):
 		# This will change once more different cadences (i.e. 20s) is defined
 		if self.datasource == 'ffi':
 			search_cadence = "datasource='ffi'"
-		elif self.datasource == 'tpf':
+		else:
 			search_cadence = "datasource!='ffi'"
 
 		# Load stars from data base
@@ -566,7 +566,7 @@ class CBVCorrector(BaseCorrector):
 
 			logger.debug("Correcting star %d", lc.targetid)
 
-			flux_filter, res = cbv.cotrend_single(lc, n_components, self.data_folder, ini=True)
+			flux_filter, res = cbv.cotrend_single(lc, n_components, ini=True)
 			lc_corr = (lc.flux/flux_filter-1)*1e6
 
 			# TODO: compute diagnostics requiring the light curve
@@ -632,10 +632,6 @@ class CBVCorrector(BaseCorrector):
 		fig.savefig(os.path.join(self.data_folder, 'weights-sector-%s-%d.png' %(self.datasource,cbv_area)))
 		plt.close(fig)
 
-
-
-
-
 	#--------------------------------------------------------------------------
 	def compute_distance_map(self, cbv_area):
 		"""
@@ -659,7 +655,7 @@ class CBVCorrector(BaseCorrector):
 		# This will change once more different cadences (i.e. 20s) is defined
 		if self.datasource == 'ffi':
 			search_cadence = "datasource='ffi'"
-		elif self.datasource == 'tpf':
+		else:
 			search_cadence = "datasource!='ffi'"
 
 		# Load in positions and tmags, in same order as results are saved from ini_fit

@@ -23,7 +23,7 @@ def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None,
 	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv, datasource=datasource) as C:
 		C.compute_cbvs(cbv_area, ent_limit=el)
 		C.spike_sep(cbv_area)
-		
+
 #		C.cotrend_ini(cbv_area, do_ini_plots=ip)
 #		try:
 #			C.compute_distance_map(cbv_area)
@@ -44,7 +44,7 @@ if __name__ == '__main__':
 	group.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
 	group.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
 	group.add_argument('--datasource', type=str, default='ffi', choices=('ffi', 'tpf'), help='Data source for the creation of CBVs')
-	
+
 	group = parser.add_argument_group('Settings')
 	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
 	group.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
@@ -52,7 +52,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
-	
+
 	# Set logging level:
 	logging_level = logging.INFO
 	if args.quiet:
