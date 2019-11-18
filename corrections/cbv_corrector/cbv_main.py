@@ -131,8 +131,8 @@ class CBV(object):
 	def __init__(self, data_folder, cbv_area, datasource, threshold_snrtest=5):
 		logger = logging.getLogger(__name__)
 
-		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' %(datasource,cbv_area))
-		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' %(datasource,cbv_area))
+		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' %(datasource, cbv_area))
+		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' %(datasource, cbv_area))
 
 		if not os.path.exists(filepath):
 			raise FileNotFoundError("Could not find CBV file")
