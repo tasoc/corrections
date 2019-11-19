@@ -10,6 +10,7 @@ import logging
 from bottleneck import nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
 from scipy import stats
+import functools
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from ..utilities import loadPickle
@@ -249,20 +250,18 @@ class CBV(object):
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_pos_2(self, flux, err, Ncbvs, pos, wscale, N_neigh, method='Powell', start=None):
-		if (method=='Powell') or (method=='Nelder-Mead'):
-			# Initial guesses for coefficients:
-			if not start is None:
-				coeffs0 = start
-				coeffs0 = np.append(coeffs0, 0)
-			else:
-				coeffs0 = np.zeros(Ncbvs*2+1, dtype='float64')
+	def fitting_pos_2(self, flux, err, Ncbvs, pos, wscale, N_neigh, start_guess=None):
 
+		# Initial guesses for coefficients:
+		if start_guess is not None:
+			start_guess = np.append(start_guess, 0)
+		else:
+			start_guess = np.zeros(Ncbvs*2+1, dtype='float64')
 
-			res = np.zeros(int(Ncbvs*2), dtype='float64')
-			tree = self.priors
-			dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
-			W = 1/dist[0][1::]**2
+		res = np.zeros(int(Ncbvs*2), dtype='float64')
+		tree = self.priors
+		dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
+		W = 1/dist[0][1::]**2
 #
 #
 #			# TEST with independent spike fit
@@ -290,29 +289,29 @@ class CBV(object):
 #			plt.show()
 #			sys.exit()
 
-			for jj in range(Ncbvs):
-				V = self.inires[ind,1+jj][0][1::]
-				KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+		for jj in range(Ncbvs):
+			V = self.inires[ind,1+jj][0][1::]
+			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 
 #				VS = self.inires[ind,1+jj + no_cbv_coeff][0][1::]
 #				KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 #				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
 
-				res[jj] = minimize(self._posterior1d, coeffs0[jj], args=(flux, jj, pos, wscale, KDE), method=method).x
-				# Using KDE prior:
+			res[jj] = minimize(self._posterior1d, start_guess[jj], args=(flux, jj, pos, wscale, KDE), method='Powell').x
+			# Using KDE prior:
 #				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux, jj + no_cbv_coeff, pos, wscale, KDES), method=method).x
-				# Using flat prior
+			# Using flat prior
 #				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux1, jj + no_cbv_coeff, pos, wscale, None), method=method).x
 
 #			offset = minimize(self._lhood_off_2, coeffs0[-1], args=(flux, err, res), method='Powell').x
-			offset = minimize(self._lhood_off, coeffs0[-1], args=(flux, res, Ncbvs), method=method).x
+		offset = minimize(self._lhood_off, start_guess[-1], args=(flux, res, Ncbvs), method='Powell').x
 
-			res = np.append(res, offset)
-			return res
+		res = np.append(res, offset)
+		return res
 
 	#--------------------------------------------------------------------------
-	def _fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=50, use_bic=True, method='Powell', func='pos', wscale=5, N_neigh=1000, start=None):
+	def _fit(self, flux, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True, prior=None, start_guess=None):
 		logger = logging.getLogger(__name__)
 
 		# Find the median flux to normalise light curve
@@ -321,8 +320,16 @@ class CBV(object):
 		if Numcbvs is None:
 			Numcbvs = self.cbv.shape[1]
 
+		# Function to use for fitting.
+		# The function
+		if prior:
+			fitfunc = functools.partial(self.fitting_pos_2, err=err, prior=prior)
+		else:
+			fitfunc = functools.partial(self.fitting_lh, err=err)
+
+		# Figure out how many CBVs to loop over:
 		if use_bic:
-			# Start looping over the number of CBVs to include:
+			# Prepare variables for storing results:
 			bic = np.array([])
 			solutions = []
 
@@ -333,7 +340,7 @@ class CBV(object):
 			# Test only fit with Numcbvs
 			Nstart = Numcbvs
 
-
+		# Loop over the different number of CBVs to attempt:
 		for Ncbvs in range(Nstart, Numcbvs+1):
 
 			iters = 0
@@ -343,20 +350,16 @@ class CBV(object):
 				iters += 1
 
 				# Do the fit:
-				if func=='pos':
-					# Reuse results from iterations with fewer CBVs???
-					res = self.fitting_pos_2(fluxi, err, Ncbvs, pos, wscale, N_neigh, method=method, start=start)
-				else:
-					res = self.fitting_lh(fluxi, Ncbvs)
+				res = fitfunc(fluxi, Ncbvs, start_guess=start_guess)
 
 				# Break if nothing changes
-				if iters==1:
+				if iters == 1:
 					d = 1
 					res0 = res
 				else:
 					d = np.sum(res0 - res)
 					res0 = res
-					if d==0:
+					if d == 0:
 						break
 
 				flux_filter = self.mdl(res)
@@ -385,18 +388,16 @@ class CBV(object):
 			indx = np.argmin(bic)
 			logger.info('optimum number of CBVs %s', indx+1)
 			res_final = solutions[indx]
-			flux_filter = self.mdl(res_final)  * median_flux
+			flux_filter = self.mdl(res_final) * median_flux
 
 		else:
 			res_final = res
-			flux_filter = self.mdl(res_final)  * median_flux
-
+			flux_filter = self.mdl(res_final) * median_flux
 
 		return flux_filter, res_final
 
 	#----------------------------------------------------------------------------------------------
-	def fit(self, lc, n_components, use_bic=True, use_prior=False,
-		alpha=1.3, WS_lim=0.5, N_neigh=1000):
+	def fit(self, lc, use_bic=True, use_prior=False, cbvs=None, alpha=1.3, WS_lim=0.5, N_neigh=1000):
 		"""
 		Fit the CBV object to a lightcurve, and return the fitted cotrending-lightcurve
 		and the fitting coefficients.
@@ -434,10 +435,10 @@ class CBV(object):
 			row = lc.meta['task']['pos_row']
 			col = lc.meta['task']['pos_column']
 			tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
-
 			pos = np.array([row, col, tmag])
 
 			# Prior curve
+			n_components = self.cbs.shape[1]
 			pc0, opts = self._priorcurve(pos, n_components, N_neigh)
 			pc = pc0 * lc.meta['task']['mean_flux']
 
@@ -463,7 +464,7 @@ class CBV(object):
 
 			if WS > WS_lim:
 				logger.info('Fitting using LLSQ')
-				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic, method='llsq', func='lh') # use smaller number of CBVs
+				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic) # use smaller number of CBVs
 				diagnostics['method'] = 'llsq'
 				diagnostics['use_prior'] = False
 				diagnostics['use_bic'] = False
@@ -471,12 +472,13 @@ class CBV(object):
 			else:
 				logger.info('Fitting using Priors')
 
-				tree = self.priors
-				dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
+				#dist, ind = self.priors.query(pos, k=N_neigh+1)
+				#W = 1/dist[0][1:]**2
+				#V = self.inires[ind, 1+jj][0][1::]
+				#KDE = stats.gaussian_kde(self.inires, weights=W.flatten(), bw_method='scott')
+				prior = self._prior1d
 
-				prior = self._prior1d()
-
-				flux_filter, res = self._fit(lc.flux, err=residual, pos=pos, use_bic=use_bic, method='Powell', prior=prior, start=opts)
+				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=prior, start_guess=opts)
 
 				diagnostics.update({
 					'method': 'Powell',
@@ -492,7 +494,7 @@ class CBV(object):
 
 			"""
 			logger.info('Fitting using LLSQ')
-			flux_filter, res = self._fit(lc.flux, use_bic=use_bic, method='llsq', func='lh')
+			flux_filter, res = self._fit(lc.flux, Numcbvs=cbvs, use_bic=use_bic)
 			diagnostics['method'] = 'llsq'
 
 		return flux_filter, res, diagnostics

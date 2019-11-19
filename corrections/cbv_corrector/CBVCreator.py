@@ -601,7 +601,7 @@ class CBVCreator(BaseCorrector):
 
 			logger.debug("Correcting star %d", lc.targetid)
 
-			flux_filter, res, _ = cbv.fit(lc, use_bic=False, use_prior=False)
+			flux_filter, res, _ = cbv.fit(lc, cbvs=n_components, use_bic=False, use_prior=False)
 
 			# TODO: compute diagnostics requiring the light curve
 			# SAVE TO DIAGNOSTICS FILE::
