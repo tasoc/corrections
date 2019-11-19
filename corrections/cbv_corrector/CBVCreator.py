@@ -11,11 +11,11 @@ import numpy as np
 import os
 import logging
 from sklearn.decomposition import PCA
+from sklearn.neighbors import DistanceMetric, BallTree
 from bottleneck import allnan, nanmedian
 from scipy.interpolate import pchip_interpolate
-from statsmodels.nonparametric.kde import KDEUnivariate as KDE
 from scipy.signal import savgol_filter, find_peaks
-from sklearn.neighbors import DistanceMetric, BallTree
+from statsmodels.nonparametric.kde import KDEUnivariate as KDE
 from tqdm import tqdm
 from ..plots import plt
 from .. import BaseCorrector
@@ -25,7 +25,7 @@ from .cbv import CBV, cbv_snr_test
 from .cbv_utilities import MAD_model2, compute_scores, AlmightyCorrcoefEinsumOptimized, compute_entropy
 
 #--------------------------------------------------------------------------------------------------
-def clean_cbv(Matrix, n_components, entropy_limit=-1.5, targ_limit=50):
+def clean_cbv(matrix, n_components, entropy_limit=-1.5, targ_limit=50):
 	"""
 	Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
 	"""
@@ -34,7 +34,7 @@ def clean_cbv(Matrix, n_components, entropy_limit=-1.5, targ_limit=50):
 	# Calculate the principle components:
 	logger.info("Doing Principle Component Analysis...")
 	pca = PCA(n_components)
-	U, _, _ = pca._fit(Matrix)
+	U, _, _ = pca._fit(matrix)
 
 	Ent = compute_entropy(U)
 	logger.info('Entropy start: %f', Ent)
@@ -56,11 +56,10 @@ def clean_cbv(Matrix, n_components, entropy_limit=-1.5, targ_limit=50):
 			star_no = np.ones(U.shape[0], dtype=bool)
 			star_no[idx0] = False
 
-			Matrix = Matrix[star_no, :]
-			U, _, _ = pca._fit(Matrix)
+			matrix = matrix[star_no, :]
+			U, _, _ = pca._fit(matrix)
 
 			targets_removed += 1
-
 			if targets_removed > targ_limit:
 				break
 
@@ -68,11 +67,11 @@ def clean_cbv(Matrix, n_components, entropy_limit=-1.5, targ_limit=50):
 
 	logger.info('Entropy end: %f', Ent)
 	logger.info('Targets removed: %d', targets_removed)
-	return Matrix
+	return matrix
 
 #--------------------------------------------------------------------------------------------------
 def lc_matrix_calc(Nstars, mat0):
-	logger=logging.getLogger(__name__)
+	logger = logging.getLogger(__name__)
 
 	logger.info("Calculating correlations...")
 
@@ -89,7 +88,7 @@ def lc_matrix_calc(Nstars, mat0):
 class CBVCreator(BaseCorrector):
 
 	def __init__(self, *args, datasource='ffi', Numcbvs='all', ncomponents=None,
-			threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
+		threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
 
@@ -146,7 +145,7 @@ class CBVCreator(BaseCorrector):
 
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
-		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d.npz' %(self.datasource,cbv_area))
+		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d.npz' % (self.datasource, cbv_area))
 		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
@@ -172,11 +171,11 @@ class CBVCreator(BaseCorrector):
 			ax.axvline(self.threshold_variability, color='r')
 			ax.set_xscale('log')
 			ax.set_xlabel('Variability')
-			fig.savefig(os.path.join(self.data_folder, 'variability-%s-area%d.png' %(self.datasource,cbv_area)))
+			fig.savefig(os.path.join(self.data_folder, 'variability-%s-area%d.png' % (self.datasource, cbv_area)))
 			plt.close(fig)
 
 			# Get the list of star that we are going to load in the lightcurves for:
-			stars = self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area, 'variability < %f' %(self.threshold_variability*median_variability)])
+			stars = self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area, 'variability < %f' % (self.threshold_variability*median_variability)])
 
 			# Number of stars returned:
 			Nstars = len(stars)
@@ -216,7 +215,7 @@ class CBVCreator(BaseCorrector):
 
 				# If running in DEBUG mode, save the correlations matrix to file:
 				if logger.isEnabledFor(logging.DEBUG):
-					file_correlations = os.path.join(self.data_folder, 'correlations-%s-%d.npy' %(self.datasource,cbv_area))
+					file_correlations = os.path.join(self.data_folder, 'correlations-%s-%d.npy' % (self.datasource, cbv_area))
 					np.save(file_correlations, correlations)
 
 				# Find the median absolute correlation between each lightcurve and all other lightcurves:
@@ -258,10 +257,10 @@ class CBVCreator(BaseCorrector):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
-		logger=logging.getLogger(__name__)
+		logger = logging.getLogger(__name__)
 
 		logger.info('Running matrix clean')
-		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d_clean.npz' %(self.datasource,cbv_area))
+		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d_clean.npz' % (self.datasource, cbv_area))
 		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
@@ -323,11 +322,11 @@ class CBVCreator(BaseCorrector):
 		logger.info('running CBV')
 		logger.info('------------------------------------')
 
-		if os.path.exists(os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' %(self.datasource,cbv_area))):
+		if os.path.exists(os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' % (self.datasource, cbv_area))):
 			logger.info('CBV for area %d already calculated' % cbv_area)
 			return
 
-		logger.info('Computing CBV for %s area %d' %(self.datasource,cbv_area))
+		logger.info('Computing CBV for %s area %d' % (self.datasource, cbv_area))
 
 		# Extract or compute cleaned and gapfilled light curve matrix
 		mat0, _, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
@@ -359,15 +358,15 @@ class CBVCreator(BaseCorrector):
 		#indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
 
 		# Save the CBV to file:
-		np.save(os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' %(self.datasource,cbv_area)), cbv)
+		np.save(os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' % (self.datasource, cbv_area)), cbv)
 
 		####################### PLOTS #################################
 		# Plot the "effectiveness" of each CBV:
-		max_components=20
+		max_components = 20
 		n_cbv_components = np.arange(max_components, dtype=int)
 		pca_scores = compute_scores(mat, n_cbv_components)
 
-		fig0 = plt.figure(figsize=(12,8))
+		fig0 = plt.figure(figsize=(12, 8))
 		ax0 = fig0.add_subplot(121)
 		ax0.plot(n_cbv_components, pca_scores, 'b', label='PCA scores')
 		ax0.set_xlabel('nb of components')
@@ -378,7 +377,7 @@ class CBVCreator(BaseCorrector):
 		ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
 		ax02.set_xlabel('CBV number')
 		ax02.set_ylabel('Variance explained ratio')
-		fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-%s-area%d.png' %(self.datasource,cbv_area)))
+		fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-%s-area%d.png' % (self.datasource, cbv_area)))
 		plt.close(fig0)
 
 		# Plot all the CBVs:
@@ -406,8 +405,8 @@ class CBVCreator(BaseCorrector):
 				ax.plot(np.abs(U[:, k]), 'k-')
 				ax.set_title('Basis Vector %d' % (k+1))
 
-		fig.savefig(os.path.join(self.data_folder, 'cbvs_ini-%s-area%d.png' %(self.datasource,cbv_area)))
-		fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-%s-area%d.png' %(self.datasource,cbv_area)))
+		fig.savefig(os.path.join(self.data_folder, 'cbvs_ini-%s-area%d.png' % (self.datasource, cbv_area)))
+		fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-%s-area%d.png' % (self.datasource, cbv_area)))
 		plt.close(fig)
 		plt.close(fig2)
 
@@ -426,16 +425,15 @@ class CBVCreator(BaseCorrector):
 		logger.info('running CBV spike separation')
 		logger.info('------------------------------------')
 
-
-		if os.path.exists(os.path.join(self.data_folder, 'cbv-%s-%d.npy' %(self.datasource,cbv_area))) \
-			and os.path.exists(os.path.join(self.data_folder, 'cbv-s-%s-%d.npy' %(self.datasource,cbv_area))):
-			logger.info('Separated CBVs for %s area %d already calculated' %(self.datasource,cbv_area))
+		if os.path.exists(os.path.join(self.data_folder, 'cbv-%s-%d.npy' % (self.datasource, cbv_area))) \
+			and os.path.exists(os.path.join(self.data_folder, 'cbv-s-%s-%d.npy' % (self.datasource, cbv_area))):
+			logger.info('Separated CBVs for %s area %d already calculated' % (self.datasource, cbv_area))
 			return
 
-		logger.info('Computing CBV spike separation for %s area %d' %(self.datasource,cbv_area))
+		logger.info('Computing CBV spike separation for %s area %d' % (self.datasource, cbv_area))
 
 		# Load initial CBV from "compute_CBV"
-		filepath = os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' %(self.datasource,cbv_area))
+		filepath = os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' % (self.datasource, cbv_area))
 		cbv = np.load(filepath)
 
 		# padding window, just needs to be bigger than savgol filtering window
@@ -449,7 +447,7 @@ class CBVCreator(BaseCorrector):
 		for j in range(cbv.shape[1]):
 
 			# Pad ends for better peak detection at boundaries of data
-			data0 = cbv[:,j]
+			data0 = cbv[:, j]
 			data0 = np.append(np.flip(data0[0:wmir])[0:-1], data0)
 			data0 = np.append(data0, np.flip(data0[-wmir::])[1::])
 
@@ -465,8 +463,8 @@ class CBVCreator(BaseCorrector):
 
 				# run low pass filter, set window width
 				w = 31 - 2*i
-				if w%2==0:
-					w+=1
+				if w%2 == 0:
+					w += 1
 
 				# Smooth, filtered version of data, to use to identify "outliers", i.e., spikes
 				y = savgol_filter(data2, w, 2, mode='constant')
@@ -487,12 +485,12 @@ class CBVCreator(BaseCorrector):
 			S = (data0[wmir-1:-wmir+1] - data[wmir-1:-wmir+1])
 			S[np.isnan(S)] = 0
 
-			cbv_spike[:,j] = S
-			cbv_new[:,j] = data[wmir-1:-wmir+1]
+			cbv_spike[:, j] = S
+			cbv_new[:, j] = data[wmir-1:-wmir+1]
 
 		# Save files
-		np.save(os.path.join(self.data_folder, 'cbv-%s-%d.npy' %(self.datasource,cbv_area)), cbv_new)
-		np.save(os.path.join(self.data_folder, 'cbv-s-%s-%d.npy' %(self.datasource,cbv_area)), cbv_spike)
+		np.save(os.path.join(self.data_folder, 'cbv-%s-%d.npy' % (self.datasource, cbv_area)), cbv_new)
+		np.save(os.path.join(self.data_folder, 'cbv-s-%s-%d.npy' % (self.datasource, cbv_area)), cbv_spike)
 
 		# Signal-to-Noise test (here only for plotting)
 		indx_lowsnr = cbv_snr_test(cbv_new, self.threshold_snrtest)
@@ -527,8 +525,8 @@ class CBVCreator(BaseCorrector):
 				ax.plot(cbv_spike[:, k], ls='-', color=col)
 				ax.set_title('Spike Basis Vector %d' % (k+1))
 
-		fig.savefig(os.path.join(self.data_folder, 'cbvs-%s-area%d.png' %(self.datasource,cbv_area)))
-		fig2.savefig(os.path.join(self.data_folder, 'spike-cbvs-%s-area%d.png' %(self.datasource,cbv_area)))
+		fig.savefig(os.path.join(self.data_folder, 'cbvs-%s-area%d.png' % (self.datasource, cbv_area)))
+		fig2.savefig(os.path.join(self.data_folder, 'spike-cbvs-%s-area%d.png' % (self.datasource, cbv_area)))
 		plt.close(fig)
 		plt.close(fig2)
 
@@ -559,11 +557,11 @@ class CBVCreator(BaseCorrector):
 		#------------------------------------------------------------------
 
 		logger.info("--------------------------------------------------------------")
-		if os.path.exists(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' %(self.datasource,cbv_area))):
-			logger.info("Initial co-trending for light curves in %s CBV area%d already done" %(self.datasource,cbv_area))
+		if os.path.exists(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, cbv_area))):
+			logger.info("Initial co-trending for light curves in %s CBV area%d already done" % (self.datasource, cbv_area))
 			return
 		else:
-			logger.info("Initial co-trending for light curves in %s CBV area%d" %(self.datasource,cbv_area))
+			logger.info("Initial co-trending for light curves in %s CBV area%d" % (self.datasource, cbv_area))
 
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
@@ -578,9 +576,9 @@ class CBVCreator(BaseCorrector):
 		# Load the cbv from file:
 		cbv = CBV(self.data_folder, cbv_area, self.datasource, self.threshold_snrtest)
 
-#		# Signal-to-Noise test (without actually removing any CBVs):
-#		indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
-#		cbv.remove_cols(indx_lowsnr)
+		# Signal-to-Noise test (without actually removing any CBVs):
+		#indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
+		#cbv.remove_cols(indx_lowsnr)
 
 		# Update maximum number of components
 		n_components0 = cbv.cbv.shape[1]
@@ -603,11 +601,11 @@ class CBVCreator(BaseCorrector):
 
 			logger.debug("Correcting star %d", lc.targetid)
 
-			flux_filter, res = cbv.fit(lc, use_bic=False, use_priors=False)
+			flux_filter, res, _ = cbv.fit(lc, use_bic=False, use_prior=False)
 
 			# TODO: compute diagnostics requiring the light curve
-#			# SAVE TO DIAGNOSTICS FILE::
-#			wn_ratio = GOC_wn(flux, flux-flux_filter)
+			# SAVE TO DIAGNOSTICS FILE::
+			#wn_ratio = GOC_wn(flux, flux-flux_filter)
 
 			res = np.array([res,]).flatten()
 			results[kk, 0] = lc.targetid
@@ -635,28 +633,28 @@ class CBVCreator(BaseCorrector):
 				plt.close(fig)
 
 		# Save weights for priors if it is an initial run
-		np.savez(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' %(self.datasource,cbv_area)), res=results)
+		np.savez(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, cbv_area)), res=results)
 
 		# Plot CBV weights
-		fig = plt.figure(figsize=(15,15))
+		fig = plt.figure(figsize=(15, 15))
 		ax = fig.add_subplot(221)
 		ax2 = fig.add_subplot(222)
 		ax3 = fig.add_subplot(223)
 		ax4 = fig.add_subplot(224)
-		for kk in range(1,int(2*n_components+1)):
+		for kk in range(1, int(2*n_components+1)):
 
-			if kk>n_components:
+			if kk > n_components:
 				LS = '--'
 			else:
 				LS = '-'
 			idx = np.nonzero(results[:, kk])
 			r = results[idx, kk]
-			idx2 = (r>np.percentile(r, 10)) & (r<np.percentile(r, 90))
+			idx2 = (r > np.percentile(r, 10)) & (r < np.percentile(r, 90))
 			kde = KDE(r[idx2])
 			kde.fit(gridsize=5000)
 			err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
 
-			if kk>n_components:
+			if kk > n_components:
 				ax3.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk), ls=LS)
 				ax4.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
 			else:
@@ -667,7 +665,7 @@ class CBVCreator(BaseCorrector):
 		ax2.set_ylabel('CBV weight')
 		ax2.set_xlabel('CBV')
 		ax.legend()
-		fig.savefig(os.path.join(self.data_folder, 'weights-sector-%s-%d.png' %(self.datasource,cbv_area)))
+		fig.savefig(os.path.join(self.data_folder, 'weights-sector-%s-%d.png' % (self.datasource, cbv_area)))
 		plt.close(fig)
 
 	#--------------------------------------------------------------------------
@@ -681,7 +679,7 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
 
-		inipath = os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' %(self.datasource,cbv_area))
+		inipath = os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, cbv_area))
 		if not os.path.exists(inipath):
 			raise IOError('Trying to make priors without initial corrections')
 
@@ -697,7 +695,7 @@ class CBVCreator(BaseCorrector):
 
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0 = np.zeros([n_stars, 3])
-		for jj, star in enumerate(results[:,0]):
+		for jj, star in enumerate(results[:, 0]):
 			star_single = self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area, 'todolist.starid=%d' % int(star)])
 			pos_mag0[jj, 0] = star_single[0]['pos_row']
 			pos_mag0[jj, 1] = star_single[0]['pos_column']
@@ -716,4 +714,4 @@ class CBVCreator(BaseCorrector):
 		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
 		tree = BallTree(pos_mag0, metric=dist)
 
-		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' %(self.datasource,cbv_area)), tree)
+		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' % (self.datasource, cbv_area)), tree)
