@@ -75,14 +75,14 @@ class CBV(object):
 		self.remove_cols(indx_lowsnr)
 
 		self.priors = None
-		priorpath = os.path.join(data_folder, 'D_%s-area%d.pkl' %(datasource,cbv_area))
+		priorpath = os.path.join(data_folder, 'D_%s-area%d.pkl' % (datasource, cbv_area))
 		if os.path.exists(priorpath):
 			self.priors = loadPickle(priorpath)
 		else:
 			logger.info('Path to prior distance file does not exist', priorpath)
 
 		self.inires = None
-		inipath = os.path.join(data_folder, 'mat-%s-%d_free_weights.npz' %(datasource,cbv_area))
+		inipath = os.path.join(data_folder, 'mat-%s-%d_free_weights.npz' % (datasource, cbv_area))
 		if os.path.exists(inipath):
 			self.inires = np.load(inipath)['res']
 
@@ -105,7 +105,7 @@ class CBV(object):
 #		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
 		try:
 			C = (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
-		except:
+		except np.linalg.LinAlgError:
 			# Another (but slover) implementation
 			C = np.linalg.lstsq(X, F)[0]
 
@@ -195,7 +195,6 @@ class CBV(object):
 
 	#----------------------------------------------------------------------------------------------
 	def _priorcurve(self, x, Ncbvs, N_neigh):
-
 		"""
 		Get "most likely" correction from peak in prior distributions
 		of fitting coefficients
@@ -238,19 +237,19 @@ class CBV(object):
 			return float(KDE(c))
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh(self, flux, Ncbvs):
+	def fitting_lh(self, flux, Ncbvs, err=None):
 		res = self.lsfit(flux, Ncbvs)
 		res[-1] -= 1
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh_spike(self, flux, Ncbvs):
+	def fitting_lh_spike(self, flux, Ncbvs, err=None):
 		res = self.lsfit_spike(flux, Ncbvs)
 		res[-1] -= 1
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_pos_2(self, flux, err, Ncbvs, pos, wscale, N_neigh, start_guess=None):
+	def fitting_pos_2(self, flux, Ncbvs, err=None, pos, wscale, N_neigh, start_guess=None):
 
 		# Initial guesses for coefficients:
 		if start_guess is not None:
@@ -312,20 +311,25 @@ class CBV(object):
 
 	#--------------------------------------------------------------------------
 	def _fit(self, flux, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True, prior=None, start_guess=None):
+		"""
+
+		"""
+
 		logger = logging.getLogger(__name__)
 
-		# Find the median flux to normalise light curve
-		median_flux = nanmedian(flux)
-
+		# If no number of CBVs are specified,
+		# use the full set of CBVs:
 		if Numcbvs is None:
 			Numcbvs = self.cbv.shape[1]
 
 		# Function to use for fitting.
-		# The function
 		if prior:
 			fitfunc = functools.partial(self.fitting_pos_2, err=err, prior=prior)
 		else:
 			fitfunc = functools.partial(self.fitting_lh, err=err)
+
+		# Find the median flux to normalise light curve
+		median_flux = nanmedian(flux)
 
 		# Figure out how many CBVs to loop over:
 		if use_bic:
@@ -343,18 +347,14 @@ class CBV(object):
 		# Loop over the different number of CBVs to attempt:
 		for Ncbvs in range(Nstart, Numcbvs+1):
 
-			iters = 0
 			fluxi = np.copy(flux) / median_flux
 
-			while iters <= maxiter:
-				iters += 1
-
+			for iters in range(maxiter):
 				# Do the fit:
 				res = fitfunc(fluxi, Ncbvs, start_guess=start_guess)
 
 				# Break if nothing changes
-				if iters == 1:
-					d = 1
+				if iters == 0:
 					res0 = res
 				else:
 					d = np.sum(res0 - res)
@@ -376,13 +376,13 @@ class CBV(object):
 
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
-				filt = self.mdl(res)  * median_flux
+				filt = self.mdl(res) * median_flux
 				bic = np.append(bic, np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( (flux - filt)**2 )) #not using errors
 				solutions.append(res)
 
 		if use_bic:
 			logger.info('bic %s', bic)
-			logger.info('iters %s', iters)
+			logger.info('iters %s', iters+1)
 
 			# Use the solution which minimizes the BIC:
 			indx = np.argmin(bic)
@@ -407,6 +407,13 @@ class CBV(object):
 			use_bic (boolean, optional): Use the Bayesian Information Criterion to find the
 				optimal number of CBVs to fit. Default=True.
 			use_prior (boolean, optional):
+			cbvs (integer, optional): Number of CBVs to fit to lightcurve. If `use_bic=True`, this
+				indicated the maximum number of CBVs to fit.
+
+		Returns:
+			`numpy.array`: Fitted lightcurve with the same length as `lc`.
+			list: Coefficients for each CBV.
+			dict: Diagnostics information about the fitting.
 
 		"""
 
@@ -432,6 +439,8 @@ class CBV(object):
 			variability measures (not fully implemented yet!)
 
 			"""
+
+			# Position of target in multidimentional prior space:
 			row = lc.meta['task']['pos_row']
 			col = lc.meta['task']['pos_column']
 			tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
@@ -444,23 +453,19 @@ class CBV(object):
 
 			# Compute new variability measure
 			idx = np.isfinite(lc.flux)
-			Poly = np.poly1d(np.polyfit(lc.time[idx], lc.flux[idx], 3))
-			Polyfit = Poly(lc.time)
-			residual = MAD_model(lc.flux-pc)
+			polyfit = np.polyval(np.polyfit(lc.time[idx], lc.flux[idx], 3), lc.time)
+			residual = MAD_model(lc.flux - pc)
 			#residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
 			#WS = np.min([1, residual_ratio])
 
 			AA = 2
-			GRAW = np.std((pc - Polyfit) / MAD_model2(lc.flux - Polyfit) - 1)
+			GRAW = np.std((pc - polyfit) / MAD_model2(lc.flux - polyfit) - 1)
 			GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
 
 			beta1 = 1
 			beta2 = 1
-			VAR = np.nanstd(lc.flux - Polyfit)
+			VAR = np.nanstd(lc.flux - polyfit)
 			WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
-
-			#lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
-			#lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
 
 			if WS > WS_lim:
 				logger.info('Fitting using LLSQ')
@@ -474,8 +479,8 @@ class CBV(object):
 
 				#dist, ind = self.priors.query(pos, k=N_neigh+1)
 				#W = 1/dist[0][1:]**2
-				#V = self.inires[ind, 1+jj][0][1::]
-				#KDE = stats.gaussian_kde(self.inires, weights=W.flatten(), bw_method='scott')
+				#V = self.inires[ind, 1+jj][0][1:]
+				#KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 				prior = self._prior1d
 
 				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=prior, start_guess=opts)
