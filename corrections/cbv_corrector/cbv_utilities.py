@@ -157,3 +157,24 @@ def AlmightyCorrcoefEinsumOptimized(O, P):
 	tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
 
 	return cov / np.sqrt(tmp)
+
+#--------------------------------------------------------------------------------------------------
+def lightcurve_correlation_matrix(mat):
+	"""
+	Calculate the correlation matrix between all lightcurves in matrix.
+	
+	Parameters:
+		mat (numpy.array): (NxM)
+		
+	Returns:
+		numpy.array: Correlation matrix (NxN).
+	"""
+
+	indx_nancol = allnan(mat, axis=0)
+	mat1 = mat[:, ~indx_nancol]
+
+	mat1[np.isnan(mat1)] = 0
+	correlations = np.abs(AlmightyCorrcoefEinsumOptimized(mat1.T, mat1.T))
+	np.fill_diagonal(correlations, np.nan)
+
+	return correlations

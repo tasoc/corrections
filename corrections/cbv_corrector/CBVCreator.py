@@ -22,7 +22,7 @@ from .. import BaseCorrector
 from ..utilities import savePickle, mad_to_sigma
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
 from .cbv import CBV, cbv_snr_test
-from .cbv_utilities import MAD_model2, compute_scores, AlmightyCorrcoefEinsumOptimized, compute_entropy
+from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_matrix, compute_entropy
 
 #--------------------------------------------------------------------------------------------------
 def clean_cbv(matrix, n_components, entropy_limit=-1.5, targ_limit=50):
@@ -68,21 +68,6 @@ def clean_cbv(matrix, n_components, entropy_limit=-1.5, targ_limit=50):
 	logger.info('Entropy end: %f', Ent)
 	logger.info('Targets removed: %d', targets_removed)
 	return matrix
-
-#--------------------------------------------------------------------------------------------------
-def lc_matrix_calc(Nstars, mat0):
-	logger = logging.getLogger(__name__)
-
-	logger.info("Calculating correlations...")
-
-	indx_nancol = allnan(mat0, axis=0)
-	mat1 = mat0[:, ~indx_nancol]
-
-	mat1[np.isnan(mat1)] = 0
-	correlations = np.abs(AlmightyCorrcoefEinsumOptimized(mat1.T, mat1.T))
-	np.fill_diagonal(correlations, np.nan)
-
-	return correlations
 
 #--------------------------------------------------------------------------------------------------
 class CBVCreator(BaseCorrector):
@@ -135,107 +120,106 @@ class CBVCreator(BaseCorrector):
 			varis: variances of light curves in "mat"
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
-
-		#----------------------------------------------------------------------
-		# CALCULATE LIGHT CURVE CORRELATIONS
-		#----------------------------------------------------------------------
-
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
+		# If we are running in DEBUG mode, check if a intermediate file
+		# has been created, and in that case, simply load the matrix from there:
 		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d.npz' % (self.datasource, cbv_area))
 		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
-			mat = data['mat']
-			varis = data['varis']
+			return data['mat'], data['varis']
 
+		# Convert datasource into query-string for the database:
+		# This will change once more different cadences (i.e. 20s) is defined
+		if self.datasource == 'ffi':
+			search_cadence = "datasource='ffi'"
 		else:
-			# Convert datasource into query-string for the database:
-			# This will change once more different cadences (i.e. 20s) is defined
-			if self.datasource == 'ffi':
-				search_cadence = "datasource='ffi'"
-			else:
-				search_cadence = "datasource!='ffi'"
+			search_cadence = "datasource!='ffi'"
 
-			# Find the median of the variabilities:
-			variability = np.array([float(row['variability']) for row in self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area], select='variability')], dtype='float64')
-			median_variability = nanmedian(variability)
+		# Find the median of the variabilities:
+		variability = np.array([float(row['variability']) for row in self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area], select='variability')], dtype='float64')
+		median_variability = nanmedian(variability)
 
-			# Plot the distribution of variability for all stars:
-			fig = plt.figure()
-			ax = fig.add_subplot(111)
-			ax.hist(variability/median_variability, bins=np.logspace(np.log10(0.1), np.log10(1000.0), 50))
-			ax.axvline(self.threshold_variability, color='r')
-			ax.set_xscale('log')
-			ax.set_xlabel('Variability')
-			fig.savefig(os.path.join(self.data_folder, 'variability-%s-area%d.png' % (self.datasource, cbv_area)))
-			plt.close(fig)
+		# Plot the distribution of variability for all stars:
+		fig = plt.figure()
+		ax = fig.add_subplot(111)
+		ax.hist(variability/median_variability, bins=np.logspace(np.log10(0.1), np.log10(1000.0), 50))
+		ax.axvline(self.threshold_variability, color='r')
+		ax.set_xscale('log')
+		ax.set_xlabel('Variability')
+		fig.savefig(os.path.join(self.data_folder, 'variability-%s-area%d.png' % (self.datasource, cbv_area)))
+		plt.close(fig)
 
-			# Get the list of star that we are going to load in the lightcurves for:
-			stars = self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area, 'variability < %f' % (self.threshold_variability*median_variability)])
+		# Get the list of star that we are going to load in the lightcurves for:
+		stars = self.search_database(
+			select=['lightcurve', 'mean_flux', 'variance'],
+			search=[search_cadence, 'cbv_area=%d' % cbv_area, 'variability < %f' % (self.threshold_variability*median_variability)]
+		)
 
-			# Number of stars returned:
-			Nstars = len(stars)
+		# Number of stars returned:
+		Nstars = len(stars)
 
-			# Load the very first timeseries only to find the number of timestamps.
-			lc = self.load_lightcurve(stars[0])
-			Ntimes = len(lc.time)
+		# Load the very first timeseries only to find the number of timestamps.
+		lc = self.load_lightcurve(stars[0])
+		Ntimes = len(lc.time)
 
-			logger.info("Matrix size: %d x %d", Nstars, Ntimes)
+		logger.info("Matrix size: %d x %d", Nstars, Ntimes)
 
-			# Make the matrix that will hold all the lightcurves:
-			logger.info("Loading in lightcurves...")
-			mat0 = np.empty((Nstars, Ntimes), dtype='float64')
-			mat0.fill(np.nan)
-			varis0 = np.empty(Nstars, dtype='float64')
+		# Make the matrix that will hold all the lightcurves:
+		logger.info("Loading in lightcurves...")
+		mat = np.empty((Nstars, Ntimes), dtype='float64')
+		mat.fill(np.nan)
+		varis = np.empty(Nstars, dtype='float64')
 
-			# Loop over stars
-			for k, star in tqdm(enumerate(stars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
+		# Loop over stars
+		for k, star in tqdm(enumerate(stars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
+			# Load lightkurve object
+			lc = self.load_lightcurve(star)
 
-				# Load lightkurve object
-				lc = self.load_lightcurve(star)
+			# Remove bad data based on quality
+			flag_good = TESSQualityFlags.filter(lc.pixel_quality, TESSQualityFlags.CBV_BITMASK) & CorrectorQualityFlags.filter(lc.quality, CorrectorQualityFlags.CBV_BITMASK)
+			lc.flux[~flag_good] = np.nan
 
-				# Remove bad data based on quality
-				flag_good = TESSQualityFlags.filter(lc.pixel_quality, TESSQualityFlags.CBV_BITMASK) & CorrectorQualityFlags.filter(lc.quality, CorrectorQualityFlags.CBV_BITMASK)
-				lc.flux[~flag_good] = np.nan
+			# Normalize the data and store it in the rows of the matrix:
+			mat[k, :] = lc.flux / star['mean_flux'] - 1.0
 
-				# Normalize the data and store it in the rows of the matrix:
-				mat0[k, :] = lc.flux / star['mean_flux'] - 1.0
+			# Store the standard deviations of each lightcurve:
+			varis[k] = np.NaN if star['variance'] is None else star['variance']
 
-				# Store the standard deviations of each lightcurve:
-				varis0[k] = np.NaN if star['variance'] is None else star['variance']
+		# Only start calculating correlations if we are actually filtering using them:
+		if self.threshold_correlation < 1.0:
+			# Calculate the correlation matrix between all lightcurves:
+			logger.info("Calculating correlations...")
+			correlations = lightcurve_correlation_matrix(mat)
 
-			# Only start calculating correlations if we are actually filtering using them:
-			if self.threshold_correlation < 1.0:
-				# Calculate the correlation matrix between all lightcurves:
-				correlations = lc_matrix_calc(Nstars, mat0)
-
-				# If running in DEBUG mode, save the correlations matrix to file:
-				if logger.isEnabledFor(logging.DEBUG):
-					file_correlations = os.path.join(self.data_folder, 'correlations-%s-%d.npy' % (self.datasource, cbv_area))
-					np.save(file_correlations, correlations)
-
-				# Find the median absolute correlation between each lightcurve and all other lightcurves:
-				c = nanmedian(correlations, axis=0)
-
-				# Indicies that would sort the lightcurves by correlations in descending order:
-				indx = np.argsort(c)[::-1]
-				indx = indx[:int(self.threshold_correlation*Nstars)]
-				#TODO: remove based on threshold value? rather than just % of stars
-
-				# Only keep the top "threshold_correlation"% of the lightcurves that are most correlated:
-				mat = mat0[indx, :]
-				varis = varis0[indx]
-
-				# Clean up a bit:
-				del correlations, c, indx
-
-			# Save something for debugging:
+			# If running in DEBUG mode, save the correlations matrix to file:
 			if logger.isEnabledFor(logging.DEBUG):
-				np.savez(tmpfile, mat=mat, varis=varis)
+				file_correlations = os.path.join(self.data_folder, 'correlations-%s-%d.npy' % (self.datasource, cbv_area))
+				np.save(file_correlations, correlations)
+
+			# Find the median absolute correlation between each lightcurve and all other lightcurves:
+			c = nanmedian(correlations, axis=0)
+
+			# Indicies that would sort the lightcurves by correlations in descending order:
+			indx = np.argsort(c)[::-1]
+			indx = indx[:int(self.threshold_correlation*Nstars)]
+			#TODO: remove based on threshold value? rather than just % of stars
+
+			# Only keep the top "threshold_correlation"% of the lightcurves that are most correlated:
+			mat = mat[indx, :]
+			varis = varis[indx]
+
+			# Clean up a bit:
+			del correlations, c, indx
+
+		# Save something for debugging:
+		if logger.isEnabledFor(logging.DEBUG):
+			np.savez(tmpfile, mat=mat, varis=varis)
 
 		return mat, varis
 
