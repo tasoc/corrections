@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
+Creation of Cotrending Basis Vectors.
 
-
+.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
@@ -84,10 +85,11 @@ def lc_matrix_calc(Nstars, mat0):
 
 	return correlations
 
+#--------------------------------------------------------------------------------------------------
 class CBVCreator(BaseCorrector):
 
-	def __init__(self, *args, Numcbvs='all', ncomponents=None, WS_lim=0.8, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
-			threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, datasource='ffi', **kwargs):
+	def __init__(self, *args, datasource='ffi', Numcbvs='all', ncomponents=None,
+			threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
 		"""
 		Initialise the corrector
 
@@ -109,15 +111,10 @@ class CBVCreator(BaseCorrector):
 		super(self.__class__, self).__init__(*args, **kwargs)
 
 		self.Numcbvs = Numcbvs
-		self.use_bic = use_bic
-		self.method = method
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_correlation = threshold_correlation
 		self.threshold_variability = threshold_variability
 		self.ncomponents = ncomponents
-		self.alpha = alpha
-		self.WS_lim = WS_lim
-		self.N_neigh = N_neigh
 		self.datasource = datasource
 
 	#--------------------------------------------------------------------------
@@ -243,7 +240,7 @@ class CBVCreator(BaseCorrector):
 
 		return mat, varis
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def lc_matrix_clean(self, cbv_area):
 		"""
 		Performs gap-filling of light curves returned by :py:func:`CBVCorrector.lc_matrix`, and
@@ -301,7 +298,7 @@ class CBVCreator(BaseCorrector):
 
 		return mat, varis, indx_nancol, Ntimes
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def compute_cbvs(self, cbv_area, ent_limit=-1.5, targ_limit=150):
 		"""
 		Main function for computing CBVs.
@@ -358,8 +355,8 @@ class CBVCreator(BaseCorrector):
 		cbv.fill(np.nan)
 		cbv[~indx_nancol, :] = np.transpose(pca.components_)
 
-#			# Signal-to-Noise test (here only for plotting)
-#			indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
+		# Signal-to-Noise test (here only for plotting)
+		#indx_lowsnr = cbv_snr_test(cbv, self.threshold_snrtest)
 
 		# Save the CBV to file:
 		np.save(os.path.join(self.data_folder, 'cbv_ini-%s-%d.npy' %(self.datasource,cbv_area)), cbv)
@@ -707,13 +704,13 @@ class CBVCreator(BaseCorrector):
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
 
 		# Relative importance of dimensions
-#		S = np.array([1, 1, 2])
+		#S = np.array([1, 1, 2])
 		S = np.array([MAD_model2(pos_mag0[:, 0]), MAD_model2(pos_mag0[:, 1]), 0.5*MAD_model2(pos_mag0[:, 2])])
 		LL = np.diag(S)
 
-#		pos_mag0[:, 0] /= np.std(pos_mag0[:, 0])
-#		pos_mag0[:, 1] /= np.std(pos_mag0[:, 1])
-#		pos_mag0[:, 2] /= np.std(pos_mag0[:, 2])
+		#pos_mag0[:, 0] /= np.std(pos_mag0[:, 0])
+		#pos_mag0[:, 1] /= np.std(pos_mag0[:, 1])
+		#pos_mag0[:, 2] /= np.std(pos_mag0[:, 2])
 
 		# Construct and save distance tree
 		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
