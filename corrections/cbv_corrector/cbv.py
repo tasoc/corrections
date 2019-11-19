@@ -7,15 +7,14 @@
 import numpy as np
 import os
 import logging
-from sklearn.decomposition import PCA
-from bottleneck import allnan, nansum, nanmedian
+from bottleneck import nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
 from scipy import stats
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from ..utilities import loadPickle
-from .cbv_util import compute_entopy, MAD_model,MAD_model2
 from ..quality import CorrectorQualityFlags
+from .cbv_utilities import MAD_model, MAD_model2
 
 #------------------------------------------------------------------------------
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
@@ -38,98 +37,22 @@ def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 
 	return indx_lowsnr
 
-#------------------------------------------------------------------------------
-def clean_cbv(Matrix, n_components, ent_limit=-1.5, targ_limit=50):
-	"""
-	Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
-	"""
-	logger = logging.getLogger(__name__)
-
-	# Calculate the principle components:
-	logger.info("Doing Principle Component Analysis...")
-	pca = PCA(n_components)
-	U, _, _ = pca._fit(Matrix)
-
-	Ent = compute_entopy(U)
-	logger.info('Entropy start: %f', Ent)
-
-	targets_removed = 0
-	components = np.arange(n_components)
-
-	with np.errstate(invalid='ignore'):
-		while np.any(Ent < ent_limit):
-			com = components[(Ent < ent_limit)][0]
-
-			# Remove highest relative weight target
-			m = nanmedian(U[:, com])
-			s = 1.46*nanmedian(np.abs(U[:, com] - m))
-			dev = np.abs(U[:, com] - m) / s
-
-			idx0 = np.argmax(dev)
-
-			star_no = np.ones(U.shape[0], dtype=bool)
-			star_no[idx0] = False
-
-			Matrix = Matrix[star_no, :]
-			U, _, _ = pca._fit(Matrix)
-
-			targets_removed += 1
-
-			if targets_removed > targ_limit:
-				break
-
-			Ent = compute_entopy(U)
-
-	logger.info('Entropy end: %f', Ent)
-	logger.info('Targets removed: %d', targets_removed)
-	return Matrix
-
-#------------------------------------------------------------------------------
-def AlmightyCorrcoefEinsumOptimized(O, P):
-	"""
-	Correlation coefficients using Einstein sums
-
-	"""
-
-	(n, t) = O.shape      # n traces of t samples
-	(n_bis, m) = P.shape  # n predictions for each of m candidates
-
-	DO = O - (np.einsum("nt->t", O, optimize='optimal') / np.double(n)) # compute O - mean(O)
-	DP = P - (np.einsum("nm->m", P, optimize='optimal') / np.double(n)) # compute P - mean(P)
-
-	cov = np.einsum("nm,nt->mt", DP, DO, optimize='optimal')
-
-	varP = np.einsum("nm,nm->m", DP, DP, optimize='optimal')
-	varO = np.einsum("nt,nt->t", DO, DO, optimize='optimal')
-	tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
-
-	return cov / np.sqrt(tmp)
-
-#------------------------------------------------------------------------------
-def lc_matrix_calc(Nstars, mat0):
-	logger=logging.getLogger(__name__)
-
-	logger.info("Calculating correlations...")
-
-	indx_nancol = allnan(mat0, axis=0)
-	mat1 = mat0[:, ~indx_nancol]
-
-	mat1[np.isnan(mat1)] = 0
-	correlations = np.abs(AlmightyCorrcoefEinsumOptimized(mat1.T, mat1.T))
-	np.fill_diagonal(correlations, np.nan)
-
-	return correlations
-
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class CBV(object):
 	"""
-	Cotrending Basis Vector.
+	Cotrending Basis Vector object.
+
+	Attributes:
+		cbv (numpy.array)
+		cbv_s (numpy.array)
+		priors
+		inires
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def __init__(self, data_folder, cbv_area, datasource, threshold_snrtest=5):
 		logger = logging.getLogger(__name__)
 
@@ -143,6 +66,8 @@ class CBV(object):
 
 		self.cbv = np.load(filepath)
 		self.cbv_s = np.load(filepath_s)
+
+		self.threshold_snrtest = threshold_snrtest
 
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(self.cbv, threshold_snrtest)
@@ -160,12 +85,12 @@ class CBV(object):
 		if os.path.exists(inipath):
 			self.inires = np.load(inipath)['res']
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
 		self.cbv = self.cbv[:, ~indx_lowsnr]
 		self.cbv_s = self.cbv_s[:, ~indx_lowsnr]
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def lsfit(self, flux, Ncbvs):
 		"""
 		Computes the least-squares solution to a linear matrix equation.
@@ -185,7 +110,7 @@ class CBV(object):
 
 		return C
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def lsfit_spike(self, flux, Ncbvs):
 		"""
 		Computes the least-squares solution to a linear matrix equation.
@@ -200,7 +125,7 @@ class CBV(object):
 
 		return C
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def mdl(self, coeffs):
 		coeffs = np.atleast_1d(coeffs)
 		m = np.ones(self.cbv.shape[0], dtype='float64')
@@ -211,7 +136,7 @@ class CBV(object):
 
 		return m + coeffs[-1]
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def mdl_spike(self, coeffs):
 		coeffs = np.atleast_1d(coeffs)
 		m = np.ones(self.cbv.shape[0], dtype='float64')
@@ -220,7 +145,7 @@ class CBV(object):
 
 		return m + coeffs[-1]
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def mdl_off(self, coeff, fitted, Ncbvs):
 		fitted = np.atleast_1d(fitted)
 
@@ -230,46 +155,44 @@ class CBV(object):
 			m += (fitted[k] * self.cbv[:, k]) + (fitted[k+Ncbvs] * self.cbv_s[:, k])
 		return m + coeff
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def mdl1d(self, coeff, ncbv):
 		cbv_comb = np.column_stack((self.cbv, self.cbv_s))
 
 		m = 1 + coeff * cbv_comb[:, ncbv]
 		return m
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 #	def _lhood(self, coeffs, flux, err):
 #		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def _lhood_off(self, coeffs, flux, fitted, Ncbvs):
 		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted, Ncbvs))**2)
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 #	def _lhood_off_2(self, coeffs, flux, err, fitted):
 #		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err**2)
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def _lhood1d(self, coeff, flux, ncbv):
 		return 0.5*nansum((flux - self.mdl1d(coeff, ncbv))**2)
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 #	def _lhood1d_2(self, coeff, flux, err, ncbv):
 #		return 0.5*nansum(((flux - self.mdl1d(coeff, ncbv))/err)**2) + 0.5*np.log(err**2)
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def _posterior1d(self, coeff, flux, ncbv, pos, wscale, KDE):
 		Post = self._lhood1d(coeff, flux, ncbv) - wscale*np.log(self._prior1d(coeff, KDE))
 		return Post
 
-
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 #	def _posterior1d_2(self, coeff, flux, err, ncbv, pos, wscale, KDE):
 #		Post = self._lhood1d_2(coeff, flux, err, ncbv) + self._prior1d(coeff, wscale, KDE)
 #		return Post
 
-
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def _priorcurve(self, x, Ncbvs, N_neigh):
 
 		"""
@@ -306,28 +229,26 @@ class CBV(object):
 			res += (self.mdl1d(opt, ncbv) - 1) + (self.mdl1d(opt_s, ncbv + no_cbv_coeff) - 1)
 		return res+1, opts
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def _prior1d(self, c, KDE=None):
 		if KDE is None:
 			return 0
 		else:
 			return float(KDE(c))
 
-
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def fitting_lh(self, flux, Ncbvs):
 		res = self.lsfit(flux, Ncbvs)
 		res[-1] -= 1
 		return res
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def fitting_lh_spike(self, flux, Ncbvs):
 		res = self.lsfit_spike(flux, Ncbvs)
 		res[-1] -= 1
 		return res
 
-
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def fitting_pos_2(self, flux, err, Ncbvs, pos, wscale, N_neigh, method='Powell', start=None):
 		if (method=='Powell') or (method=='Nelder-Mead'):
 			# Initial guesses for coefficients:
@@ -391,7 +312,7 @@ class CBV(object):
 			return res
 
 	#--------------------------------------------------------------------------
-	def fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=50, use_bic=True, method='Powell', func='pos', wscale=5, N_neigh=1000, start=None):
+	def _fit(self, flux, err=None, pos=None, Numcbvs=3, sigma_clip=4.0, maxiter=50, use_bic=True, method='Powell', func='pos', wscale=5, N_neigh=1000, start=None):
 		logger = logging.getLogger(__name__)
 
 		# Find the median flux to normalise light curve
@@ -438,7 +359,6 @@ class CBV(object):
 					if d==0:
 						break
 
-
 				flux_filter = self.mdl(res)
 
 				# Do robust sigma clipping:
@@ -474,95 +394,105 @@ class CBV(object):
 
 		return flux_filter, res_final
 
-	#--------------------------------------------------------------------------
-	def cotrend_single(self, lc, n_components, alpha=1.3, WS_lim=0.5, simple_fit=True, ini=True, use_bic=False, method='Powell', N_neigh=1000):
-		logger = logging.getLogger(__name__)
-		# Remove bad data based on quality
+	#----------------------------------------------------------------------------------------------
+	def fit(self, lc, n_components, use_bic=True, use_prior=False,
+		alpha=1.3, WS_lim=0.5, N_neigh=1000):
+		"""
+		Fit the CBV object to a lightcurve, and return the fitted cotrending-lightcurve
+		and the fitting coefficients.
 
+		Parameters:
+			lc (`LightCurve`): Lightcurve to be cotrended.
+			use_bic (boolean, optional): Use the Bayesian Information Criterion to find the
+				optimal number of CBVs to fit. Default=True.
+			use_prior (boolean, optional):
+
+		"""
+
+		logger = logging.getLogger(__name__)
+
+		# Remove bad data based on quality
 		flag_good = CorrectorQualityFlags.filter(lc.quality)
 		lc.flux[~flag_good] = np.nan
 
+		# Diagnostics to return at the end about what was
+		# actually used in the fitting:
+		diagnostics = {
+			'method': None,
+			'use_bic': use_bic,
+			'use_prior': use_prior
+		}
 
 		# Fit the CBV to the flux:
-		if ini:
+		if use_prior:
 			"""
-			Do initial fits to define prior weights, i.e., include all
-			possible CBVs (disregarding BIC)
+			Do fits including prior information from the initial fits -
+			allow switching to a simple LSSQ fit depending on
+			variability measures (not fully implemented yet!)
 
 			"""
-			flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=False, method='llsq', func='lh')
-			lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
-			lc.meta['additional_headers']['CBV_MET'] = ('llsq', 'method used to fit CBV')
+			row = lc.meta['task']['pos_row']
+			col = lc.meta['task']['pos_column']
+			tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
 
-			return flux_filter, res
+			pos = np.array([row, col, tmag])
 
-		else:
+			# Prior curve
+			pc0, opts = self._priorcurve(pos, n_components, N_neigh)
+			pc = pc0 * lc.meta['task']['mean_flux']
 
-			if simple_fit:
+			# Compute new variability measure
+			idx = np.isfinite(lc.flux)
+			Poly = np.poly1d(np.polyfit(lc.time[idx], lc.flux[idx], 3))
+			Polyfit = Poly(lc.time)
+			residual = MAD_model(lc.flux-pc)
+			#residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
+			#WS = np.min([1, residual_ratio])
 
-				"""
-				Do "simple" LSSQ fits using BIC to decide on number of CBVs
-				to include
+			AA = 2
+			GRAW = np.std((pc - Polyfit) / MAD_model2(lc.flux - Polyfit) - 1)
+			GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
 
-				"""
-				logger.info('Fitting using LSSQ')
-				flux_filter, res = self.fit(lc.flux, Numcbvs=n_components, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
-				lc.meta['additional_headers']['CBV_PRI'] = (False, 'Was prior used')
-				lc.meta['additional_headers']['CBV_MET'] = ('llsq', 'method used to fit CBV')
+			beta1 = 1
+			beta2 = 1
+			VAR = np.nanstd(lc.flux - Polyfit)
+			WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
 
-				return flux_filter, res
+			#lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
+			#lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
+
+			if WS > WS_lim:
+				logger.info('Fitting using LLSQ')
+				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic, method='llsq', func='lh') # use smaller number of CBVs
+				diagnostics['method'] = 'llsq'
+				diagnostics['use_prior'] = False
+				diagnostics['use_bic'] = False
+
 			else:
-
-				"""
-				Do fits including prior information from the initial fits -
-				allow switching to a simple LSSQ fit depending on
-				variability measures (not fully implemented yet!)
-
-				"""
-				row = lc.meta['task']['pos_row']
-				col = lc.meta['task']['pos_column']
-				tmag = np.clip(lc.meta['task']['tmag'], 2, 20)
-
-				pos = np.array([row, col, tmag])
-
-				# Prior curve
-				pc0, opts = self._priorcurve(pos, n_components, N_neigh)
-				pc = pc0 * lc.meta['task']['mean_flux']
-
-				# Compute new variability measure
-				idx = np.isfinite(lc.flux)
-				Poly = np.poly1d(np.polyfit(lc.time[idx], lc.flux[idx], 3))
-				Polyfit = Poly(lc.time)
-				residual = MAD_model(lc.flux-pc)
-#				residual_ratio = MAD_model(lc.flux-lc.meta['task']['mean_flux'])/residual
-#				WS = np.min([1, residual_ratio])
-
-				AA = 2
-				GRAW = np.std((pc - Polyfit) / MAD_model2(lc.flux - Polyfit) - 1)
-				GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
-#
-				beta1 = 1
-				beta2 = 1
-				VAR = np.nanstd(lc.flux - Polyfit)
-				WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
-
-#				lc.meta['additional_headers']['rratio'] = (residual_ratio, 'residual ratio')
-#				lc.meta['additional_headers']['var_new'] = (residual, 'new variability')
+				logger.info('Fitting using Priors')
 
 				tree = self.priors
 				dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
 
+				prior = self._prior1d()
 
-				if WS>WS_lim:
-					logger.info('Fitting using LSSQ')
-					flux_filter, res = self.fit(lc.flux, Numcbvs=5, use_bic=True, method='llsq', func='lh') #use smaller number of CBVs
-					lc.meta['additional_headers']['pri_use'] = (False, 'Was prior used')
-					lc.meta['additional_headers']['CBV_MET'] = ('llsq', 'method used to fit CBV')
+				flux_filter, res = self._fit(lc.flux, err=residual, pos=pos, use_bic=use_bic, method='Powell', prior=prior, start=opts)
 
-				else:
-					logger.info('Fitting using Priors')
-					flux_filter, res = self.fit(lc.flux, err=residual, pos=pos, Numcbvs=n_components, use_bic=True, method=self.method, func='pos', wscale=WS, N_neigh=N_neigh, start=opts)
-					lc.meta['additional_headers']['pri_use'] = (True, 'Was prior used')
-					lc.meta['additional_headers']['CBV_MET'] = (self.method, 'method used to fit CBV')
+				diagnostics.update({
+					'method': 'Powell',
+					'residual': residual,
+					'WS': WS,
+					'pc': pc
+				})
 
-				return flux_filter, res, residual, WS, pc
+		else:
+			"""
+			Do "simple" LSSQ fits using BIC to decide on number of CBVs
+			to include
+
+			"""
+			logger.info('Fitting using LLSQ')
+			flux_filter, res = self._fit(lc.flux, use_bic=use_bic, method='llsq', func='lh')
+			diagnostics['method'] = 'llsq'
+
+		return flux_filter, res, diagnostics

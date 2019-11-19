@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
+CBV Utility functions
+
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
-from six.moves import range
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.model_selection import cross_val_score
@@ -18,19 +18,19 @@ from scipy.special import xlogy
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from scipy.spatial import distance
+from ..utilities import mad_to_sigma
 
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
-
+#--------------------------------------------------------------------------------------------------
 def MAD_model(x, **kwargs):
 	# x: difference between input
-	return 1.4826*np.nanmedian(np.abs(x), **kwargs)
+	return mad_to_sigma*np.nanmedian(np.abs(x), **kwargs)
 
+#--------------------------------------------------------------------------------------------------
 def MAD_model2(x, **kwargs):
 	# x: difference between input
-	return 1.4826*np.nanmedian(np.abs(x-np.nanmedian(x)), **kwargs)
+	return mad_to_sigma*np.nanmedian(np.abs(x-np.nanmedian(x)), **kwargs)
 
+#--------------------------------------------------------------------------------------------------
 def MAD_scatter(X, Y, bins=15):
 	bin_means, bin_edges, binnumber = stats.binned_statistic(X, Y, statistic=nanmedian, bins=bins)
 	bin_width = (bin_edges[1] - bin_edges[0])
@@ -41,8 +41,7 @@ def MAD_scatter(X, Y, bins=15):
 	M = MAD_model(Y-spl(X))
 	return M
 
-
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def _move_median_central_1d(x, width_points):
 	y = move_median(x, width_points, min_count=1)
 	y = np.roll(y, -width_points//2+1)
@@ -77,7 +76,7 @@ def rms(x, **kwargs):
 	return np.sqrt(nansum(x**2, **kwargs)/len(x))
 
 #------------------------------------------------------------------------------
-def compute_entopy(U):
+def compute_entropy(U):
 
 	HGauss0 = 0.5 + 0.5*np.log(2*np.pi)
 
@@ -108,6 +107,7 @@ def compute_entopy(U):
 		H[iBasisVector] = HVMatrix - HGauss
 
 	return H
+
 #------------------------------------------------------------------------------
 def reduce_std(x):
 	return np.median(np.abs(x-np.median(x)))
@@ -138,19 +138,22 @@ def ndim_med_filt(v, x, n, dist='euclidean', mad_frac=2):
 			idx[i] = True
 	return idx
 
+#------------------------------------------------------------------------------
+def AlmightyCorrcoefEinsumOptimized(O, P):
+	"""
+	Correlation coefficients using Einstein sums
+	"""
 
+	(n, t) = O.shape      # n traces of t samples
+	(n_bis, m) = P.shape  # n predictions for each of m candidates
 
+	DO = O - (np.einsum("nt->t", O, optimize='optimal') / np.double(n)) # compute O - mean(O)
+	DP = P - (np.einsum("nm->m", P, optimize='optimal') / np.double(n)) # compute P - mean(P)
 
+	cov = np.einsum("nm,nt->mt", DP, DO, optimize='optimal')
 
+	varP = np.einsum("nm,nm->m", DP, DP, optimize='optimal')
+	varO = np.einsum("nt,nt->t", DO, DO, optimize='optimal')
+	tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
 
-
-
-
-
-
-
-
-
-
-
-
+	return cov / np.sqrt(tmp)
