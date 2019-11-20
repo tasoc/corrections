@@ -12,7 +12,7 @@ import os
 import logging
 from sklearn.decomposition import PCA
 from sklearn.neighbors import DistanceMetric, BallTree
-from bottleneck import allnan, nanmedian
+from bottleneck import allnan, nanmedian, replace
 from scipy.interpolate import pchip_interpolate
 from scipy.signal import savgol_filter, find_peaks
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
@@ -300,6 +300,7 @@ class CBVCreator(BaseCorrector):
 			Saves CBVs per cbv-area in ".npy" files
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
@@ -428,48 +429,38 @@ class CBVCreator(BaseCorrector):
 		cbv_spike = np.zeros_like(cbv)
 
 		# Iterate over basis vectors
+		xs = np.arange(0, cbv.shape[0])
 		for j in range(cbv.shape[1]):
 
 			# Pad ends for better peak detection at boundaries of data
 			data0 = cbv[:, j]
 			data0 = np.append(np.flip(data0[0:wmir])[0:-1], data0)
 			data0 = np.append(data0, np.flip(data0[-wmir::])[1::])
-
-			xs = np.arange(0, len(data0))
-
 			data = data0.copy()
 
-			# Iterate peak detection
-			for i in range(5):
-
+			# Iterate peak detection, with different savgol filter widths:
+			for w in (31, 29, 27, 25, 23):
 				# For savgol filter data must be continuous
 				data2 = pchip_interpolate(xs[np.isfinite(data)], data[np.isfinite(data)], xs)
-
-				# run low pass filter, set window width
-				w = 31 - 2*i
-				if w%2 == 0:
-					w += 1
 
 				# Smooth, filtered version of data, to use to identify "outliers", i.e., spikes
 				y = savgol_filter(data2, w, 2, mode='constant')
 				y2 = data2 - y
 
 				# Run peak detection
-				sigma = 1.4826 * nanmedian(np.abs(y2))
+				sigma = mad_to_sigma * nanmedian(np.abs(y2))
 				peaks, properties = find_peaks(np.abs(y2), prominence=(3*sigma, None), wlen=500)
 
 				data[peaks] = np.nan
-
 
 			# Interpolate CBVs where spike has been identified
 			data = pchip_interpolate(xs[np.isfinite(data)], data[np.isfinite(data)], xs)
 
 			# Remove padded ends and store in CBV matrices
 			# Spike signal is difference between original data and data with masked spikes
-			S = (data0[wmir-1:-wmir+1] - data[wmir-1:-wmir+1])
-			S[np.isnan(S)] = 0
+			cbv_spike[:, j] = data0[wmir-1:-wmir+1] - data[wmir-1:-wmir+1]
+			replace(cbv_spike[:, j], np.nan, 0)
 
-			cbv_spike[:, j] = S
 			cbv_new[:, j] = data[wmir-1:-wmir+1]
 
 		# Save files
@@ -680,7 +671,10 @@ class CBVCreator(BaseCorrector):
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0 = np.zeros([n_stars, 3])
 		for jj, star in enumerate(results[:, 0]):
-			star_single = self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area, 'todolist.starid=%d' % int(star)])
+			star_single = self.search_database(
+				select=['pos_row', 'pos_column', 'tmag'],
+				search=[search_cadence, 'cbv_area=%d' % cbv_area, 'todolist.starid=%d' % int(star)]
+			)
 			pos_mag0[jj, 0] = star_single[0]['pos_row']
 			pos_mag0[jj, 1] = star_single[0]['pos_column']
 			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
