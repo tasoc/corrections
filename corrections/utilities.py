@@ -10,6 +10,7 @@ the corrections package.
 import numpy as np
 import pickle
 import gzip
+from astropy.io import fits
 from bottleneck import nanmedian, nanmean, allnan
 from scipy.stats import binned_statistic
 
@@ -122,3 +123,37 @@ def rms_timescale(lc, timescale=3600/86400):
 
 	# Compute robust RMS value (MAD scaled to RMS)
 	return mad_to_sigma * nanmedian(np.abs(flux_bin - nanmedian(flux_bin)))
+
+#--------------------------------------------------------------------------------------------------
+def fix_fits_table_headers(table, column_titles=None):
+	"""
+	Fix headers in FITS files, adding appropiate comments where they are missing.
+
+	Changes headers in-place.
+
+	Parameters:
+		table (``fits.BinTableHDU``): Table HDU to fix headers for.
+		column_titles (dict): Descriptions of columns to add to header comments.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+
+	if isinstance(table, fits.BinTableHDU):
+		table = table.header
+
+	for k in range(1, table.get('TFIELDS', 0)+1):
+		if not table.comments['TDISP%d' % k]:
+			table.comments['TDISP%d' % k] = 'column display format'
+
+		if not table.comments['TFORM%d' % k]:
+			table.comments['TFORM%d' % k] = {
+				'D': 'column format: 64-bit floating point',
+				'E': 'column format: 32-bit floating point',
+				'J': 'column format: signed 32-bit integer',
+				'L': 'column format: logical value'
+			}[table.get('TFORM%d' % k)]
+
+		if column_titles is not None:
+			key = table.get('TTYPE%d' % k)
+			if key and key in column_titles:
+				table.comments['TTYPE%d' % k] = column_titles[table.get('TTYPE%d' % k)]

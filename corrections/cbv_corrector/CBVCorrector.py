@@ -12,7 +12,10 @@ import os
 import logging
 from ..plots import plt
 from .. import BaseCorrector, STATUS
+from ..version import get_version
 from . import CBV
+
+__version__ = get_version(pep440=False)
 
 #--------------------------------------------------------------------------------------------------
 class CBVCorrector(BaseCorrector):
@@ -121,7 +124,6 @@ class CBVCorrector(BaseCorrector):
 		status = STATUS.OK
 		if len(res) < 4: # fitting and using only one CBV
 			status = STATUS.WARNING
-
 		if len(res) > 21: # fitting and using more than 10 CBVs
 			status = STATUS.WARNING
 
