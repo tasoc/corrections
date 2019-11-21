@@ -7,13 +7,16 @@
 import numpy as np
 import os
 import logging
-from bottleneck import nansum, nanmedian
+from astropy.io import fits
+from astropy.time import Time
+import datetime
+from bottleneck import allnan, nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
 from scipy import stats
 import functools
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
-from ..utilities import loadPickle
+from ..utilities import loadPickle, fix_fits_table_headers
 from ..quality import CorrectorQualityFlags
 from .cbv_utilities import MAD_model, MAD_model2
 
@@ -53,25 +56,42 @@ class CBV(object):
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
-	#----------------------------------------------------------------------------------------------
-	def __init__(self, data_folder, cbv_area, datasource, threshold_snrtest=5):
+	#--------------------------------------------------------------------------
+	def __init__(self, data_folder, cbv_area, datasource):
 		logger = logging.getLogger(__name__)
+
+		self.cbv_area = cbv_area
+		self.datasource = datasource
 
 		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' % (datasource, cbv_area))
 		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' % (datasource, cbv_area))
+		filepath_auxinfo = os.path.join(data_folder, 'auxinfo-%s-%d.npz' % (datasource, cbv_area))
 
 		if not os.path.exists(filepath):
 			raise FileNotFoundError("Could not find CBV file")
 		if not os.path.exists(filepath_s):
 			raise FileNotFoundError("Could not find CBV spike file")
+		if not os.path.exists(filepath_auxinfo):
+			raise FileNotFoundError("Could not find AUXILIARY INFORMATION file")
 
 		self.cbv = np.load(filepath)
 		self.cbv_s = np.load(filepath_s)
 
-		self.threshold_snrtest = threshold_snrtest
+		with np.load(filepath_auxinfo) as auxinfo:
+			self.sector = int(auxinfo['sector'])
+			self.cadence = auxinfo['cadence']
+			self.time = auxinfo['time']
+			self.cadenceno = auxinfo['cadenceno']
+			self.camera = int(auxinfo['camera'])
+			self.ccd = int(auxinfo['ccd'])
+			self.threshold_correlation = float(auxinfo['threshold_correlation'])
+			self.threshold_variability = float(auxinfo['threshold_variability'])
+			self.threshold_snrtest = float(auxinfo['threshold_snrtest'])
+			self.threshold_entropy = float(auxinfo['threshold_entropy'])
+			self.version = str(auxinfo['version'])
 
 		# Signal-to-Noise test (without actually removing any CBVs):
-		indx_lowsnr = cbv_snr_test(self.cbv, threshold_snrtest)
+		indx_lowsnr = cbv_snr_test(self.cbv, self.threshold_snrtest)
 		self.remove_cols(indx_lowsnr)
 
 		self.priors = None
@@ -79,7 +99,7 @@ class CBV(object):
 		if os.path.exists(priorpath):
 			self.priors = loadPickle(priorpath)
 		else:
-			logger.info('Path to prior distance file does not exist', priorpath)
+			logger.info('Path to prior distance file does not exist: %s', priorpath)
 
 		self.inires = None
 		inipath = os.path.join(data_folder, 'mat-%s-%d_free_weights.npz' % (datasource, cbv_area))
@@ -503,3 +523,139 @@ class CBV(object):
 			diagnostics['method'] = 'llsq'
 
 		return flux_filter, res, diagnostics
+
+	#----------------------------------------------------------------------------------------------
+	def save_to_fits(self, output_folder, datarel=5):
+		"""
+		Save CBVs to FITS file.
+
+		Parameters:
+			output_folder (string): Path to directory where FITS file should be saved.
+			datarel (integer): Data release number to add to file header.
+
+		Returns:
+			string: Path to the generated FITS file.
+
+		Raises:
+			FileNotFoundError: If `output_folder` is invalid.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		.. codeauthor:: Nicholas Saunders <nksaun@hawaii.edu>
+		"""
+
+		# Checks of input:
+		if not os.path.isdir(output_folder):
+			raise FileNotFoundError("Invalid output directory")
+
+		# Store the date that the file is created
+		now = datetime.datetime.now()
+
+		# Timestamps of start and end of timeseries:
+		tdel = self.cadence/86400
+		tstart = self.time[0] - tdel/2
+		tstop = self.time[-1] + tdel/2
+		tstart_tm = Time(tstart, 2457000, format='jd', scale='tdb')
+		tstop_tm = Time(tstop, 2457000, format='jd', scale='tdb')
+		telapse = tstop - tstart
+
+		# write fits header information
+		hdr = fits.Header()
+		hdr['EXTNAME'] = ('PRIMARY', 'extension name')
+		hdr['ORIGIN'] = ('TASOC/Aarhus', 'institution responsible for creating this file')
+		hdr['DATE'] = (now.strftime("%Y-%m-%d"), 'file creation date')
+		hdr['TELESCOP'] = ('TESS', 'telescope')
+		hdr['INSTRUME'] = ('TESS Photometer', 'detector type')
+		hdr['SECTOR'] = (self.sector, 'Observing sector')
+		hdr['DATA_REL'] = (datarel, 'data release version number')
+		hdr['PROCVER'] = (self.version, 'Version of corrections pipeline')
+		hdr['FILEVER'] = ('1.0', 'File format version')
+		hdr['TSTART'] = (tstart, 'observation start time in TJD')
+		hdr['TSTOP'] = (tstop, 'observation stop time in TJD')
+		hdr['DATE-OBS'] = (tstart_tm.utc.isot, 'TSTART as UTC calendar date')
+		hdr['DATE-END'] = (tstop_tm.utc.isot, 'TSTOP as UTC calendar date')
+		hdr['CAMERA'] = (self.camera, 'CCD camera')
+		hdr['CCD'] = (self.ccd, 'CCD chip')
+		hdr['CBV_AREA'] = (self.cbv_area, 'CCD area')
+
+		# Create primary hdu:
+		phdu = fits.PrimaryHDU(header=hdr)
+
+		# Create common table headers:
+		table_header = fits.Header()
+		table_header['TIMEREF'] = ('SOLARSYSTEM', 'barycentric correction applied to times')
+		table_header['TIMESYS'] = ('TDB', 'time system is Barycentric Dynamical Time (TDB)')
+		table_header['JDREFI'] = (2457000, 'integer part of BTJD reference date')
+		table_header['JDREFF'] = (0.0, 'fraction of the day in BTJD reference date')
+		table_header['TIMEUNIT'] = ('d', 'time unit for TIME, TSTART and TSTOP')
+		table_header['TSTART'] = (tstart, 'observation start time in TJD')
+		table_header['TSTOP'] = (tstop, 'observation stop time in TJD')
+		table_header['DATE-OBS'] = (tstart_tm.utc.isot, 'TSTART as UTC calendar date')
+		table_header['DATE-END'] = (tstop_tm.utc.isot, 'TSTOP as UTC calendar date')
+		table_header['TELAPSE'] = (telapse, '[d] LC_STOP - LC_START')
+		table_header['TIMEPIXR'] = (0.5, 'bin time beginning=0 middle=0.5 end=1')
+		table_header['CAMERA'] = (self.camera, 'CCD camera')
+		table_header['CCD'] = (self.ccd, 'CCD chip')
+		table_header['CBV_AREA'] = (self.cbv_area, 'CCD area')
+
+		# Settings used when generating the CBV:
+		table_header['THR_COR'] = (self.threshold_correlation, 'Fraction of stars used for CBVs')
+		table_header['THR_VAR'] = (self.threshold_variability, 'Threshold for variability rejection')
+		table_header['THR_SNR'] = (self.threshold_snrtest, 'Threshold for SNR test')
+		table_header['THR_ENT'] = (self.threshold_entropy, 'Threshold for entropy cleaning')
+
+		# Columns that are common between all tables:
+		col_time = fits.Column(name='TIME', format='D', unit='JD - 2457000, days', disp='D17.7', array=self.time)
+		col_cadno = fits.Column(name='CADENCENO', format='J', disp='I10', array=self.cadenceno)
+
+		# Single-scale CBVs:
+		cols = [col_time, col_cadno]
+		col_titles = {}
+		# store all CBVs for each camera and chip
+		for n in range(self.cbv.shape[1]):
+			col_name = 'VECTOR_%d' % (n+1)
+			col = fits.Column(name=col_name, format='E', disp='F8.5', array=self.cbv[:, n])
+			cols.append(col)
+			col_titles[col_name] = 'column title: co-trending basis vector %d' % (n+1)
+
+		# append CBVs as hdu columns
+		table_hdu1 = fits.BinTableHDU.from_columns(cols, header=table_header, name='CBV.SINGLE-SCALE.%d' % self.cbv_area)
+
+		# Fix table headers:
+		fix_fits_table_headers(table_hdu1, column_titles=col_titles)
+		table_hdu1.header.comments['TTYPE1'] = 'column title: data time stamps'
+		table_hdu1.header.comments['TUNIT1'] = 'column units: TESS modified Julian date (TJD)'
+		table_hdu1.header.comments['TTYPE2'] = 'column title: unique cadence number'
+
+		# Spike CBVs:
+		cols = [col_time, col_cadno]
+		col_titles = {}
+		# store all CBVs for each camera and chip
+		for n in range(self.cbv_s.shape[1]):
+			col_name = 'VECTOR_%d' % (n+1)
+			col = fits.Column(name=col_name, format='E', disp='F8.5', array=self.cbv_s[:, n])
+			col_titles[col_name] = 'column title: co-trending basis vector %d' % (n+1)
+			cols.append(col)
+
+		# append CBVs as hdu columns
+		table_hdu2 = fits.BinTableHDU.from_columns(cols, header=table_header, name='CBV.SPIKE.%d' % self.cbv_area)
+
+		# Fix table headers:
+		fix_fits_table_headers(table_hdu2, column_titles=col_titles)
+		table_hdu2.header.comments['TTYPE1'] = 'column title: data time stamps'
+		table_hdu2.header.comments['TUNIT1'] = 'column units: TESS modified Julian date (TJD)'
+		table_hdu2.header.comments['TTYPE2'] = 'column title: unique cadence number'
+
+		# Name of the
+		fname = 'tess-s{sector:04d}-c{cadence:04d}-a{cbvarea:d}-v{datarel:d}-tasoc_cbv.fits'.format(
+			sector=self.sector,
+			cadence=self.cadence,
+			cbvarea=self.cbv_area,
+			datarel=datarel
+		)
+		filepath = os.path.join(output_folder, fname)
+
+		# store as HDU list and write to fits file
+		with fits.HDUList([phdu, table_hdu1, table_hdu2]) as hdul:
+			hdul.writeto(filepath, overwrite=True, checksum=True)
+
+		return filepath

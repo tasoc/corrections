@@ -24,6 +24,7 @@ from ..quality import CorrectorQualityFlags, TESSQualityFlags
 from .cbv import CBV, cbv_snr_test
 from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_matrix, compute_entropy
 
+
 #--------------------------------------------------------------------------------------------------
 def clean_cbv(matrix, n_components, entropy_limit=-1.5, targ_limit=50):
 	"""
@@ -137,8 +138,10 @@ class CBVCreator(BaseCorrector):
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
 		if self.datasource == 'ffi':
+			cadence = 1800
 			search_cadence = "datasource='ffi'"
 		else:
+			cadence = 120
 			search_cadence = "datasource!='ffi'"
 
 		# Find the median of the variabilities:
@@ -167,6 +170,23 @@ class CBVCreator(BaseCorrector):
 		# Load the very first timeseries only to find the number of timestamps.
 		lc = self.load_lightcurve(stars[0])
 		Ntimes = len(lc.time)
+
+		# Save aux information about this CBV to an separate file.
+		filepath_auxinfo = os.path.join(self.data_folder, 'auxinfo-%s-%d.npz' %(self.datasource, cbv_area))
+		np.savez(filepath_auxinfo,
+			time=lc.time - lc.timecorr, # Change the timestamps back to uncorrected JD (TDB)
+			cadenceno=lc.cadenceno,
+			sector=lc.sector,
+			cadence=cadence,
+			camera=lc.camera,
+			ccd=lc.ccd,
+			cbv_area=cbv_area,
+			threshold_correlation=self.threshold_correlation,
+			threshold_variability=self.threshold_variability,
+			threshold_snrtest=self.threshold_snrtest,
+			threshold_entropy=self.threshold_entropy,
+			version=__version__
+		)
 
 		logger.info("Matrix size: %d x %d", Nstars, Ntimes)
 
@@ -535,8 +555,8 @@ class CBVCreator(BaseCorrector):
 		if os.path.exists(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, cbv_area))):
 			logger.info("Initial co-trending for light curves in %s CBV area%d already done" % (self.datasource, cbv_area))
 			return
-		else:
-			logger.info("Initial co-trending for light curves in %s CBV area%d" % (self.datasource, cbv_area))
+
+		logger.info("Initial co-trending for light curves in %s CBV area%d" % (self.datasource, cbv_area))
 
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
@@ -549,7 +569,7 @@ class CBVCreator(BaseCorrector):
 		stars = self.search_database(search=[search_cadence, 'cbv_area=%d' % cbv_area])
 
 		# Load the cbv from file:
-		cbv = CBV(self.data_folder, cbv_area, self.datasource, self.threshold_snrtest)
+		cbv = CBV(self.data_folder, cbv_area, self.datasource)
 
 		# Signal-to-Noise test (without actually removing any CBVs):
 		#indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
@@ -693,3 +713,18 @@ class CBVCreator(BaseCorrector):
 		tree = BallTree(pos_mag0, metric=dist)
 
 		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' % (self.datasource, cbv_area)), tree)
+
+	#----------------------------------------------------------------------------------------------
+	def save_cbv_to_fits(self, cbv_area, datarel=5):
+		"""
+		Save Cotrending Basis Vectors (CBVs) to FITS file.
+
+		Returns:
+			string: Path to the generated FITS file.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
+
+		cbv = CBV(self.data_folder, cbv_area, self.datasource)
+		return cbv.save_to_fits(self.data_folder, datarel=datarel)
+

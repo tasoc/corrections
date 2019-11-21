@@ -96,7 +96,7 @@ class CBVCorrector(BaseCorrector):
 
 		logger.info('Fitting using number of components: %d', n_components)
 
-		flux_filter, res, diagnostics = cbv.cotrend_single(lc, use_bic=True, use_prior=use_prior)
+		flux_filter, res, diagnostics = cbv.fit(lc, use_bic=True, use_prior=use_prior)
 		#logger.debug('New variability', residual)
 
 		# Corrected light curve in ppm
