@@ -19,8 +19,11 @@ from ..plots import plt
 from .. import BaseCorrector, STATUS
 from ..utilities import savePickle
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
+from ..version import get_version
 from .cbv_main import CBV, cbv_snr_test, clean_cbv, lc_matrix_calc
 from .cbv_util import MAD_model2, compute_scores
+
+__version__ = get_version(pep440=False)
 
 #------------------------------------------------------------------------------
 class CBVCorrector(BaseCorrector):
@@ -32,7 +35,7 @@ class CBVCorrector(BaseCorrector):
 	"""
 
 	def __init__(self, *args, Numcbvs='all', ncomponents=None, simple_fit=True, WS_lim=0.8, alpha=1.3, N_neigh=1000, method='Powell', use_bic=True, \
-			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, datasource='ffi', **kwargs):
+			  threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, threshold_entropy=-0.5, datasource='ffi', **kwargs):
 		"""
 		Initialise the corrector
 
@@ -59,6 +62,7 @@ class CBVCorrector(BaseCorrector):
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_correlation = threshold_correlation
 		self.threshold_variability = threshold_variability
+		self.threshold_entropy = threshold_entropy
 		self.ncomponents = ncomponents
 		self.alpha = alpha
 		self.WS_lim = WS_lim
@@ -109,8 +113,10 @@ class CBVCorrector(BaseCorrector):
 			# Convert datasource into query-string for the database:
 			# This will change once more different cadences (i.e. 20s) is defined
 			if self.datasource == 'ffi':
+				cadence = 1800
 				search_cadence = "datasource='ffi'"
 			else:
+				cadence = 120
 				search_cadence = "datasource!='ffi'"
 
 			# Find the median of the variabilities:
@@ -136,6 +142,23 @@ class CBVCorrector(BaseCorrector):
 			# Load the very first timeseries only to find the number of timestamps.
 			lc = self.load_lightcurve(stars[0])
 			Ntimes = len(lc.time)
+
+			# Save aux information about this CBV to an separate file.
+			filepath_auxinfo = os.path.join(self.data_folder, 'auxinfo-%s-%d.npz' %(self.datasource, cbv_area))
+			np.savez(filepath_auxinfo,
+				time=lc.time - lc.timecorr, # Change the timestamps back to uncorrected JD (TDB)
+				cadenceno=lc.cadenceno,
+				sector=lc.sector,
+				cadence=cadence,
+				camera=lc.camera,
+				ccd=lc.ccd,
+				cbv_area=cbv_area,
+				threshold_correlation=self.threshold_correlation,
+				threshold_variability=self.threshold_variability,
+				threshold_snrtest=self.threshold_snrtest,
+				threshold_entropy=self.threshold_entropy,
+				version=__version__
+			)
 
 			logger.info("Matrix size: %d x %d", Nstars, Ntimes)
 
@@ -539,7 +562,7 @@ class CBVCorrector(BaseCorrector):
 		stars = self.search_database(search=[search_cadence, 'cbv_area=%s' % cbv_area])
 
 		# Load the cbv from file:
-		cbv = CBV(self.data_folder, cbv_area, self.datasource, self.threshold_snrtest)
+		cbv = CBV(self.data_folder, cbv_area, self.datasource)
 
 #		# Signal-to-Noise test (without actually removing any CBVs):
 #		indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
@@ -681,6 +704,19 @@ class CBVCorrector(BaseCorrector):
 
 		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' %(self.datasource,cbv_area)), tree)
 
+	#----------------------------------------------------------------------------------------------
+	def save_cbv_to_fits(self, cbv_area, datarel=5):
+		"""
+		Save Cotrending Basis Vectors (CBVs) to FITS file.
+
+		Returns:
+			string: Path to the generated FITS file.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
+
+		cbv = CBV(self.data_folder, cbv_area, self.datasource)
+		return cbv.save_to_fits(self.data_folder, datarel=datarel)
 
 	#--------------------------------------------------------------------------
 	def do_correction(self, lc):
@@ -701,7 +737,7 @@ class CBVCorrector(BaseCorrector):
 		cbv = self.cbvs.get(cbv_area)
 		if cbv is None:
 			logger.debug("Loading CBV for area %d into memory", cbv_area)
-			cbv = CBV(self.data_folder, cbv_area, self.datasource, self.threshold_snrtest)
+			cbv = CBV(self.data_folder, cbv_area, self.datasource)
 			self.cbvs[cbv_area] = cbv
 
 			if not self.simple_fit:
@@ -734,28 +770,26 @@ class CBVCorrector(BaseCorrector):
 
 		res = np.array([res,]).flatten()
 
-		status = STATUS.OK
-
 		no_cbvs_fitted = int((len(res)-1)/2)
+
+		lc_corr.meta['additional_headers']['CBV_AREA'] = (cbv_area, 'CBV area of star')
+		lc_corr.meta['additional_headers']['CBV_BIC'] = (self.use_bic, 'was BIC used to select no of CBVs')
+		lc_corr.meta['additional_headers']['CBV_FIT'] = (self.simple_fit, 'CBV fitted with LLSQ?')
+		lc_corr.meta['additional_headers']['CBV_COMP'] = (no_cbvs_fitted, 'number of fitted CBVs')
+		lc_corr.meta['additional_headers']['CBV_MAX'] = (n_components, 'number of possible CBVs to fit')
+		lc_corr.meta['additional_headers']['CBV_C0'] = (res[-1], 'fitted offset')
+
 		for ii in range(no_cbvs_fitted):
 			lc_corr.meta['additional_headers']['CBV_C%i'%int(ii+1)] = (res[ii], 'CBV%i coefficient' %int(ii+1))
 
 		for jj in range(no_cbvs_fitted):
 			lc_corr.meta['additional_headers']['CBVS_C%i'%int(jj+1)] = (res[jj+no_cbvs_fitted], 'Spike-CBV%i coefficient' %int(jj+1))
 
-			if len(res)<4: #fitting and using only one CBV
-				status = STATUS.WARNING
-
-			if len(res)>21: #fitting and using more than 10 CBVs
-				status = STATUS.WARNING
-
-		lc_corr.meta['additional_headers']['CBV_C0'] = (res[-1], 'fitted offset')
-		lc_corr.meta['additional_headers']['CBV_AREA'] = (cbv_area, 'CBV area of star')
-		lc_corr.meta['additional_headers']['CBV_BIC'] = (self.use_bic, 'was BIC used to select no of CBVs')
-		lc_corr.meta['additional_headers']['CBV_FIT'] = (self.simple_fit, 'CBV fitted with LLSQ?')
-		lc_corr.meta['additional_headers']['CBV_COMP'] = (no_cbvs_fitted, 'number of fitted CBVs')
-		lc_corr.meta['additional_headers']['CBV_MAX'] = (n_components, 'number of possible CBVs to fit')
-
+		status = STATUS.OK
+		if len(res) < 4: # fitting and using only one CBV
+			status = STATUS.WARNING
+		if len(res) > 21: # fitting and using more than 10 CBVs
+			status = STATUS.WARNING
 
 		if self.plot:
 			fig = plt.figure()

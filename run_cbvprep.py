@@ -15,20 +15,21 @@ import multiprocessing
 from corrections import CBVCorrector, BaseCorrector
 
 #------------------------------------------------------------------------------
-def prepare_cbv(cbv_area, input_folder=None, threshold=None, ncbv=None, el=None, ip=False, datasource='ffi'):
+def prepare_cbv(cbv_area, input_folder=None, threshold_correlation=None, threshold_snrtest=None,
+		ncbv=None, el=None, ip=False, datasource='ffi'):
 
 	logger = logging.getLogger(__name__)
-	logger.info('running CBV for area %s', str(cbv_area))
+	logger.info('running CBV for area %d', cbv_area)
 
-	with CBVCorrector(input_folder, threshold_snrtest=threshold, ncomponents=ncbv, datasource=datasource) as C:
+	with CBVCorrector(input_folder, threshold_correlation=threshold_correlation,
+		threshold_snrtest=threshold_snrtest, threshold_entropy=el, ncomponents=ncbv,
+		datasource=datasource) as C:
+
 		C.compute_cbvs(cbv_area, ent_limit=el)
 		C.spike_sep(cbv_area)
-
-#		C.cotrend_ini(cbv_area, do_ini_plots=ip)
-#		try:
-#			C.compute_distance_map(cbv_area)
-#		except:
-#			pass
+		#C.cotrend_ini(cbv_area, do_ini_plots=ip)
+		#C.compute_distance_map(cbv_area)
+		C.save_cbv_to_fits(cbv_area)
 
 #------------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -38,6 +39,7 @@ if __name__ == '__main__':
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots.', action='store_true')
+	parser.add_argument('--threads', type=int, help="Number of parallel threads to use. If not specified, all available CPUs will be used.", default=None)
 
 	group = parser.add_argument_group('Specifying CBVs to calculate')
 	group.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
@@ -46,9 +48,10 @@ if __name__ == '__main__':
 	group.add_argument('--datasource', type=str, default='ffi', choices=('ffi', 'tpf'), help='Data source for the creation of CBVs')
 
 	group = parser.add_argument_group('Settings')
-	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
 	group.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
-	group.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV')
+	group.add_argument('--corr', type=float, default=0.5, help='Fraction of most correlated stars to use for CBVs.')
+	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
+	group.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV.')
 
 	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
 	args = parser.parse_args()
@@ -89,6 +92,8 @@ if __name__ == '__main__':
 			constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
 		if args.area:
 			constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
+		if args.datasource:
+			constraints.append("datasource='ffi'" if args.datasource=='ffi' else "datasource!='ffi'")
 		if not constraints:
 			constraints = None
 
@@ -97,12 +102,22 @@ if __name__ == '__main__':
 		logger.debug("CBV areas: %s", cbv_areas)
 
 	# Number of threads to run in parallel:
-	threads = int(os.environ.get('SLURM_CPUS_PER_TASK', multiprocessing.cpu_count()))
+	threads = args.threads
+	if not threads:
+		threads = int(os.environ.get('SLURM_CPUS_PER_TASK', multiprocessing.cpu_count()))
 	threads = min(threads, len(cbv_areas))
 	logger.info("Using %d processes.", threads)
 
 	# Create wrapper function which only takes a single cbv_area as input:
-	prepare_cbv_wrapper = partial(prepare_cbv, input_folder=input_folder, threshold=args.snr, ncbv=args.ncbv, el=args.el, ip=args.iniplot, datasource=args.datasource)
+	prepare_cbv_wrapper = partial(prepare_cbv,
+		input_folder=input_folder,
+		threshold_correlation=args.corr,
+		threshold_snrtest=args.snr,
+		ncbv=args.ncbv,
+		el=args.el,
+		ip=args.iniplot,
+		datasource=args.datasource
+	)
 
 	# Run the preparation:
 	if threads > 1:

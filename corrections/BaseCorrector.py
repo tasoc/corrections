@@ -22,12 +22,12 @@ from bottleneck import nanmedian, nanvar
 from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
-from .version import get_version
 from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
 from .manual_filters import manual_exclude
+from .version import get_version
 
-__version__ = get_version()
+__version__ = get_version(pep440=False)
 
 __docformat__ = 'restructuredtext'
 
@@ -331,6 +331,9 @@ class BaseCorrector(object):
 			# Quality flags from the pixels:
 			pixel_quality = np.asarray(data[:,3], dtype='int32')
 
+			# Corrections applied to timestamps:
+			timecorr = np.zeros(data.shape[0], dtype='float32')
+
 			# Change the Manual Exclude flag, since the simulated data
 			# and the real TESS quality flags differ in the definition:
 			indx = (pixel_quality & 256 != 0)
@@ -368,6 +371,9 @@ class BaseCorrector(object):
 				# Quality flags from the pixels:
 				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
 
+				# Corrections applied to timestamps:
+				timecorr = hdu['LIGHTCURVE'].data['TIMECORR']
+
 				# Create the QUALITY column and fill it with flags of bad data points:
 				quality = np.zeros_like(hdu['LIGHTCURVE'].data['TIME'], dtype='int32')
 				bad_data = ~np.isfinite(hdu['LIGHTCURVE'].data['FLUX_RAW'])
@@ -399,12 +405,12 @@ class BaseCorrector(object):
 				# Apply manual exclude flag:
 				manexcl = manual_exclude(lc)
 				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
-
 		else:
 			raise ValueError("Invalid file format")
 
 		# Add additional attributes to lightcurve object:
 		lc.pixel_quality = pixel_quality
+		lc.timecorr = timecorr
 
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
