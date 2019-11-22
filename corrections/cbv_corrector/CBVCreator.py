@@ -21,60 +21,18 @@ from ..plots import plt
 from .. import BaseCorrector
 from ..utilities import savePickle, mad_to_sigma
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
+from ..version import get_version
 from .cbv import CBV, cbv_snr_test
 from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_matrix, compute_entropy
 
-
-#--------------------------------------------------------------------------------------------------
-def clean_cbv(matrix, n_components, entropy_limit=-1.5, targ_limit=50):
-	"""
-	Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
-	"""
-	logger = logging.getLogger(__name__)
-
-	# Calculate the principle components:
-	logger.info("Doing Principle Component Analysis...")
-	pca = PCA(n_components)
-	U, _, _ = pca._fit(matrix)
-
-	Ent = compute_entropy(U)
-	logger.info('Entropy start: %f', Ent)
-
-	targets_removed = 0
-	components = np.arange(n_components)
-
-	with np.errstate(invalid='ignore'):
-		while np.any(Ent < entropy_limit):
-			com = components[(Ent < entropy_limit)][0]
-
-			# Remove highest relative weight target
-			m = nanmedian(U[:, com])
-			s = mad_to_sigma*nanmedian(np.abs(U[:, com] - m))
-			dev = np.abs(U[:, com] - m) / s
-
-			idx0 = np.argmax(dev)
-
-			star_no = np.ones(U.shape[0], dtype=bool)
-			star_no[idx0] = False
-
-			matrix = matrix[star_no, :]
-			U, _, _ = pca._fit(matrix)
-
-			targets_removed += 1
-			if targets_removed > targ_limit:
-				break
-
-			Ent = compute_entropy(U)
-
-	logger.info('Entropy end: %f', Ent)
-	logger.info('Targets removed: %d', targets_removed)
-	return matrix
+__version__ = get_version(pep440=False)
 
 #--------------------------------------------------------------------------------------------------
 class CBVCreator(BaseCorrector):
 
-	def __init__(self, *args, datasource='ffi', Numcbvs='all', ncomponents=None,
-		threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3, **kwargs):
+	def __init__(self, *args, datasource='ffi', ncomponents=16,
+		threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3,
+		threshold_entropy=-0.5, **kwargs):
 		"""
 		Initialise the corrector
 
@@ -95,45 +53,46 @@ class CBVCreator(BaseCorrector):
 		# This will set several default settings
 		super(self.__class__, self).__init__(*args, **kwargs)
 
-		self.Numcbvs = Numcbvs
-		self.threshold_snrtest = threshold_snrtest
-		self.threshold_correlation = threshold_correlation
-		self.threshold_variability = threshold_variability
 		self.ncomponents = ncomponents
+		self.threshold_variability = threshold_variability
+		self.threshold_correlation = threshold_correlation
+		self.threshold_snrtest = threshold_snrtest
+		self.threshold_entropy = threshold_entropy
 		self.datasource = datasource
 
-	#--------------------------------------------------------------------------
-	def lc_matrix(self, cbv_area):
+	#----------------------------------------------------------------------------------------------
+	def lc_matrix_clean(self, cbv_area):
 		"""
-		Computes correlation matrix for light curves in a given cbv-area.
 
 		Only targets with a variability below a user-defined threshold are included
 		in the calculation.
 
-		Returns matrix of the *self.threshold_correlation*% most correlated light curves; the threshold is defined in the class init function.
+		Computes correlation matrix for light curves in a given cbv-area.
+		Returns matrix of the *self.threshold_correlation*% most correlated light curves.
+
+		Performs gap-filling of light curves and removes time stamps where all flux values are nan.
 
 		Parameters:
-            cbv_area: the cbv area to calculate matrix for
-				additional parameters are contained in *self* and defined in the init function.
+			cbv_area: the cbv area to calculate light curve matrix for
 
         Returns:
             mat: matrix of *self.threshold_correlation*% most correlated light curves, to be used in CBV calculation
-			varis: variances of light curves in "mat"
+			indx_nancol: the indices for the timestamps with nans in all light curves
 
-		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
-		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
-		# If we are running in DEBUG mode, check if a intermediate file
-		# has been created, and in that case, simply load the matrix from there:
-		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d.npz' % (self.datasource, cbv_area))
+		logger.info('Running matrix clean')
+		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d_clean.npz' % (self.datasource, cbv_area))
 		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
-			return data['mat'], data['varis']
+			return data['mat'], data['indx_nancol']
+
+		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
@@ -181,8 +140,8 @@ class CBVCreator(BaseCorrector):
 			camera=lc.camera,
 			ccd=lc.ccd,
 			cbv_area=cbv_area,
-			threshold_correlation=self.threshold_correlation,
 			threshold_variability=self.threshold_variability,
+			threshold_correlation=self.threshold_correlation,
 			threshold_snrtest=self.threshold_snrtest,
 			threshold_entropy=self.threshold_entropy,
 			version=__version__
@@ -192,11 +151,10 @@ class CBVCreator(BaseCorrector):
 
 		# Make the matrix that will hold all the lightcurves:
 		logger.info("Loading in lightcurves...")
-		mat = np.empty((Nstars, Ntimes), dtype='float64')
-		mat.fill(np.nan)
+		mat = np.full((Nstars, Ntimes), np.nan, dtype='float64')
 		varis = np.empty(Nstars, dtype='float64')
 
-		# Loop over stars
+		# Loop over stars, fill
 		for k, star in tqdm(enumerate(stars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
 			# Load lightkurve object
 			lc = self.load_lightcurve(star)
@@ -237,72 +195,76 @@ class CBVCreator(BaseCorrector):
 			# Clean up a bit:
 			del correlations, c, indx
 
+		# Print the final shape of the matrix:
+		logger.info("Matrix size: %d x %d" % mat.shape)
+
+		# Find columns where all stars have NaNs and remove them:
+		indx_nancol = allnan(mat, axis=0)
+		mat = mat[:, ~indx_nancol]
+		cadenceno = np.arange(Ntimes)
+
+		logger.info("Gap-filling lightcurves...")
+		for k in tqdm(range(mat.shape[0]), total=mat.shape[0], disable=not logger.isEnabledFor(logging.INFO)):
+			# Normalize the lightcurves by their variances:
+			mat[k, :] /= varis[k]
+
+			# Fill out missing values by interpolating the lightcurve:
+			indx = np.isfinite(mat[k, :])
+			mat[k, ~indx] = pchip_interpolate(cadenceno[indx], mat[k, indx], cadenceno[~indx])
+
 		# Save something for debugging:
 		if logger.isEnabledFor(logging.DEBUG):
-			np.savez(tmpfile, mat=mat, varis=varis)
+			np.savez(tmpfile, mat=mat, varis=varis, indx_nancol=indx_nancol)
 
-		return mat, varis
+		return mat, indx_nancol
 
 	#----------------------------------------------------------------------------------------------
-	def lc_matrix_clean(self, cbv_area):
+	def entropy_cleaning(self, matrix, targ_limit=150):
 		"""
-		Performs gap-filling of light curves returned by :py:func:`CBVCorrector.lc_matrix`, and
-		removes time stamps where all flux values are nan
-
-		Parameters:
-			cbv_area: the cbv area to calculate light curve matrix for
-
-		Returns:
-			mat: matrix from :py:func:`CBVCorrector.lc_matrix` that has been gap-filled and with nans removed, to be used in CBV calculation
-			varis: variances of light curves in "mat"
-			indx_nancol: the indices for the timestamps with nans in all light curves
-			Ntimes: Number of timestamps in light curves contained in mat before removing nans
-
-		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
 		"""
-
 		logger = logging.getLogger(__name__)
 
-		logger.info('Running matrix clean')
-		tmpfile = os.path.join(self.data_folder, 'mat-%s-%d_clean.npz' % (self.datasource, cbv_area))
-		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
-			logger.info("Loading existing file...")
-			data = np.load(tmpfile)
-			mat = data['mat']
-			varis = data['varis']
+		# Calculate the principle components:
+		logger.info("Doing Principle Component Analysis...")
+		pca = PCA(self.ncomponents)
+		U, _, _ = pca._fit(matrix)
 
-			Ntimes = data['Ntimes']
-			indx_nancol = data['indx_nancol']
+		ent = compute_entropy(U)
+		logger.info('Entropy start: %s', ent)
 
-		else:
-			# Compute light curve correlation matrix
-			mat0, varis = self.lc_matrix(cbv_area)
+		targets_removed = 0
+		components = np.arange(self.ncomponents)
 
-			# Print the final shape of the matrix:
-			logger.info("Matrix size: %d x %d" % mat0.shape)
+		with np.errstate(invalid='ignore'):
+			while np.any(ent < self.threshold_entropy):
+				com = components[ent < self.threshold_entropy][0]
 
-			# Find columns where all stars have NaNs and remove them:
-			indx_nancol = allnan(mat0, axis=0)
-			Ntimes = mat0.shape[1]
-			mat = mat0[:, ~indx_nancol]
-			cadenceno = np.arange(mat.shape[1])
+				# Remove highest relative weight target
+				m = nanmedian(U[:, com])
+				s = mad_to_sigma*nanmedian(np.abs(U[:, com] - m))
+				dev = np.abs(U[:, com] - m) / s
 
-			logger.info("Gap-filling lightcurves...")
-			for k in tqdm(range(mat.shape[0]), total=mat.shape[0], disable=not logger.isEnabledFor(logging.INFO)):
+				idx0 = np.argmax(dev)
 
-				mat[k, :] /= varis[k]
-				# Fill out missing values by interpolating the lightcurve:
-				indx = np.isfinite(mat[k, :])
-				mat[k, ~indx] = pchip_interpolate(cadenceno[indx], mat[k, indx], cadenceno[~indx])
+				# Remove the star from the lightcurve matrix:
+				star_no = np.ones(U.shape[0], dtype=bool)
+				star_no[idx0] = False
+				matrix = matrix[star_no, :]
 
-			# Save something for debugging:
-			if logger.isEnabledFor(logging.DEBUG):
-				np.savez(tmpfile, mat=mat, varis=varis, indx_nancol=indx_nancol, Ntimes=Ntimes)
+				targets_removed += 1
+				if targets_removed >= targ_limit:
+					break
 
-		return mat, varis, indx_nancol, Ntimes
+				U, _, _ = pca._fit(matrix)
+				ent = compute_entropy(U)
+
+		logger.info('Entropy end: %s', ent)
+		logger.info('Targets removed: %d', targets_removed)
+		return matrix
 
 	#----------------------------------------------------------------------------------------------
-	def compute_cbvs(self, cbv_area, ent_limit=-1.5, targ_limit=150):
+	def compute_cbvs(self, cbv_area, targ_limit=150):
 		"""
 		Main function for computing CBVs.
 
@@ -334,29 +296,26 @@ class CBVCreator(BaseCorrector):
 		logger.info('Computing CBV for %s area %d' % (self.datasource, cbv_area))
 
 		# Extract or compute cleaned and gapfilled light curve matrix
-		mat0, _, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
+		mat, indx_nancol = self.lc_matrix_clean(cbv_area)
+		Ntimes = mat.shape[1]
 
 		# Calculate initial CBVs
 		logger.info('Computing %d CBVs', self.ncomponents)
-		pca0 = PCA(self.ncomponents)
-		U0, _, _ = pca0._fit(mat0)
+		pca = PCA(self.ncomponents)
+		U0, _, _ = pca._fit(mat)
 
-		cbv0 = np.empty((Ntimes, self.ncomponents), dtype='float64')
-		cbv0.fill(np.nan)
-		cbv0[~indx_nancol, :] = np.transpose(pca0.components_)
-
-		logger.info('Cleaning matrix for CBV - remove single dominant contributions')
+		cbv0 = np.full((Ntimes, self.ncomponents), np.nan, dtype='float64')
+		cbv0[~indx_nancol, :] = np.transpose(pca.components_)
 
 		# Clean away targets that contribute significantly as a single star to a given CBV (based on entropy)
-		mat = clean_cbv(mat0, self.ncomponents, ent_limit, targ_limit)
+		logger.info('Cleaning matrix for CBV - remove single dominant contributions')
+		mat = self.entropy_cleaning(mat, targ_limit=targ_limit)
 
 		# Calculate the principle components of cleaned matrix
 		logger.info("Doing Principle Component Analysis...")
-		pca = PCA(self.ncomponents)
 		U, _, _ = pca._fit(mat)
 
-		cbv = np.empty((Ntimes, self.ncomponents), dtype='float64')
-		cbv.fill(np.nan)
+		cbv = np.full((Ntimes, self.ncomponents), np.nan, dtype='float64')
 		cbv[~indx_nancol, :] = np.transpose(pca.components_)
 
 		# Signal-to-Noise test (here only for plotting)
@@ -496,29 +455,17 @@ class CBVCreator(BaseCorrector):
 		fig.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
 		fig2.subplots_adjust(wspace=0.23, hspace=0.46, left=0.08, right=0.96, top=0.94, bottom=0.055)
 
-		for k, ax in enumerate(axes.flatten()):
-			if k < cbv_new.shape[1]:
-				if not indx_lowsnr is None:
-					if indx_lowsnr[k]:
-						col = 'c'
-					else:
-						col = 'k'
-				else:
-					col = 'k'
-				ax.plot(cbv_new[:, k], ls='-', color=col)
-				ax.set_title('Basis Vector %d' % (k+1))
+		for k in range(cbv_new.shape[1]):
+			if indx_lowsnr is not None and indx_lowsnr[k]:
+				col = 'c'
+			else:
+				col = 'k'
 
-		for k, ax in enumerate(axes2.flatten()):
-			if k < cbv_spike.shape[1]:
-				if not indx_lowsnr is None:
-					if indx_lowsnr[k]:
-						col = 'c'
-					else:
-						col = 'k'
-				else:
-					col = 'k'
-				ax.plot(cbv_spike[:, k], ls='-', color=col)
-				ax.set_title('Spike Basis Vector %d' % (k+1))
+			axes[k].plot(cbv_new[:, k], ls='-', color=col)
+			axes[k].set_title('Basis Vector %d' % (k+1))
+
+			axes2[k].plot(cbv_spike[:, k], ls='-', color=col)
+			axes2[k].set_title('Spike Basis Vector %d' % (k+1))
 
 		fig.savefig(os.path.join(self.data_folder, 'cbvs-%s-area%d.png' % (self.datasource, cbv_area)))
 		fig2.savefig(os.path.join(self.data_folder, 'spike-cbvs-%s-area%d.png' % (self.datasource, cbv_area)))
@@ -571,22 +518,12 @@ class CBVCreator(BaseCorrector):
 		# Load the cbv from file:
 		cbv = CBV(self.data_folder, cbv_area, self.datasource)
 
-		# Signal-to-Noise test (without actually removing any CBVs):
-		#indx_lowsnr = cbv_snr_test(cbv.cbv, self.threshold_snrtest)
-		#cbv.remove_cols(indx_lowsnr)
-
 		# Update maximum number of components
-		n_components0 = cbv.cbv.shape[1]
-		logger.info('New max number of components: %d', n_components0)
+		Ncbvs = cbv.cbv.shape[1]
+		logger.info('Fitting using number of components: %d', Ncbvs)
 
-		if self.Numcbvs == 'all':
-			n_components = n_components0
-		else:
-			n_components = np.min([self.Numcbvs, n_components0])
-
-		logger.info('Fitting using number of components: %d', n_components)
 		# initialize results array, including TIC, CBV components, and an residual offset
-		Nres = int(2*n_components+2)
+		Nres = 2*Ncbvs+2
 		results = np.zeros([len(stars), Nres])
 
 		# Loop through stars
@@ -596,7 +533,7 @@ class CBVCreator(BaseCorrector):
 
 			logger.debug("Correcting star %d", lc.targetid)
 
-			flux_filter, res, _ = cbv.fit(lc, cbvs=n_components, use_bic=False, use_prior=False)
+			flux_filter, res, _ = cbv.fit(lc, cbvs=Ncbvs, use_bic=False, use_prior=False)
 
 			# TODO: compute diagnostics requiring the light curve
 			# SAVE TO DIAGNOSTICS FILE::
@@ -636,9 +573,9 @@ class CBVCreator(BaseCorrector):
 		ax2 = fig.add_subplot(222)
 		ax3 = fig.add_subplot(223)
 		ax4 = fig.add_subplot(224)
-		for kk in range(1, int(2*n_components+1)):
+		for kk in range(1, int(2*Ncbvs+1)):
 
-			if kk > n_components:
+			if kk > Ncbvs:
 				LS = '--'
 			else:
 				LS = '-'
@@ -649,7 +586,7 @@ class CBVCreator(BaseCorrector):
 			kde.fit(gridsize=5000)
 			err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
 
-			if kk > n_components:
+			if kk > Ncbvs:
 				ax3.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk), ls=LS)
 				ax4.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
 			else:

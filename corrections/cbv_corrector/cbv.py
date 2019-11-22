@@ -269,7 +269,7 @@ class CBV(object):
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_pos_2(self, flux, Ncbvs, err=None, pos, wscale, N_neigh, start_guess=None):
+	def fitting_pos_2(self, flux, Ncbvs, err, pos, wscale, N_neigh, start_guess=None):
 
 		# Initial guesses for coefficients:
 		if start_guess is not None:

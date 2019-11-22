@@ -12,10 +12,7 @@ import os
 import logging
 from ..plots import plt
 from .. import BaseCorrector, STATUS
-from ..version import get_version
-from . import CBV
-
-__version__ = get_version(pep440=False)
+from .cbv import CBV
 
 #--------------------------------------------------------------------------------------------------
 class CBVCorrector(BaseCorrector):

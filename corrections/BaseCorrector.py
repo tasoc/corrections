@@ -83,6 +83,7 @@ class BaseCorrector(object):
 			'BaseCorrector': 'base',
 			'EnsembleCorrector': 'ensemble',
 			'CBVCorrector': 'cbv',
+			'CBVCreator': 'cbv',
 			'KASOCFilterCorrector': 'kasoc_filter'
 		}.get(self.__class__.__name__)
 

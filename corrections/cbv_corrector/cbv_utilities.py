@@ -4,12 +4,13 @@
 CBV Utility functions
 
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.model_selection import cross_val_score
-from bottleneck import nansum, move_median, nanmedian
+from bottleneck import nansum, move_median, nanmedian, allnan
 from scipy.stats import pearsonr
 from statsmodels.nonparametric.kde import KDEUnivariate as KDE
 from scipy.interpolate import InterpolatedUnivariateSpline

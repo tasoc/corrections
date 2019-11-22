@@ -21,7 +21,7 @@ def prepare_cbv(cbv_area, input_folder=None, threshold_correlation=None, thresho
 	logger = logging.getLogger(__name__)
 	logger.info('running CBV for area %d', cbv_area)
 
-	with CBVCorrector(input_folder, threshold_correlation=threshold_correlation,
+	with CBVCreator(input_folder, threshold_correlation=threshold_correlation,
 		threshold_snrtest=threshold_snrtest, threshold_entropy=el, ncomponents=ncbv,
 		datasource=datasource) as C:
 
