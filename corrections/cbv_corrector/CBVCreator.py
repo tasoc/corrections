@@ -34,9 +34,7 @@ class CBVCreator(BaseCorrector):
 		threshold_correlation=0.5, threshold_snrtest=5, threshold_variability=1.3,
 		threshold_entropy=-0.5, **kwargs):
 		"""
-		Initialise the corrector
-
-		The CBV init inherets init and functionality of :py:class:`BaseCorrector`
+		Initialise the CBV Creator.
 
 		The CBV init has three import steps run in addition to defining
 		various high-level variables:
@@ -90,7 +88,7 @@ class CBVCreator(BaseCorrector):
 		if logger.isEnabledFor(logging.DEBUG) and os.path.exists(tmpfile):
 			logger.info("Loading existing file...")
 			data = np.load(tmpfile)
-			return data['mat'], data['indx_nancol']
+			return data['mat'], data['indx_nancol'], data['Ntimes']
 
 		logger.info("We are running CBV_AREA=%d" % cbv_area)
 
@@ -196,15 +194,18 @@ class CBVCreator(BaseCorrector):
 			del correlations, c, indx
 
 		# Print the final shape of the matrix:
-		logger.info("Matrix size: %d x %d" % mat.shape)
+		Nstars = mat.shape[0]
+		Ntimes = mat.shape[1]
 
 		# Find columns where all stars have NaNs and remove them:
 		indx_nancol = allnan(mat, axis=0)
 		mat = mat[:, ~indx_nancol]
-		cadenceno = np.arange(Ntimes)
+
+		logger.info("Matrix size: %d x %d" % mat.shape)
 
 		logger.info("Gap-filling lightcurves...")
-		for k in tqdm(range(mat.shape[0]), total=mat.shape[0], disable=not logger.isEnabledFor(logging.INFO)):
+		cadenceno = np.arange(mat.shape[1])
+		for k in tqdm(range(Nstars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
 			# Normalize the lightcurves by their variances:
 			mat[k, :] /= varis[k]
 
@@ -214,9 +215,9 @@ class CBVCreator(BaseCorrector):
 
 		# Save something for debugging:
 		if logger.isEnabledFor(logging.DEBUG):
-			np.savez(tmpfile, mat=mat, varis=varis, indx_nancol=indx_nancol)
+			np.savez(tmpfile, mat=mat, indx_nancol=indx_nancol, Ntimes=Ntimes)
 
-		return mat, indx_nancol
+		return mat, indx_nancol, Ntimes
 
 	#----------------------------------------------------------------------------------------------
 	def entropy_cleaning(self, matrix, targ_limit=150):
@@ -296,8 +297,7 @@ class CBVCreator(BaseCorrector):
 		logger.info('Computing CBV for %s area %d' % (self.datasource, cbv_area))
 
 		# Extract or compute cleaned and gapfilled light curve matrix
-		mat, indx_nancol = self.lc_matrix_clean(cbv_area)
-		Ntimes = mat.shape[1]
+		mat, indx_nancol, Ntimes = self.lc_matrix_clean(cbv_area)
 
 		# Calculate initial CBVs
 		logger.info('Computing %d CBVs', self.ncomponents)
@@ -352,14 +352,12 @@ class CBVCreator(BaseCorrector):
 
 		for k, ax in enumerate(axes.flatten()):
 			if k < cbv0.shape[1]:
-				ax.plot(cbv0[:, k]+0.1, 'r-')
-				#if not indx_lowsnr is None:
-				#	if indx_lowsnr[k]:
-				#		col = 'c'
-				#	else:
-				#		col = 'k'
+				#if indx_lowsnr is not None and indx_lowsnr[k]:
+				#	col = 'c'
 				#else:
 				#	col = 'k'
+
+				ax.plot(cbv0[:, k]+0.1, 'r-')
 				ax.plot(cbv[:, k], ls='-', color='k')
 				ax.set_title('Basis Vector %d' % (k+1))
 

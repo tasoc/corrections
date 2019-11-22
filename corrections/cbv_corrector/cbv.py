@@ -281,6 +281,9 @@ class CBV(object):
 		tree = self.priors
 		dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
 		W = 1/dist[0][1::]**2
+
+		posterior = lambda coeff: self._lhood1d(coeff, flux, Ncbvs) - prior(coeff)
+
 #
 #
 #			# TEST with independent spike fit
@@ -501,7 +504,7 @@ class CBV(object):
 				#W = 1/dist[0][1:]**2
 				#V = self.inires[ind, 1+jj][0][1:]
 				#KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-				prior = self._prior1d
+				#prior = lambda coeff: wscale * KDE.logpdf(coeff)
 
 				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=prior, start_guess=opts)
 

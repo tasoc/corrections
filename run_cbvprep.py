@@ -25,7 +25,7 @@ def prepare_cbv(cbv_area, input_folder=None, threshold_correlation=None, thresho
 		threshold_snrtest=threshold_snrtest, threshold_entropy=el, ncomponents=ncbv,
 		datasource=datasource) as C:
 
-		C.compute_cbvs(cbv_area, ent_limit=el)
+		C.compute_cbvs(cbv_area)
 		C.spike_sep(cbv_area)
 		#C.cotrend_ini(cbv_area, do_ini_plots=ip)
 		#C.compute_distance_map(cbv_area)
