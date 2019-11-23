@@ -15,7 +15,7 @@ from sklearn.neighbors import DistanceMetric, BallTree
 from bottleneck import allnan, nanmedian, replace
 from scipy.interpolate import pchip_interpolate
 from scipy.signal import savgol_filter, find_peaks
-from statsmodels.nonparametric.kde import KDEUnivariate as KDE
+from scipy.stats import gaussian_kde
 from tqdm import tqdm
 from ..plots import plt
 from .. import BaseCorrector
@@ -572,24 +572,24 @@ class CBVCreator(BaseCorrector):
 		ax3 = fig.add_subplot(223)
 		ax4 = fig.add_subplot(224)
 		for kk in range(1, int(2*Ncbvs+1)):
-
-			if kk > Ncbvs:
-				LS = '--'
-			else:
-				LS = '-'
 			idx = np.nonzero(results[:, kk])
 			r = results[idx, kk]
 			idx2 = (r > np.percentile(r, 10)) & (r < np.percentile(r, 90))
-			kde = KDE(r[idx2])
-			kde.fit(gridsize=5000)
+
+			kde = gaussian_kde(r[idx2])
+			kde_support = np.linspace(np.min(r[idx2]), np.max(r[idx2]), 5000)
+			kde_density = kde.pdf(kde_support)
+
 			err = nanmedian(np.abs(r[idx2] - nanmedian(r[idx2]))) * 1e5
 
+			imax = np.argmax(kde_density)
+
 			if kk > Ncbvs:
-				ax3.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk), ls=LS)
-				ax4.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
+				ax3.plot(kde_support*1e5, kde_density/kde_density[imax], label='CBV ' + str(kk), ls='--')
+				ax4.errorbar(kk, kde_support[imax]*1e5, yerr=err, marker='o', color='k')
 			else:
-				ax.plot(kde.support*1e5, kde.density/np.max(kde.density), label='CBV ' + str(kk), ls=LS)
-				ax2.errorbar(kk, kde.support[np.argmax(kde.density)]*1e5, yerr=err, marker='o', color='k')
+				ax.plot(kde_support*1e5, kde_density/kde_density[imax], label='CBV ' + str(kk), ls='-')
+				ax2.errorbar(kk, kde_support[imax]*1e5, yerr=err, marker='o', color='k')
 
 		ax.set_xlabel('CBV weight')
 		ax2.set_ylabel('CBV weight')
