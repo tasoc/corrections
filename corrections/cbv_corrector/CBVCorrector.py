@@ -139,7 +139,7 @@ class CBVCorrector(BaseCorrector):
 			ax2.set_xlabel('Time (BJD)')
 			ax2.set_ylabel('Relative flux (ppm)')
 			plt.tight_layout()
-			filename = 'lc_corr_TIC%d.png' %lc.targetid
+			filename = 'lc_corr_TIC%d.png' % lc.targetid
 			if not os.path.exists(os.path.join(self.plot_folder(lc))):
 				os.makedirs(os.path.join(self.plot_folder(lc)))
 			fig.savefig(os.path.join(self.plot_folder(lc), filename))

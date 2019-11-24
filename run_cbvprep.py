@@ -92,7 +92,7 @@ def main():
 		if args.area:
 			constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
 		if args.datasource:
-			constraints.append("datasource='ffi'" if args.datasource=='ffi' else "datasource!='ffi'")
+			constraints.append("datasource='ffi'" if args.datasource == 'ffi' else "datasource!='ffi'")
 		if not constraints:
 			constraints = None
 
@@ -120,8 +120,7 @@ def main():
 		ncbv=args.ncbv,
 		el=args.el,
 		ip=args.iniplot,
-		datasource=args.datasource
-	)
+		datasource=args.datasource)
 
 	# Run the preparation:
 	if threads > 1:

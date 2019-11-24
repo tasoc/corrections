@@ -222,7 +222,7 @@ class CBV(object):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 		res = np.zeros_like(self.cbv[:, 0], dtype='float64')
-		opts = np.zeros(int(Ncbvs*2)) #entries for both CBV and CBV_S
+		opts = np.zeros(int(Ncbvs*2)) # entries for both CBV and CBV_S
 
 		no_cbv_coeff = self.cbv.shape[1]
 
@@ -400,7 +400,7 @@ class CBV(object):
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
 				filt = self.mdl(res) * median_flux
-				bic = np.append(bic, np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( (flux - filt)**2 )) #not using errors
+				bic = np.append(bic, np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( (flux - filt)**2 )) # not using errors
 				solutions.append(res)
 
 		if use_bic:
@@ -483,7 +483,7 @@ class CBV(object):
 
 			AA = 2
 			GRAW = np.std((pc - polyfit) / MAD_model2(lc.flux - polyfit) - 1)
-			GPR = 0 + (1 - (GRAW/AA)**2)*(GRAW<AA)
+			GPR = 0 + (1 - (GRAW/AA)**2) * (GRAW < AA)
 
 			beta1 = 1
 			beta2 = 1
