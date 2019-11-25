@@ -7,10 +7,11 @@
 import numpy as np
 import os
 import logging
+import h5py
 from astropy.io import fits
 from astropy.time import Time
 import datetime
-from bottleneck import allnan, nansum, nanmedian
+from bottleneck import nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
 from scipy import stats
 import functools
@@ -60,35 +61,30 @@ class CBV(object):
 	def __init__(self, data_folder, cbv_area, datasource):
 		logger = logging.getLogger(__name__)
 
+		self.data_folder = data_folder
 		self.cbv_area = cbv_area
 		self.datasource = datasource
 
-		filepath = os.path.join(data_folder, 'cbv-%s-%d.npy' % (datasource, cbv_area))
-		filepath_s = os.path.join(data_folder, 'cbv-s-%s-%d.npy' % (datasource, cbv_area))
-		filepath_auxinfo = os.path.join(data_folder, 'auxinfo-%s-%d.npz' % (datasource, cbv_area))
-
+		filepath = os.path.join(data_folder, 'cbv-%s-%d.hdf5' % (datasource, cbv_area))
 		if not os.path.exists(filepath):
 			raise FileNotFoundError("Could not find CBV file")
-		if not os.path.exists(filepath_s):
-			raise FileNotFoundError("Could not find CBV spike file")
-		if not os.path.exists(filepath_auxinfo):
-			raise FileNotFoundError("Could not find AUXILIARY INFORMATION file")
 
-		self.cbv = np.load(filepath)
-		self.cbv_s = np.load(filepath_s)
+		with h5py.File(filepath, 'r') as hdf:
+			self.sector = int(hdf.attrs['sector'])
+			self.cadence = int(hdf.attrs['cadence'])
+			self.camera = int(hdf.attrs['camera'])
+			self.ccd = int(hdf.attrs['ccd'])
+			self.threshold_correlation = float(hdf.attrs['threshold_correlation'])
+			self.threshold_variability = float(hdf.attrs['threshold_variability'])
+			self.threshold_snrtest = float(hdf.attrs['threshold_snrtest'])
+			self.threshold_entropy = float(hdf.attrs['threshold_entropy'])
+			self.version = str(hdf.attrs['version'])
 
-		with np.load(filepath_auxinfo) as auxinfo:
-			self.sector = int(auxinfo['sector'])
-			self.cadence = auxinfo['cadence']
-			self.time = auxinfo['time']
-			self.cadenceno = auxinfo['cadenceno']
-			self.camera = int(auxinfo['camera'])
-			self.ccd = int(auxinfo['ccd'])
-			self.threshold_correlation = float(auxinfo['threshold_correlation'])
-			self.threshold_variability = float(auxinfo['threshold_variability'])
-			self.threshold_snrtest = float(auxinfo['threshold_snrtest'])
-			self.threshold_entropy = float(auxinfo['threshold_entropy'])
-			self.version = str(auxinfo['version'])
+			self.time = np.asarray(hdf['time'])
+			self.cadenceno = np.asarray(hdf['cadenceno'])
+
+			self.cbv = np.asarray(hdf['cbv-single-scale'])
+			self.cbv_s = np.asarray(hdf['cbv-spike'])
 
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(self.cbv, self.threshold_snrtest)

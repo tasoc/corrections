@@ -88,6 +88,12 @@ class CBVCorrector(BaseCorrector):
 			if use_prior and cbv.priors is None:
 				raise IOError('Trying to co-trend without a defined prior')
 
+		# Special treatment when not having a CBV created for this cadence:
+		#cbv_interp = interp1d(cbv.time, cbv.cbv, axis=0, kind='cubic', assume_sorted=True)
+		#cbv.cbv = f(lc.time - lc.timecorr)
+		#alpha = 1 - max(1, lc.meta['task']['variability'])**-2
+		#coeff = (1 - alpha)*coeff_interp + alpha*coeff_ffi
+
 		# Update maximum number of components
 		n_components = cbv.cbv.shape[1]
 

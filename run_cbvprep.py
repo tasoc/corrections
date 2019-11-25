@@ -14,22 +14,22 @@ from functools import partial
 import multiprocessing
 from corrections import CBVCreator, BaseCorrector
 
-#------------------------------------------------------------------------------
-def prepare_cbv(cbv_area, input_folder=None, threshold_correlation=None, threshold_snrtest=None,
-		ncbv=None, el=None, ip=False, datasource='ffi'):
+#--------------------------------------------------------------------------------------------------
+def prepare_cbv(cbv_area, datasource='ffi', input_folder=None, ncbv=None, threshold_correlation=None,
+		threshold_snrtest=None, el=None, ip=False):
 
 	logger = logging.getLogger(__name__)
 	logger.info('running CBV for area %d', cbv_area)
 
-	with CBVCreator(input_folder, threshold_correlation=threshold_correlation,
-		threshold_snrtest=threshold_snrtest, threshold_entropy=el, ncomponents=ncbv,
-		datasource=datasource) as C:
+	with CBVCreator(input_folder, datasource=datasource, cbv_area=cbv_area,
+		threshold_correlation=threshold_correlation, threshold_snrtest=threshold_snrtest,
+		threshold_entropy=el, ncomponents=ncbv) as C:
 
-		C.compute_cbvs(cbv_area)
-		C.spike_sep(cbv_area)
-		#C.cotrend_ini(cbv_area, do_ini_plots=ip)
-		#C.compute_distance_map(cbv_area)
-		C.save_cbv_to_fits(cbv_area)
+		C.compute_cbvs()
+		C.spike_sep()
+		#C.cotrend_ini(do_ini_plots=ip)
+		#C.compute_distance_map()
+		C.save_cbv_to_fits()
 
 #--------------------------------------------------------------------------------------------------
 def main():
@@ -44,7 +44,7 @@ def main():
 	group.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
 	group.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
 	group.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
-	group.add_argument('--datasource', type=str, choices=('ffi', 'tpf'), default=None, help='Data source for the creation of CBVs')
+	group.add_argument('--datasource', type=str, choices=('ffi', 'tpf'), default='ffi', help='Data source for the creation of CBVs.')
 
 	group = parser.add_argument_group('Settings')
 	group.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
@@ -130,10 +130,8 @@ def main():
 
 		# There is more than one area to process, so let's start
 		# a process pool and process them in parallel:
-		pool = multiprocessing.Pool(threads)
-		pool.map(prepare_cbv_wrapper, cbv_areas)
-		pool.close()
-		pool.join()
+		with multiprocessing.Pool(threads) as pool:
+			pool.map(prepare_cbv_wrapper, cbv_areas)
 
 	else:
 		# Only a single area to process, so let's not bother with
