@@ -144,6 +144,8 @@ class BaseCorrector(object):
 		"""
 		lcfile = os.path.join(self.input_folder, lc.meta['task']['lightcurve'])
 		plot_folder = os.path.join(os.path.dirname(lcfile), 'plots', '%011d' % lc.targetid)
+		if self.plot:
+			os.makedirs(plot_folder, exist_ok=True)
 		return plot_folder
 
 	#----------------------------------------------------------------------------------------------

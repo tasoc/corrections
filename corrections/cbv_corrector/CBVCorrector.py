@@ -58,12 +58,11 @@ class CBVCorrector(BaseCorrector):
 			`TessLightcurve`: Corrected lightcurve.
 			`STATUS`: Status of the correction.
 
-		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
-
 		logger.info('Co-trending star with TIC ID: %d', lc.targetid)
 
 		# Load the CBV (and Prior) from memory and if it is not already loaded,
@@ -73,9 +72,7 @@ class CBVCorrector(BaseCorrector):
 
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
-		if datasource == 'ffi':
-			datasource = "ffi"
-		else:
+		if datasource != 'ffi':
 			datasource = "tpf"
 
 		cbv_key = (datasource, cbv_area)
@@ -137,17 +134,15 @@ class CBVCorrector(BaseCorrector):
 			ax1.plot(lc.time, flux_filter)
 			if 'pc' in diagnostics:
 				ax1.plot(lc.time, diagnostics['pc'], 'm--')
-			ax1.set_xlabel('Time (BJD)')
+			ax1.set_xlabel('Time (TBJD)')
 			ax1.set_ylabel('Flux (counts)')
 			ax1.set_xticks([])
 			ax2 = fig.add_subplot(212)
 			ax2.plot(lc_corr.time, lc_corr.flux)
-			ax2.set_xlabel('Time (BJD)')
+			ax2.set_xlabel('Time (TBJD)')
 			ax2.set_ylabel('Relative flux (ppm)')
 			plt.tight_layout()
-			filename = 'lc_corr_TIC%d.png' % lc.targetid
-			if not os.path.exists(os.path.join(self.plot_folder(lc))):
-				os.makedirs(os.path.join(self.plot_folder(lc)))
+			filename = 'tess%011d-cbv_corr.png' % lc.targetid
 			fig.savefig(os.path.join(self.plot_folder(lc), filename))
 			plt.close(fig)
 

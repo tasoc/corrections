@@ -92,15 +92,18 @@ class CBVCreator(BaseCorrector):
 		self.threshold_entropy = threshold_entropy
 
 		# Path to the HDF5 file which will contain all the information for a set of CBVs:
-		hdf5_filename = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, cbv_area))
+		filepath = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, cbv_area))
 
 		# If the file already extsts, determine if it was created using the same settings:
-		if os.path.exists(hdf5_filename):
-			with h5py.File(hdf5_filename, 'r') as hdf:
+		if os.path.exists(filepath):
+			with h5py.File(filepath, 'r') as hdf:
 				# If any of these are different, we should start from scratch:
 				start_over = False
-				if hdf.attrs.get('version') != __version__:
-					logger.error("Existing CBV created with another VERSION")
+				#if hdf.attrs.get('version') != __version__:
+				#	logger.error("Existing CBV created with another VERSION")
+				#	start_over = True
+				if hdf.attrs.get('method') != 'normal':
+					logger.error("Existing CBV created with another METHOD")
 					start_over = True
 				if hdf.attrs['Ncbvs'] != self.ncomponents:
 					logger.error("Existing CBV created with different Ncbvs")
@@ -120,14 +123,15 @@ class CBVCreator(BaseCorrector):
 
 			# If we need to start over, we simply delete the existing file:
 			if start_over and overwrite:
-				os.remove(hdf5_filename)
+				os.remove(filepath)
 			elif start_over:
 				raise ValueError()
 
 		# Open the HDF5 file for storing the resulting CBVs:
-		self.hdf = h5py.File(hdf5_filename, 'a', libver='latest')
+		self.hdf = h5py.File(filepath, 'a', libver='latest')
 
 		# Save all settings in the attributes of the root of the HDF5 file:
+		self.hdf.attrs['method'] = 'normal'
 		self.hdf.attrs['cbv_area'] = cbv_area
 		self.hdf.attrs['cadence'] = (1800 if datasource == 'ffi' else 120)
 		self.hdf.attrs['version'] = __version__
@@ -377,7 +381,8 @@ class CBVCreator(BaseCorrector):
 		cbv0 = np.full((Ntimes, self.ncomponents), np.nan, dtype='float64')
 		cbv0[~indx_nancol, :] = np.transpose(pca.components_)
 
-		# Clean away targets that contribute significantly as a single star to a given CBV (based on entropy)
+		# Clean away targets that contribute significantly
+		# as a single star to a given CBV (based on entropy)
 		logger.info('Doing Entropy Cleaning...')
 		mat = self.entropy_cleaning(mat, targ_limit=targ_limit)
 
@@ -472,7 +477,6 @@ class CBVCreator(BaseCorrector):
 		# Initiate arrays for cleaned and spike CBVs
 		cbv_new = np.zeros_like(cbv)
 		cbv_spike = np.zeros_like(cbv)
-		print(cbv.shape)
 
 		# Iterate over basis vectors
 		xs = np.arange(0, cbv.shape[0] + 2*wmir-2)
@@ -570,7 +574,7 @@ class CBVCreator(BaseCorrector):
 		#------------------------------------------------------------------
 
 		logger.info("--------------------------------------------------------------")
-		if os.path.exists(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, self.cbv_area))):
+		if 'inifit' in self.hdf:
 			logger.info("Initial co-trending for light curves in %s CBV area%d already done" % (self.datasource, self.cbv_area))
 			return
 
@@ -629,14 +633,11 @@ class CBVCreator(BaseCorrector):
 				ax2.set_xlabel('Time (BJD)')
 				ax2.set_ylabel('Relative flux (ppm)')
 				filename = 'lc_corr_ini_TIC%d.png' % lc.targetid
-
-				if not os.path.exists(os.path.join(self.plot_folder(lc))):
-					os.makedirs(os.path.join(self.plot_folder(lc)))
 				fig.savefig(os.path.join(self.plot_folder(lc), filename))
 				plt.close(fig)
 
 		# Save weights for priors if it is an initial run
-		np.savez(os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, self.cbv_area)), res=results)
+		self.hdf.create_dataset('inifit', data=results)
 
 		# Plot CBV weights
 		fig = plt.figure(figsize=(15, 15))
@@ -682,11 +683,10 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
 
-		inipath = os.path.join(self.data_folder, 'mat-%s-%d_free_weights.npz' % (self.datasource, self.cbv_area))
-		if not os.path.exists(inipath):
+		if 'inifit' not in self.hdf:
 			raise IOError('Trying to make priors without initial corrections')
 
-		results = np.load(inipath)['res']
+		results = np.asarray(self.hdf['inifit'])
 		n_stars = results.shape[0]
 
 		# Convert datasource into query-string for the database:
