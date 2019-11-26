@@ -246,7 +246,7 @@ class BaseCorrector(object):
 		return result
 
 	#----------------------------------------------------------------------------------------------
-	def search_database(self, select=None, search=None, order_by=None, limit=None, distinct=False):
+	def search_database(self, select=None, join=None, search=None, order_by=None, limit=None, distinct=False):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
@@ -269,6 +269,18 @@ class BaseCorrector(object):
 		elif isinstance(select, (list, tuple)):
 			select = ",".join(select)
 
+		joins = [
+			'INNER JOIN diagnostics ON todolist.priority=diagnostics.priority',
+			'INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority'
+		]
+		if join is None:
+			pass
+		elif isinstance(join, (list, tuple)):
+			joins += list(join)
+		else:
+			joins.append(join)
+		joins = ' '.join(joins)
+
 		if search is None:
 			search = ''
 		elif isinstance(search, (list, tuple)):
@@ -285,9 +297,10 @@ class BaseCorrector(object):
 
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT {distinct:s}{select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {distinct:s}{select:s} FROM todolist {join:s} WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
 			distinct='DISTINCT ' if distinct else '',
 			select=select,
+			join=joins,
 			search=search,
 			order_by=order_by,
 			limit=limit

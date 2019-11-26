@@ -31,6 +31,9 @@ def prepare_cbv(cbv_area, datasource='ffi', input_folder=None, ncbv=None, thresh
 		#C.compute_distance_map()
 		C.save_cbv_to_fits()
 
+		if datasource == 'ffi':
+			C.interpolate_to_higher_cadence()
+
 #--------------------------------------------------------------------------------------------------
 def main():
 	# Parse command line arguments:

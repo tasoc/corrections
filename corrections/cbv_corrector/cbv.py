@@ -253,7 +253,7 @@ class CBV(object):
 			return float(KDE(c))
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh(self, flux, Ncbvs, err=None):
+	def fitting_lh(self, flux, Ncbvs, err=None, start_guess=None):
 		res = self.lsfit(flux, Ncbvs)
 		res[-1] -= 1
 		return res
@@ -489,7 +489,7 @@ class CBV(object):
 			if WS > WS_lim:
 				logger.info('Fitting using LLSQ')
 				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic) # use smaller number of CBVs
-				diagnostics['method'] = 'llsq'
+				diagnostics['method'] = 'LC'
 				diagnostics['use_prior'] = False
 				diagnostics['use_bic'] = False
 
@@ -505,7 +505,7 @@ class CBV(object):
 				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=prior, start_guess=opts)
 
 				diagnostics.update({
-					'method': 'Powell',
+					'method': 'MAP',
 					'residual': residual,
 					'WS': WS,
 					'pc': pc
@@ -519,7 +519,7 @@ class CBV(object):
 			"""
 			logger.info('Fitting using LLSQ')
 			flux_filter, res = self._fit(lc.flux, Numcbvs=cbvs, use_bic=use_bic)
-			diagnostics['method'] = 'llsq'
+			diagnostics['method'] = 'LC'
 
 		return flux_filter, res, diagnostics
 

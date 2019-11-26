@@ -14,7 +14,7 @@ import h5py
 from sklearn.decomposition import PCA
 from sklearn.neighbors import DistanceMetric, BallTree
 from bottleneck import allnan, nanmedian, replace
-from scipy.interpolate import pchip_interpolate
+from scipy.interpolate import pchip_interpolate, interp1d
 from scipy.signal import savgol_filter, find_peaks
 from scipy.stats import gaussian_kde
 from tqdm import tqdm
@@ -31,6 +31,7 @@ __version__ = get_version(pep440=False)
 #--------------------------------------------------------------------------------------------------
 class CBVCreator(BaseCorrector):
 	"""
+	Creation of Cotrending Basis Vectors.
 
 	The CBV init has three import steps run in addition to defining
 	various high-level variables:
@@ -40,6 +41,18 @@ class CBVCreator(BaseCorrector):
 		3: Prior from step 2 are constructed using the :py:func:`CBVCorrector.compute_weight_interpolations` function. This
 		function saves interpolation functions for each of the CBV coefficient priors.
 
+	Attributes:
+		datasource (string):
+		cbv_area (integer):
+		ncomponents (integer):
+		threshold_variability (float):
+		threshold_correlation (float):
+		threshold_snrtest (float):
+		threshold_entropy (float):
+		hdf (`h5py.File`):
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
 	def __init__(self, *args, datasource=None, cbv_area=None, ncomponents=16,
@@ -721,6 +734,58 @@ class CBVCreator(BaseCorrector):
 		tree = BallTree(pos_mag0, metric=dist)
 
 		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' % (self.datasource, self.cbv_area)), tree)
+
+	#----------------------------------------------------------------------------------------------
+	def interpolate_to_higher_cadence(self):
+
+		if self.datasource != 'ffi':
+			raise Exception()
+
+		logger = logging.getLogger(__name__)
+		logger.info("Interpolating to higher cadence")
+
+		newfile = os.path.join(self.data_folder, 'cbv-tpf-%d.hdf5' % self.cbv_area)
+		if os.path.exists(newfile):
+			logger.warning("File already exists: %s", newfile)
+			return
+
+		# Get the list of star that we are going to load in the lightcurves for:
+		stars = self.search_database(
+			select=['lightcurve'],
+			search=["datasource!='ffi'", 'cbv_area=%d' % self.cbv_area],
+			limit=1
+		)
+
+		# Load the very first timeseries only to find the number of timestamps.
+		lc = self.load_lightcurve(stars[0])
+		Ntimes = len(lc.time)
+
+		# Interpolate the FFI CBV into high-cadence timestamps:
+		cbv_interp = interp1d(self.hdf['time'], self.hdf['cbv-single-scale'], axis=0, kind='cubic', assume_sorted=True, fill_value='extrapolate')
+		cbv = cbv_interp(lc.time - lc.timecorr)
+		logger.info("New CBV shape: %s", cbv.shape)
+
+		# Clear Spike-CBVs since we have no reliable way of interpolating them:
+		cbv_spike = np.zeros_like(cbv)
+
+		# Modify the file, overwriting the CBVs and Spike-CBVs with the interpolated ones:
+		with h5py.File(newfile, 'w', libver='latest') as hdf:
+			# Copy all headers:
+			for key, value in self.hdf.attrs.items():
+				hdf.attrs[key] = value
+
+			# Change the headers that are different now:
+			hdf.attrs['cadence'] = 120
+			hdf.attrs['Ntimes'] = Ntimes
+			hdf.attrs['method'] = 'interpolated'
+
+			# Add datasets that are needed for CBVs to load:
+			hdf.create_dataset('time', data=lc.time - lc.timecorr)
+			hdf.create_dataset('cadenceno', data=lc.cadenceno)
+			hdf.create_dataset('cbv-single-scale', data=cbv)
+			hdf.create_dataset('cbv-spike', data=cbv_spike)
+
+		return newfile
 
 	#----------------------------------------------------------------------------------------------
 	def save_cbv_to_fits(self, datarel=5):

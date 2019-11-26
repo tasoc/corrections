@@ -10,6 +10,9 @@ Correct lightcurves using Cotrending Basis Vectors.
 import numpy as np
 import os
 import logging
+from astropy.io import fits
+from bottleneck import nanmedian, nanstd
+#from scipy.stats import norm
 from ..plots import plt
 from .. import BaseCorrector, STATUS
 from .cbv import CBV
@@ -85,19 +88,99 @@ class CBVCorrector(BaseCorrector):
 			if use_prior and cbv.priors is None:
 				raise IOError('Trying to co-trend without a defined prior')
 
-		# Special treatment when not having a CBV created for this cadence:
-		#cbv_interp = interp1d(cbv.time, cbv.cbv, axis=0, kind='cubic', assume_sorted=True)
-		#cbv.cbv = f(lc.time - lc.timecorr)
-		#alpha = 1 - max(1, lc.meta['task']['variability'])**-2
-		#coeff = (1 - alpha)*coeff_interp + alpha*coeff_ffi
-
 		# Update maximum number of components
 		n_components = cbv.cbv.shape[1]
-
 		logger.info('Fitting using number of components: %d', n_components)
 
-		flux_filter, res, diagnostics = cbv.fit(lc, use_bic=True, use_prior=use_prior)
-		#logger.debug('New variability', residual)
+		# Special treatment when not having a CBV created for this cadence:
+		# Use the fit of the FFI as a "prior" and do a weighted fit, where
+		# the FFI coefficients and high-cadence coefficients are combined.
+		# TODO: This is still experimental!
+		if use_prior and datasource == 'tpf':
+			# Find the corrected lightcurve for the same target, observed in FFI:
+			star_ffi = self.search_database(
+				select='diagnostics_corr.lightcurve,corr_status',
+				join='LEFT JOIN diagnostics_corr ON diagnostics_corr.priority=todolist.priority',
+				search=['todolist.starid=%d' % lc.targetid, "datasource='ffi'"], #  "corr_status=1"
+				limit=1)[0]
+			print(star_ffi)
+
+			if star_ffi['corr_status'] is None:
+				raise ValueError("Star has not been processed with FFI data yet")
+
+			#if star_ffi['corr_status'] == STATUS.WARNING:
+			#	status = STATUS.WARNING
+
+ 			#if star_ffi['corr_status'] not in (STATUS.OK, STATUS.WARNING) or star_ffi['lightcurve'] is None:
+			#	logger.warning()
+			#	status = STATUS.WARNING
+			#	alpha = 0
+
+			# Load CBV coefficients fitted to the FFI data:
+			ffi_path = os.path.join(self.input_folder, star_ffi['lightcurve'])
+			with fits.open(ffi_path, mode='readonly', memmap=True) as hdu:
+				Ncbvs_ffi = hdu[1].header.get('CBV_NUM', hdu[1].header['CBV_COMP'])
+				coeff_ffi = np.array([hdu[1].header['CBV_C%d' % (k+1)] for k in range(Ncbvs_ffi)])
+				offset_ffi = hdu[1].header['CBV_C0']
+
+			median_flux = nanmedian(lc.flux)
+
+			flux_filter_ffi = cbv.mdl(np.append(coeff_ffi, offset_ffi)) * median_flux
+
+			# Fit the interpolated CBV to the high cadence data using LS:
+			flux_filter_interp, coeff_interp, diagnostics = cbv.fit(lc, cbvs=Ncbvs_ffi, use_bic=False, use_prior=False)
+
+			# Separate coefficients and
+			offset = coeff_interp[-1]
+			coeff_interp = coeff_interp[:Ncbvs_ffi]
+			logger.debug("OFFSET = %f", offset)
+
+			# Weighting function of FFI vs SC:
+			# For alpha=0, the fit to high-cadence data is weighted up.
+			# For alpha=1, the fit to FFI is weighted high.
+			#alpha = 1 - max(1, lc.meta['task']['variability'])**-2
+			#alpha = min(1, max( 2*lc.meta['task']['rms_hour']/lc.meta['task']['ptp'] - 1, 0))
+
+			flux = lc.flux / lc.meta['task']['mean_flux']
+			indx = np.isfinite(flux)
+			p = np.polyfit(lc.time[indx], flux[indx], 3)
+			fpol = flux - np.polyval(p, lc.time)
+			ptp = nanmedian(np.abs(np.diff(fpol)))
+			variability = nanstd(fpol) / ptp
+			alpha = 1 - 1/max(1, variability)**2
+
+			#alpha = norm.cdf(variability, 2.5, 0.5)
+
+			logger.debug("ALPHA = %f", alpha)
+			res = (1 - alpha)*coeff_interp + alpha*coeff_ffi
+
+			# The constant offset is determined solely from the high cadence fit:
+			res = np.append(res, offset)
+
+			# Final weighted filter-lightcurve:
+			flux_filter = cbv.mdl(res) * median_flux
+
+			# Set that the
+			diagnostics['method'] = 'WLS'
+
+			if self.plot:
+				fig = plt.figure()
+				ax = fig.add_subplot(111)
+				ax.scatter(lc.time, lc.flux, c='k', alpha=0.3, s=2, label='Raw lightcurve')
+				ax.plot(lc.time, flux_filter_ffi, label='FFI fit')
+				ax.plot(lc.time, flux_filter_interp, label='SC fit')
+				ax.plot(lc.time, flux_filter, label='Final fit')
+				ax.set_xlabel('Time (TBJD)')
+				ax.set_ylabel('Flux (%s)' % lc.flux_unit)
+				ax.legend()
+				ax.set_title(r'TIC %d - $\alpha = %.3f$' % (lc.targetid, alpha))
+				filename = 'tess%011d-cbv_corr-tpf.png' % lc.targetid
+				fig.savefig(os.path.join(self.plot_folder(lc), filename))
+				plt.close(fig)
+
+		else:
+			# Run the standard fitting, using BIC, and optionally also using prior:
+			flux_filter, res, diagnostics = cbv.fit(lc, use_bic=True, use_prior=use_prior)
 
 		# Corrected light curve in ppm
 		lc_corr = 1e6*(lc.copy()/flux_filter - 1)
@@ -107,11 +190,11 @@ class CBVCorrector(BaseCorrector):
 		res = np.array([res,]).flatten()
 
 		lc_corr.meta['additional_headers']['CBV_AREA'] = (cbv_area, 'CBV area of star')
-		#lc_corr.meta['additional_headers']['CBV_MET'] = (diagnostics['method'], 'Method used to fit CBVs')
+		lc_corr.meta['additional_headers']['CBV_MET'] = (diagnostics['method'], 'Method used to fit CBVs')
 		lc_corr.meta['additional_headers']['CBV_BIC'] = (diagnostics['use_bic'], 'Was BIC used to select no of CBVs')
 		lc_corr.meta['additional_headers']['CBV_PRI'] = (diagnostics['use_prior'], 'Was prior used')
-		lc_corr.meta['additional_headers']['CBV_COMP'] = (no_cbvs_fitted, 'Number of fitted CBVs')
 		lc_corr.meta['additional_headers']['CBV_MAX'] = (n_components, 'Number of possible CBVs to fit')
+		lc_corr.meta['additional_headers']['CBV_NUM'] = (no_cbvs_fitted, 'Number of fitted CBVs')
 		lc_corr.meta['additional_headers']['CBV_C0'] = (res[-1], 'Fitted offset')
 
 		for ii in range(no_cbvs_fitted):

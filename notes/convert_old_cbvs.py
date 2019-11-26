@@ -15,6 +15,7 @@ import itertools
 if __name__ == '__main__':
 
 	folder = r'E:\TASOC_DR05\S01\cbv-prepare\old'
+	output_folder = r'E:\TASOC_DR05\S01\cbv-prepare'
 
 	with fits.open(r'E:\TASOC_DR05\S01\ffi\00008\tess00008195168-s01-c1800-dr01-v04-tasoc-cbv_lc.fits.gz', mode='readonly', memmap=True) as hdu:
 		time = hdu[1].data['TIME'] - hdu[1].data['TIMECORR']
@@ -25,7 +26,7 @@ if __name__ == '__main__':
 		cbv_area = camera*100+ccd*10+area
 		print(cbv_area)
 
-		hdf5file = os.path.join(folder, 'cbv-ffi-%d.hdf5' % cbv_area)
+		hdf5file = os.path.join(output_folder, 'cbv-ffi-%d.hdf5' % cbv_area)
 
 		# Load old files:
 		cbv_ini = np.load(os.path.join(folder, 'cbv_ini-ffi-%d.npy' % cbv_area))
