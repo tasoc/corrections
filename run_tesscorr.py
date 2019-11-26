@@ -4,14 +4,11 @@
 Command-line utility to run TESS detrend correction from command-line.
 
 Note:
-    This file is intended as an addition to the code
-    `tess_detrend` by Derek Buzasi <dbuzasi@fgcu.edu>
+	This tool allows for small tests of single target inputs from
+	a variety of formats, including FITS and text files,
+	and provides an option for debugging and maintenance
 
-    It allows for small tests of single target inputs from
-    a variety of formats, including FITS and text files,
-    and provides an option for debugging and maintenance
 Structure inspired by `tessphot` by Rasmus Handberg <rasmush@phys.au.dk>
-
 """
 
 import os
@@ -19,9 +16,8 @@ import argparse
 import logging
 import corrections
 
-#------------------------------------------------------------------------------
-if __name__ == '__main__':
-
+#--------------------------------------------------------------------------------------------------
+def main():
 	# Parse command line arguments:
 	parser = argparse.ArgumentParser(description='Run TESS Corrector pipeline on single star.')
 	parser.add_argument('-m', '--method', help='Corrector method to use.', default=None, choices=('ensemble', 'cbv', 'kasoc_filter'))
@@ -106,3 +102,7 @@ if __name__ == '__main__':
 
 				if not args.all:
 					break
+
+#--------------------------------------------------------------------------------------------------
+if __name__ == '__main__':
+	main()
