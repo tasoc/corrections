@@ -9,3 +9,4 @@ psycopg2-binary
 scikit-learn
 statsmodels == 0.10.1
 patsy
+h5py
