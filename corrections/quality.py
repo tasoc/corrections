@@ -24,8 +24,8 @@ class QualityFlagsBase(object):
 
 		Returns:
 			list of str: List of human-readable strings giving a short
-			             description of the quality flags raised.
-						 Returns an empty list if no flags raised.
+				description of the quality flags raised.
+				Returns an empty list if no flags raised.
 		"""
 		result = []
 		for flag in cls.STRINGS.keys():
@@ -82,7 +82,7 @@ class CorrectorQualityFlags(QualityFlagsBase):
 
 	# Default bitmask
 	DEFAULT_BITMASK = (FlaggedBadData | ManualExclude)
-	
+
 	# Preferred bitmask for CBV corrections
 	CBV_BITMASK = (ManualExclude)
 
@@ -117,9 +117,9 @@ class TESSQualityFlags(QualityFlagsBase):
 	EarthMoonPlanetInFOV = 2048
 
 	# Which is the recommended QUALITY mask to identify bad data?
-	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint |
-					   Desat | ApertureCosmic | ManualExclude)
-	
+	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint | Desat
+						| ApertureCosmic | ManualExclude)
+
 	# Preferred bitmask for CBV corrections
 	CBV_BITMASK = (SafeMode | EarthPoint | Desat | ManualExclude)
 

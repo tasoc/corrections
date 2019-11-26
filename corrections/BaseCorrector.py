@@ -9,7 +9,6 @@ All other specific correction classes will inherit from BaseCorrector.
 .. codeauthor:: Filipe Pereira
 """
 
-import six
 import os.path
 import shutil
 import enum
@@ -292,7 +291,7 @@ class BaseCorrector(object):
 			order_by = ''
 		elif isinstance(order_by, (list, tuple)):
 			order_by = " ORDER BY " + ",".join(order_by)
-		elif isinstance(order_by, six.string_types):
+		elif isinstance(order_by, str):
 			order_by = " ORDER BY " + order_by
 
 		limit = '' if limit is None else " LIMIT %d" % limit

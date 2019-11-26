@@ -101,7 +101,7 @@ class CBVCorrector(BaseCorrector):
 			star_ffi = self.search_database(
 				select='diagnostics_corr.lightcurve,corr_status',
 				join='LEFT JOIN diagnostics_corr ON diagnostics_corr.priority=todolist.priority',
-				search=['todolist.starid=%d' % lc.targetid, "datasource='ffi'"], #  "corr_status=1"
+				search=['todolist.starid=%d' % lc.targetid, "datasource='ffi'"],
 				limit=1)[0]
 			print(star_ffi)
 
@@ -111,7 +111,7 @@ class CBVCorrector(BaseCorrector):
 			#if star_ffi['corr_status'] == STATUS.WARNING:
 			#	status = STATUS.WARNING
 
- 			#if star_ffi['corr_status'] not in (STATUS.OK, STATUS.WARNING) or star_ffi['lightcurve'] is None:
+			#if star_ffi['corr_status'] not in (STATUS.OK, STATUS.WARNING) or star_ffi['lightcurve'] is None:
 			#	logger.warning()
 			#	status = STATUS.WARNING
 			#	alpha = 0

@@ -37,7 +37,7 @@ def MAD_scatter(X, Y, bins=15):
 	bin_width = (bin_edges[1] - bin_edges[0])
 	bin_centers = bin_edges[1:] - bin_width/2
 	idx = np.isfinite(bin_centers) & np.isfinite(bin_means)
-	spl = InterpolatedUnivariateSpline(bin_centers[idx] , bin_means[idx])
+	spl = InterpolatedUnivariateSpline(bin_centers[idx], bin_means[idx])
 
 	M = MAD_model(Y-spl(X))
 	return M
@@ -63,14 +63,14 @@ def pearson(x, y):
 
 #------------------------------------------------------------------------------
 def compute_scores(X, n_components):
-    pca = PCA(svd_solver='full')
+	pca = PCA(svd_solver='full')
 
-    pca_scores = []
-    for n in n_components:
-        pca.n_components = n
-        pca_scores.append(np.mean(cross_val_score(pca, X, cv=5)))
+	pca_scores = []
+	for n in n_components:
+		pca.n_components = n
+		pca_scores.append(np.mean(cross_val_score(pca, X, cv=5)))
 
-    return pca_scores
+	return pca_scores
 
 #------------------------------------------------------------------------------
 def rms(x, **kwargs):
@@ -101,7 +101,7 @@ def compute_entropy(U):
 		HGauss = HGauss0 + np.log(sigma)
 
 		# Calculate vMatrix entropy
-		pdf_pos = (pdf>0)
+		pdf_pos = (pdf > 0)
 		HVMatrix = -np.sum(xlogy(pdf[pdf_pos], pdf[pdf_pos])) * dx
 
 		# Returned entropy is difference between V-Matrix entropy and Gaussian entropy of similar width (sigma)
@@ -130,12 +130,12 @@ def ndim_med_filt(v, x, n, dist='euclidean', mad_frac=2):
 	idx = np.zeros_like(v, dtype=bool)
 	for i in range(v.shape[0]):
 		idx_sort = np.argsort(d[i,:])
-		vv= v[idx_sort][1:n+1] # sort values according to distance from point
+		vv = v[idx_sort][1:n+1] # sort values according to distance from point
 
 		vm = np.median(vv) # median value of n nearest points
 		mad = MAD_model(vv-vm)
 
-		if (v[i]<vm+mad_frac*mad) & (v[i]>vm-mad_frac*mad):
+		if (v[i] < vm+mad_frac*mad) & (v[i] > vm-mad_frac*mad):
 			idx[i] = True
 	return idx
 
@@ -163,10 +163,10 @@ def AlmightyCorrcoefEinsumOptimized(O, P):
 def lightcurve_correlation_matrix(mat):
 	"""
 	Calculate the correlation matrix between all lightcurves in matrix.
-	
+
 	Parameters:
 		mat (numpy.array): (NxM)
-		
+
 	Returns:
 		numpy.array: Correlation matrix (NxN).
 	"""
