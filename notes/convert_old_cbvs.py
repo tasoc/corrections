@@ -11,13 +11,21 @@ import h5py
 import os.path
 from astropy.io import fits
 import itertools
+import glob
 
 if __name__ == '__main__':
 
-	folder = r'E:\TASOC_DR05\S01\cbv-prepare\old'
-	output_folder = r'E:\TASOC_DR05\S01\cbv-prepare'
+	process_folder = r'E:\TASOC_DR05\S04'
 
-	with fits.open(r'E:\TASOC_DR05\S01\ffi\00008\tess00008195168-s01-c1800-dr01-v04-tasoc-cbv_lc.fits.gz', mode='readonly', memmap=True) as hdu:
+	folder = os.path.join(process_folder, 'cbv-prepare', 'old_format')
+	output_folder = os.path.join(process_folder, 'cbv-prepare')
+
+	# Take the very first lightcurve:
+	lc = glob.iglob(os.path.join(process_folder, 'ffi', '*'))
+	lc = glob.iglob(os.path.join(next(lc), 'tess*_lc.fits.gz'))
+	lc = next(lc)
+
+	with fits.open(lc, mode='readonly', memmap=True) as hdu:
 		time = hdu[1].data['TIME'] - hdu[1].data['TIMECORR']
 		cadenceno = hdu[1].data['CADENCENO']
 

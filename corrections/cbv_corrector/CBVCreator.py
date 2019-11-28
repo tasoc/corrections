@@ -140,20 +140,24 @@ class CBVCreator(BaseCorrector):
 			elif start_over:
 				raise ValueError()
 
+		# Store wheter the file already exists:
+		file_is_new = not os.path.exists(filepath)
+
 		# Open the HDF5 file for storing the resulting CBVs:
 		self.hdf = h5py.File(filepath, 'a', libver='latest')
 
 		# Save all settings in the attributes of the root of the HDF5 file:
-		self.hdf.attrs['method'] = 'normal'
-		self.hdf.attrs['cbv_area'] = cbv_area
-		self.hdf.attrs['cadence'] = (1800 if datasource == 'ffi' else 120)
-		self.hdf.attrs['version'] = __version__
-		self.hdf.attrs['Ncbvs'] = self.ncomponents
-		self.hdf.attrs['threshold_variability'] = self.threshold_variability
-		self.hdf.attrs['threshold_correlation'] = self.threshold_correlation
-		self.hdf.attrs['threshold_snrtest'] = self.threshold_snrtest
-		self.hdf.attrs['threshold_entropy'] = self.threshold_entropy
-		self.hdf.flush()
+		if file_is_new:
+			self.hdf.attrs['method'] = 'normal'
+			self.hdf.attrs['cbv_area'] = cbv_area
+			self.hdf.attrs['cadence'] = (1800 if datasource == 'ffi' else 120)
+			self.hdf.attrs['version'] = __version__
+			self.hdf.attrs['Ncbvs'] = self.ncomponents
+			self.hdf.attrs['threshold_variability'] = self.threshold_variability
+			self.hdf.attrs['threshold_correlation'] = self.threshold_correlation
+			self.hdf.attrs['threshold_snrtest'] = self.threshold_snrtest
+			self.hdf.attrs['threshold_entropy'] = self.threshold_entropy
+			self.hdf.flush()
 
 		# Create directory for plots:
 		self.cbv_plot_folder = os.path.join(self.data_folder, 'plots')
