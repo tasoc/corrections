@@ -155,6 +155,10 @@ class CBVCreator(BaseCorrector):
 		self.hdf.attrs['threshold_entropy'] = self.threshold_entropy
 		self.hdf.flush()
 
+		# Create directory for plots:
+		self.cbv_plot_folder = os.path.join(self.data_folder, 'plots')
+		os.makedirs(self.cbv_plot_folder, exist_ok=True)
+
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		if self.hdf:
@@ -210,7 +214,7 @@ class CBVCreator(BaseCorrector):
 		ax.axvline(self.threshold_variability, color='r')
 		ax.set_xscale('log')
 		ax.set_xlabel('Variability')
-		fig.savefig(os.path.join(self.data_folder, 'variability-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, 'variability-%s-area%d.png' % (self.datasource, self.cbv_area)))
 		plt.close(fig)
 
 		# Get the list of star that we are going to load in the lightcurves for:
@@ -429,7 +433,7 @@ class CBVCreator(BaseCorrector):
 		ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
 		ax02.set_xlabel('CBV number')
 		ax02.set_ylabel('Variance explained ratio')
-		fig0.savefig(os.path.join(self.data_folder, 'cbv-perf-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig0.savefig(os.path.join(self.cbv_plot_folder, 'cbv-perf-%s-area%d.png' % (self.datasource, self.cbv_area)))
 		plt.close(fig0)
 
 		# Plot all the CBVs:
@@ -455,8 +459,8 @@ class CBVCreator(BaseCorrector):
 				ax.plot(np.abs(U[:, k]), 'k-')
 				ax.set_title('Basis Vector %d' % (k+1))
 
-		fig.savefig(os.path.join(self.data_folder, 'cbvs_ini-%s-area%d.png' % (self.datasource, self.cbv_area)))
-		fig2.savefig(os.path.join(self.data_folder, 'U_cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, 'cbvs_ini-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig2.savefig(os.path.join(self.cbv_plot_folder, 'U_cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
 		plt.close(fig)
 		plt.close(fig2)
 
@@ -554,8 +558,8 @@ class CBVCreator(BaseCorrector):
 			axes2[k].plot(cbv_spike[:, k], ls='-', color=col)
 			axes2[k].set_title('Spike Basis Vector %d' % (k+1))
 
-		fig.savefig(os.path.join(self.data_folder, 'cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
-		fig2.savefig(os.path.join(self.data_folder, 'spike-cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, 'cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig2.savefig(os.path.join(self.cbv_plot_folder, 'spike-cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
 		plt.close(fig)
 		plt.close(fig2)
 
@@ -682,7 +686,7 @@ class CBVCreator(BaseCorrector):
 		ax2.set_ylabel('CBV weight')
 		ax2.set_xlabel('CBV')
 		ax.legend()
-		fig.savefig(os.path.join(self.data_folder, 'weights-sector-%s-%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, 'weights-sector-%s-%d.png' % (self.datasource, self.cbv_area)))
 		plt.close(fig)
 
 	#----------------------------------------------------------------------------------------------
