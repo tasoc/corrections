@@ -13,19 +13,15 @@ to create new datasets optimized for asteroseismic analysis.
 import logging
 import numpy as np
 from numpy import zeros, empty, argsort, diff, mod, isfinite, array, append, searchsorted, NaN, Inf
-from scipy.stats import norm
-from copy import deepcopy as dc
-from ..plots import plt, matplotlib
+from copy import deepcopy
 import os.path
 from bottleneck import nanmedian, nanstd, median, nanargmax, nansum, allnan, nanmin, nanmax
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
-import scipy.misc
-import scipy
-scipy.factorial = scipy.misc.factorial
-import statsmodels.api as sm
-lowess = sm.nonparametric.lowess
+from scipy.stats import norm
+from statsmodels.nonparametric.smoothers_lowess import lowess
 from .utilities import moving_nanmedian, moving_nanmedian_cyclic, smooth, smooth_cyclic, BIC, theil_sen, gap_fill
+from ..plots import plt, matplotlib
 from ..quality import TESSQualityFlags
 import warnings
 
@@ -245,7 +241,7 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 			correction[0] = level1_const / level2_const
 			if isfinite(correction[0]) and correction[0] > 0:
 				# Correct data:
-				xcen2 = dc(xcen) # take a deep copy, such that corrections doesn't affect xcen
+				xcen2 = deepcopy(xcen) # take a deep copy, such that corrections doesn't affect xcen
 				xcen2[indx:] *= correction[0]
 				# Calculate model:
 				xmdl[:] = level1_const
@@ -258,7 +254,7 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 			correction[1] = level1_linear / level2_linear
 			if isfinite(correction[1]) and correction[1] > 0:
 				# Correct data:
-				xcen2 = dc(xcen) # take a deep copy, such that corrections doesn't affect xcen
+				xcen2 = deepcopy(xcen) # take a deep copy, such that corrections doesn't affect xcen
 				xcen2[indx:] *= correction[1]
 				# Calculate model:
 				xmdl[:indx] = np.polyval(res1, tcen[:indx])
@@ -1111,7 +1107,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		# Smooth the data with short moving median:
 		logger.info("Calculating short moving median...")
 		xshort = moving_nanmedian(tg, xg-filt, timescale_short, dt=dt)
-		xshort_tilde = dc(xshort)
+		xshort_tilde = deepcopy(xshort)
 		xshort = filt + xshort
 
 		# Create timeseries of the long filter, divided by the short filter:
