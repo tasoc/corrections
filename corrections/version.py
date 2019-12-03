@@ -19,18 +19,17 @@ https://github.com/aebrahim/python-git-version
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
-from __future__ import print_function
 from subprocess import check_output, CalledProcessError
-from os import path, name, devnull, environ, listdir
+import os
 
 __all__ = ("get_version",)
 
-CURRENT_DIRECTORY = path.dirname(path.abspath(__file__))
-VERSION_FILE = path.join(CURRENT_DIRECTORY, '..', 'VERSION')
+CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+VERSION_FILE = os.path.join(CURRENT_DIRECTORY, '..', 'VERSION')
 
 # Find the "git" command to run depending on the OS:
 GIT_COMMAND = "git"
-if name == "nt":
+if os.name == "nt":
 	def find_git_on_windows():
 		"""find the path to the git executable on windows"""
 		# first see if git is in the path
@@ -44,50 +43,48 @@ if name == "nt":
 		# There are several locations git.exe may be hiding
 		possible_locations = []
 		# look in program files for msysgit
-		if "PROGRAMFILES(X86)" in environ:
-			possible_locations.append("%s/Git/cmd/git.exe" %
-									  environ["PROGRAMFILES(X86)"])
-		if "PROGRAMFILES" in environ:
-			possible_locations.append("%s/Git/cmd/git.exe" %
-									  environ["PROGRAMFILES"])
+		if "PROGRAMFILES(X86)" in os.environ:
+			possible_locations.append("%s/Git/cmd/git.exe" % os.environ["PROGRAMFILES(X86)"])
+		if "PROGRAMFILES" in os.environ:
+			possible_locations.append("%s/Git/cmd/git.exe" % os.environ["PROGRAMFILES"])
 		# look for the github version of git
-		if "LOCALAPPDATA" in environ:
-			github_dir = "%s/GitHub" % environ["LOCALAPPDATA"]
-			if path.isdir(github_dir):
-				for subdir in listdir(github_dir):
+		if "LOCALAPPDATA" in os.environ:
+			github_dir = "%s/GitHub" % os.environ["LOCALAPPDATA"]
+			if os.path.isdir(github_dir):
+				for subdir in os.listdir(github_dir):
 					if not subdir.startswith("PortableGit"):
 						continue
-					possible_locations.append("%s/%s/bin/git.exe" %
-											  (github_dir, subdir))
+					possible_locations.append("%s/%s/bin/git.exe" % (github_dir, subdir))
 		for possible_location in possible_locations:
-			if path.isfile(possible_location):
+			if os.path.isfile(possible_location):
 				return possible_location
 		# git was not found
 		return "git"
 
 	GIT_COMMAND = find_git_on_windows()
 
-
+#--------------------------------------------------------------------------------------------------
 def call_git_describe(abbrev=7):
 	"""return the string output of git desribe"""
 	try:
-		with open(devnull, "w") as fnull:
-			arguments = [GIT_COMMAND, "describe", "--tags",
-						 "--abbrev=%d" % abbrev]
+		with open(os.devnull, "w") as fnull:
+			arguments = [GIT_COMMAND, "describe", "--tags", "--abbrev=%d" % abbrev]
 			return check_output(arguments, cwd=CURRENT_DIRECTORY,
 								stderr=fnull).decode("ascii").strip()
 	except (OSError, CalledProcessError):
 		return None
 
+#--------------------------------------------------------------------------------------------------
 def call_git_getbranch():
 	try:
-		with open(devnull, "w") as fnull:
+		with open(os.devnull, "w") as fnull:
 			arguments = [GIT_COMMAND, "symbolic-ref", "--short", "HEAD"]
 			return check_output(arguments, cwd=CURRENT_DIRECTORY,
 						stderr=fnull).decode("ascii").strip()
 	except (OSError, CalledProcessError):
 		return None
 
+#--------------------------------------------------------------------------------------------------
 def format_git_describe(git_str, pep440=False):
 	"""format the result of calling 'git describe' as a python version"""
 	if git_str is None:
@@ -103,6 +100,7 @@ def format_git_describe(git_str, pep440=False):
 		else:
 			return git_str.replace("-g", "+git")
 
+#--------------------------------------------------------------------------------------------------
 def read_release_version():
 	"""Read version information from VERSION file"""
 	try:
@@ -114,14 +112,14 @@ def read_release_version():
 	except IOError:
 		return None
 
-
+#--------------------------------------------------------------------------------------------------
 def update_release_version():
 	"""Update VERSION file"""
 	version = get_version(pep440=True)
 	with open(VERSION_FILE, "w") as outfile:
 		outfile.write(version)
 
-
+#--------------------------------------------------------------------------------------------------
 def get_version(pep440=False, include_branch=True):
 	"""
 	Tracks the version number.
@@ -152,11 +150,11 @@ def get_version(pep440=False, include_branch=True):
 
 	if include_branch:
 		git_branch = call_git_getbranch()
-		if not git_branch is None:
+		if git_branch is not None:
 			git_version = git_branch + '-' + git_version
 
 	return git_version
 
-
+#--------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
 	print(get_version())
