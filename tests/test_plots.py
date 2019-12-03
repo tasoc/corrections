@@ -16,7 +16,7 @@ import numpy as np
 import scipy
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from corrections.plots import matplotlib, plt, plot_image, plot_image_fit_residuals
-#import pytest
+import pytest
 
 kwargs = {'baseline_dir': 'baseline_images'}
 
@@ -28,7 +28,7 @@ def test_plot_image():
 	x, y = np.mgrid[0:10, 0:10]
 	pos = np.dstack((x, y))
 	var = scipy.stats.multivariate_normal(mean=mu, cov=[[1,0],[0,1]])
-	gauss = var.pdf(pos)
+	gauss = var.pdf(pos) - 0.05
 
 	fig = plt.figure(figsize=(12,6))
 	ax1 = fig.add_subplot(131)
@@ -38,10 +38,32 @@ def test_plot_image():
 	plot_image(gauss, ax=ax2, scale='sqrt', title='Sqrt')
 	ax2.plot(mu[1], mu[0], 'r+')
 	ax3 = fig.add_subplot(133)
-	plot_image(gauss, ax=ax3, scale='log', title='Log')
+	plot_image(gauss, ax=ax3, scale='log', title='Log', cmap='Reds', make_cbar=True)
 	ax3.plot(mu[1], mu[0], 'r+')
 
 	return fig
+
+#-------------------------------------------------------------------------------------------------
+def test_plot_image_invalid():
+
+	mu = [3.5, 3]
+	x, y = np.mgrid[0:10, 0:10]
+	pos = np.dstack((x, y))
+	var = scipy.stats.multivariate_normal(mean=mu, cov=[[1,0],[0,1]])
+	gauss = var.pdf(pos)
+
+	fig = plt.figure(figsize=(12,6))
+	ax1 = fig.add_subplot(111)
+	
+	# Run with invalid scale:
+	with pytest.raises(ValueError):
+		plot_image(gauss, ax=ax1, scale='invalid-scale')
+	
+	# Run with all-NaN image:
+	gauss[:, :] = np.NaN
+	assert plot_image(gauss, ax=ax1) is None
+	
+	plt.close(fig)
 
 #-------------------------------------------------------------------------------------------------
 #@pytest.mark.mpl_image_compare(**kwargs)
@@ -113,6 +135,7 @@ if __name__ == '__main__':
 	matplotlib.use('TkAgg')
 	plt.close('all')
 	test_plot_image()
+	test_plot_image_invalid()
 	test_plot_image_grid()
 	test_plot_image_grid_offset()
 	test_plot_image_data_change()
