@@ -229,7 +229,7 @@ class EnsembleCorrector(BaseCorrector):
 
 				ens_flux = ens_flux + res.x
 
-				temp_list.append(next_star_index) # , next_star_lc.copy()
+				temp_list.append({'priority': next_star_index, 'starid': next_star_lc.targetid})
 				lc_ensemble.append(ens_flux/nanmedian(ens_flux))
 
 				# Stop the loop if we have reached the desired number of stars:
@@ -272,7 +272,7 @@ class EnsembleCorrector(BaseCorrector):
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
 		self.ensemble_starlist = {
-			'starids': temp_list
+			'starids': [tl['starid'] for tl in temp_list]
 		}
 
 		# Set additional headers for FITS output:
