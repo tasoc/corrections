@@ -6,7 +6,7 @@ lightkurve >= 1.1.1
 matplotlib
 seaborn
 psycopg2-binary
-scikit-learn
-statsmodels == 0.10.1
+scikit-learn == 0.21.3
+statsmodels == 0.10.2
 patsy
 h5py

@@ -170,7 +170,7 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
 			constraints
