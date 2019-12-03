@@ -8,7 +8,6 @@ Plotting utilities.
 
 import logging
 import os
-import warnings
 import numpy as np
 from bottleneck import allnan
 import matplotlib
@@ -18,11 +17,7 @@ import matplotlib.pyplot as plt
 from astropy.visualization import (PercentileInterval, ImageNormalize,
 							SqrtStretch, LogStretch, LinearStretch)
 
-# Disable some warnings that are annoying (see below):
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="astropy.visualization", message="invalid value encountered in log")
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="astropy.visualization", message="invalid value encountered in sqrt")
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="matplotlib.colors", message="invalid value encountered in less")
-
+#--------------------------------------------------------------------------------------------------
 def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 	ylabel='Pixel Row Number', make_cbar=False, clabel='Flux ($e^{-}s^{-1}$)',
 	title=None, percentile=95.0, ax=None, cmap=plt.cm.Blues, offset_axes=None, **kwargs):
@@ -31,15 +26,19 @@ def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 
 	Parameters:
 		image (2d array): Image data.
-		scale (str or astropy.visualization.ImageNormalize object, optional): Normalization used to stretch the colormap. Options: ``'linear'``, ``'sqrt'``, or ``'log'``. Can also be a `astropy.visualization.ImageNormalize` object. Default is ``'log'``.
+		scale (str or astropy.visualization.ImageNormalize object, optional): Normalization used
+			to stretch the colormap. Options: ``'linear'``, ``'sqrt'``, or ``'log'``.
+			Can also be a `astropy.visualization.ImageNormalize` object. Default is ``'log'``.
 		origin (str, optional): The origin of the coordinate system.
 		xlabel (str, optional): Label for the x-axis.
 		ylabel (str, optional): Label for the y-axis.
 		make_cbar (boolean, optional): Create colorbar? Default is ``False``.
 		clabel (str, optional): Label for the color bar.
 		title (str or None, optional): Title for the plot.
-		percentile (float, optional): The fraction of pixels to keep in color-trim. The same fraction of pixels is eliminated from both ends. Default=95.
-		ax (matplotlib.pyplot.axes, optional): Axes in which to plot. Default (None) is to use current active axes.
+		percentile (float, optional): The fraction of pixels to keep in color-trim.
+			The same fraction of pixels is eliminated from both ends. Default=95.
+		ax (matplotlib.pyplot.axes, optional): Axes in which to plot.
+			Default (None) is to use current active axes.
 		cmap (matplotlib colormap, optional): Colormap to use. Default is the ``Blues`` colormap.
 		kwargs (dict, optional): Keyword arguments to be passed to `matplotlib.pyplot.imshow`.
 	"""
@@ -100,7 +99,7 @@ def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 
 	return im
 
-
+#--------------------------------------------------------------------------------------------------
 def plot_image_fit_residuals(fig, image, fit, residuals):
 	"""
 	Make a figure with three subplots showing the image, the fit and the
@@ -165,14 +164,14 @@ def plot_image_fit_residuals(fig, image, fit, residuals):
 
 	return ax_list
 
-
+#--------------------------------------------------------------------------------------------------
 def save_figure(path, fig=None, format='png', **kwargs):
 	"""
 	Write current figure to file. Creates directory to place it in if needed.
 
 	Parameters:
-		path (string): Path where to save figure. If no file extension is provided, the extension of
-			the format is automatically appended.
+		path (string): Path where to save figure. If no file extension is provided, the extension
+			of the format is automatically appended.
 		format (string): Figure file type. Default is ``'png'``.
 		kwargs (dict, optional): Keyword arguments to be passed to `matplotlib.pyplot.savefig`.
 	"""
