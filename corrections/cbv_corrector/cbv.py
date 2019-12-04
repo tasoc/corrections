@@ -489,7 +489,7 @@ class CBV(object):
 			if WS > WS_lim:
 				logger.info('Fitting using LLSQ')
 				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic) # use smaller number of CBVs
-				diagnostics['method'] = 'LC'
+				diagnostics['method'] = 'LS'
 				diagnostics['use_prior'] = False
 				diagnostics['use_bic'] = False
 
@@ -519,7 +519,7 @@ class CBV(object):
 			"""
 			logger.info('Fitting using LLSQ')
 			flux_filter, res = self._fit(lc.flux, Numcbvs=cbvs, use_bic=use_bic)
-			diagnostics['method'] = 'LC'
+			diagnostics['method'] = 'LS'
 
 		return flux_filter, res, diagnostics
 

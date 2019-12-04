@@ -171,6 +171,7 @@ class CBVCreator(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def lc_matrix_clean(self):
 		"""
+		Create matrix filled with lightcurves.
 
 		Only targets with a variability below a user-defined threshold are included
 		in the calculation.
