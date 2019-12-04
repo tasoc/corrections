@@ -61,6 +61,9 @@ class CBV(object):
 	def __init__(self, data_folder, cbv_area, datasource):
 		logger = logging.getLogger(__name__)
 
+		if datasource not in ('ffi', 'tpf'):
+			raise ValueError("Invalid datasource: '%s'" % datasource)
+
 		self.data_folder = data_folder
 		self.cbv_area = cbv_area
 		self.datasource = datasource
@@ -69,6 +72,7 @@ class CBV(object):
 		if not os.path.exists(filepath):
 			raise FileNotFoundError("Could not find CBV file: %s" % filepath)
 
+		self.inifit = None
 		with h5py.File(filepath, 'r') as hdf:
 			self.sector = int(hdf.attrs['sector'])
 			self.cadence = int(hdf.attrs['cadence'])
@@ -88,8 +92,6 @@ class CBV(object):
 
 			if 'inifit' in hdf:
 				self.inifit = np.asarray(hdf['inifit'])
-			else:
-				self.inifit = None
 
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(self.cbv, self.threshold_snrtest)
