@@ -7,9 +7,13 @@ Handling of TESS data quality flags.
 """
 
 import numpy as np
+#from enum import IntFlag
 
 #------------------------------------------------------------------------------
 class QualityFlagsBase(object):
+
+	# Using this bitmask only QUALITY == 0 cadences will remain
+	HARDEST_BITMASK = 2**32-1
 
 	@classmethod
 	def decode(cls, quality):
@@ -126,9 +130,6 @@ class TESSQualityFlags(QualityFlagsBase):
 	# This bitmask includes flags that are known to identify both good and bad cadences.
 	# Use it wisely.
 	HARD_BITMASK = (DEFAULT_BITMASK | SensitivityDropout | CollateralCosmic)
-
-	# Using this bitmask only QUALITY == 0 cadences will remain
-	HARDEST_BITMASK = 2**32-1
 
 	# Pretty string descriptions for each flag
 	STRINGS = {

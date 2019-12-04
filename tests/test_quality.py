@@ -37,11 +37,23 @@ def test_CorrectorQuality():
 	assert rep[3] == '00000000000000000000000001000010'
 	assert rep[0] == '00000000000000000000000000000000'
 
+	rep = CorrectorQualityFlags.binary_repr(2051)
+	print(rep)
+	assert rep == '00000000000000000000100000000011'
+
 	# Test decoding to strings:
 	dc = CorrectorQualityFlags.decode(quality[3])
 	print(dc)
 	assert len(dc) == 2
 	assert 'Manual exclude' in dc
+
+	# A default bitmask should be set:
+	dmask = CorrectorQualityFlags.DEFAULT_BITMASK
+	print(dmask)
+
+	# Test HARDEST_BITMASK:
+	hrep = CorrectorQualityFlags.binary_repr(CorrectorQualityFlags.HARDEST_BITMASK)
+	assert hrep == '11111111111111111111111111111111'
 
 	#for flag in CorrectorQualityFlags:
 	#	print(flag)
@@ -73,11 +85,23 @@ def test_TESSQuality():
 	assert rep[3] == '00000000000000000000000010000100'
 	assert rep[0] == '00000000000000000000000000000000'
 
+	rep = TESSQualityFlags.binary_repr(2051)
+	print(rep)
+	assert rep == '00000000000000000000100000000011'
+
 	# Test decoding to strings:
 	dc = TESSQualityFlags.decode(quality[3])
 	print(dc)
 	assert len(dc) == 2
 	assert 'Manual exclude' in dc
+
+	# A default bitmask should be set:
+	dmask = TESSQualityFlags.DEFAULT_BITMASK
+	print(dmask)
+
+	# Test HARDEST_BITMASK:
+	hrep = TESSQualityFlags.binary_repr(TESSQualityFlags.HARDEST_BITMASK)
+	assert hrep == '11111111111111111111111111111111'
 
 	#for flag in TESSQualityFlags:
 	#	print(flag)
