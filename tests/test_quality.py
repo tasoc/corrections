@@ -26,7 +26,7 @@ def test_CorrectorQuality():
 	# Assign a random flag to one of the qualities and see if it filters:
 	quality[3] = CorrectorQualityFlags.ManualExclude | CorrectorQualityFlags.JumpMultiplicativeLinear
 	indx = CorrectorQualityFlags.filter(quality, CorrectorQualityFlags.ManualExclude)
-	assert indx[3] == False
+	assert not indx[3]
 	assert sum(indx) == len(quality) - 1
 
 	# Test binary representation:
@@ -74,7 +74,7 @@ def test_TESSQuality():
 	# Assign a random flag to one of the qualities and see if it filters:
 	quality[3] = TESSQualityFlags.ManualExclude | TESSQualityFlags.CoarsePoint
 	indx = TESSQualityFlags.filter(quality, TESSQualityFlags.ManualExclude)
-	assert indx[3] == False
+	assert not indx[3]
 	assert sum(indx) == len(quality) - 1
 
 	# Test binary representation:

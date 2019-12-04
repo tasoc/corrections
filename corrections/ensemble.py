@@ -95,7 +95,7 @@ class EnsembleCorrector(BaseCorrector):
 		X = np.array([[lc.meta['task']['pos_row'], lc.meta['task']['pos_column']]])
 
 		# Use the NearestNeighbor object to find the targets closest to the main target:
-		distance_index = nn.kneighbors(X, n_neighbors=n_neighbors+1, return_distance=False)
+		distance_index = nn.kneighbors(X, n_neighbors=min(n_neighbors+1, len(priority)), return_distance=False)
 		nearby_stars = priority[distance_index.flatten()]
 
 		# Remove the main target from the list, if it is included:

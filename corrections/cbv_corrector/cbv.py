@@ -67,7 +67,7 @@ class CBV(object):
 
 		filepath = os.path.join(data_folder, 'cbv-%s-%d.hdf5' % (datasource, cbv_area))
 		if not os.path.exists(filepath):
-			raise FileNotFoundError("Could not find CBV file: %s", filepath)
+			raise FileNotFoundError("Could not find CBV file: %s" % filepath)
 
 		with h5py.File(filepath, 'r') as hdf:
 			self.sector = int(hdf.attrs['sector'])
