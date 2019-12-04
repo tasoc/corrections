@@ -51,7 +51,7 @@ class CBV(object):
 		cbv (numpy.array)
 		cbv_s (numpy.array)
 		priors
-		inires
+		inifit (numpy.array)
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -86,6 +86,11 @@ class CBV(object):
 			self.cbv = np.asarray(hdf['cbv-single-scale'])
 			self.cbv_s = np.asarray(hdf['cbv-spike'])
 
+			if 'inifit' in hdf:
+				self.inifit = np.asarray(hdf['inifit'])
+			else:
+				self.inifit = None
+
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(self.cbv, self.threshold_snrtest)
 		self.remove_cols(indx_lowsnr)
@@ -96,11 +101,6 @@ class CBV(object):
 			self.priors = loadPickle(priorpath)
 		else:
 			logger.info('Path to prior distance file does not exist: %s', priorpath)
-
-		self.inires = None
-		inipath = os.path.join(data_folder, 'mat-%s-%d_free_weights.npz' % (datasource, cbv_area))
-		if os.path.exists(inipath):
-			self.inires = np.load(inipath)['res']
 
 	#----------------------------------------------------------------------------------------------
 	def remove_cols(self, indx_lowsnr):
@@ -228,8 +228,8 @@ class CBV(object):
 
 		for ncbv in range(Ncbvs):
 
-			V = self.inires[ind,1+ncbv][0][1::]
-			VS = self.inires[ind,1+ncbv + no_cbv_coeff][0][1::]
+			V = self.inifit[ind,1+ncbv][0][1::]
+			VS = self.inifit[ind,1+ncbv + no_cbv_coeff][0][1::]
 
 			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 			KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
@@ -308,10 +308,10 @@ class CBV(object):
 #			sys.exit()
 
 		for jj in range(Ncbvs):
-			V = self.inires[ind,1+jj][0][1::]
+			V = self.inifit[ind,1+jj][0][1::]
 			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 
-#				VS = self.inires[ind,1+jj + no_cbv_coeff][0][1::]
+#				VS = self.inifit[ind,1+jj + no_cbv_coeff][0][1::]
 #				KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 #				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
@@ -498,7 +498,7 @@ class CBV(object):
 
 				#dist, ind = self.priors.query(pos, k=N_neigh+1)
 				#W = 1/dist[0][1:]**2
-				#V = self.inires[ind, 1+jj][0][1:]
+				#V = self.inifit[ind, 1+jj][0][1:]
 				#KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 				#prior = lambda coeff: wscale * KDE.logpdf(coeff)
 
