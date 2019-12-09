@@ -7,10 +7,8 @@ The CBV creation has three major steps, which are wrapped in the CBVCreator clas
 
 1. The CBVs for the specific todo list are computed using the :py:func:`CBVCorrector.compute_cbv` function.
 2. CBVs are split into "single-scale" CBVs and "spike" CBVs using the :py:func:`CBVCorrector.spike_sep` function.
-3. An initial fitting are performed for all targets using linear least squares using the :py:func:`CBVCreator.cotrend_ini` function.
-This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
-4. Prior from step 3 are constructed using the :py:func:`CBVCreator.compute_weight_interpolations` function. This
-function saves interpolation functions for each of the CBV coefficient priors.
+3. An initial fitting are performed for all targets using linear least squares using the :py:func:`CBVCreator.cotrend_ini` function. This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
+4. Prior from step 3 are constructed using the :py:func:`CBVCreator.compute_weight_interpolations` function. This function saves interpolation functions for each of the CBV coefficient priors.
 
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -51,7 +49,7 @@ class CBVCreator(BaseCorrector):
 		threshold_snrtest (float):
 		threshold_entropy (float):
 		hdf (`h5py.File`):
-		cbv_plot_folder (string): 
+		cbv_plot_folder (string):
 
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -177,17 +175,17 @@ class CBVCreator(BaseCorrector):
 		Load matrix filled with light curves.
 
 		The steps performed are the following:
-		
+
 		1. Only targets with a variability below a user-defined threshold are included.
 		2. Computes correlation matrix for light curves in a given cbv-area and only includes the self.threshold_correlation most correlated light curves.
 		3. Performs gap-filling of light curves and removes time stamps where all flux values are nan.
 
 		Returns:
-	    	tuple containing
+			tuple containing:
 
 			- `numpy.array`: matrix of light curves to be used in CBV calculation.
 			- `numpy.array`: the indices for the timestamps with nans in all light curves.
-			- integer: Number of timestamps.
+			- `integer`: Number of timestamps.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -324,11 +322,11 @@ class CBVCreator(BaseCorrector):
 	def entropy_cleaning(self, matrix, targ_limit=150):
 		"""
 		Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
-		
+
 		Parameters:
-			matrix: 
+			matrix:
 			targ_limit:
-		
+
 		"""
 		logger = logging.getLogger(__name__)
 
@@ -375,7 +373,7 @@ class CBVCreator(BaseCorrector):
 		Main function for computing CBVs.
 
 		The steps taken in the function are:
-		
+
 			1. run :py:func:`CBVCorrector.lightcurve_matrix` to obtain matrix with gap-filled, nan-removed light curves
 			for the most correlated stars in a given cbv-area
 			2. Compute principal components and remove significant single-star contributers based on entropy
@@ -563,7 +561,6 @@ class CBVCreator(BaseCorrector):
 			else:
 				col = 'k'
 
-			print(axes)
 			axes[k].plot(cbv_new[:, k], ls='-', color=col)
 			axes[k].set_title('Basis Vector %d' % (k+1))
 
@@ -581,19 +578,15 @@ class CBVCreator(BaseCorrector):
 		Function for running the initial co-trending to obtain CBV coefficients for
 		the construction of priors.
 
-		The steps taken in the function are:
-			1: for each cbv-area load calculated CBVs
-			2: co-trend all light curves in area using fit of all CBVs using linear least squares
-			3: save CBV coefficients
+		The function will load the calculated CBVs and co-trend all light curves in area using
+		fit of all CBVs using linear least squares. The CBV coefficients from the fit are saved
+		into the HDF5 CBV file.
 
 		Parameters:
-			*self*: all parameters defined in class init
-
-		Returns:
-			Saves CBV coefficients per cbv-area in ".npz" files
-			adds loaded CBVs to *self*
+			do_ini_plots (boolean): Plot the LS fit for each light curve? Default=False.
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
@@ -634,7 +627,7 @@ class CBVCreator(BaseCorrector):
 		pos = np.full((len(stars), 3), np.NaN, dtype='float64')
 
 		# Loop through stars
-		for kk, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
+		for k, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
 
 			lc = self.load_lightcurve(star)
 
@@ -682,8 +675,8 @@ class CBVCreator(BaseCorrector):
 		ax3 = fig.add_subplot(223)
 		ax4 = fig.add_subplot(224)
 		for kk in range(1, int(2*Ncbvs+1)):
-			idx = np.nonzero(results[:, kk])
-			r = results[idx, kk]
+			idx = np.nonzero(coeffs[:, kk])
+			r = coeffs[idx, kk]
 			idx2 = (r > np.percentile(r, 10)) & (r < np.percentile(r, 90))
 
 			kde = gaussian_kde(r[idx2])
@@ -722,9 +715,7 @@ class CBVCreator(BaseCorrector):
 		if 'inifit' not in self.hdf:
 			raise IOError('Trying to make priors without initial corrections')
 
-		results = np.asarray(self.hdf['inifit'])
 		pos_mag0 = np.asarray(self.hdf['inifit_targets'])
-		n_stars = results.shape[0]
 
 		# Load in positions and tmags, in same order as results are saved from ini_fit
 		pos_mag0[:, 2] = np.clip(pos_mag0[:, 2], 2, 20)
@@ -742,13 +733,23 @@ class CBVCreator(BaseCorrector):
 		dist = DistanceMetric.get_metric('mahalanobis', VI=LL)
 		tree = BallTree(pos_mag0, metric=dist)
 
+		# Save the tree to a pickle file to be easily loaded by the CBV class:
 		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' % (self.datasource, self.cbv_area)), tree)
 
 	#----------------------------------------------------------------------------------------------
 	def interpolate_to_higher_cadence(self):
+		"""
+		Interpolate CBVs generated from FFIs to higher cadence (120 seconds).
+
+		New HDF5 files will be generated, containing the CBVs interpolated using a cubic spline
+		to the higher cadence. All spike-CBVs are set to zero, since there is no good way to
+		interpolate them.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
 
 		if self.datasource != 'ffi':
-			raise Exception()
+			raise Exception("Can not interpolate this CBV, since it is doesn't come from a FFI.")
 
 		logger = logging.getLogger(__name__)
 		logger.info("Interpolating to higher cadence")
