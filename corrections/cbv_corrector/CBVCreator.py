@@ -3,6 +3,15 @@
 """
 Creation of Cotrending Basis Vectors.
 
+The CBV creation has three major steps, which are wrapped in the CBVCreator class:
+
+1. The CBVs for the specific todo list are computed using the :py:func:`CBVCorrector.compute_cbv` function.
+2. CBVs are split into "single-scale" CBVs and "spike" CBVs using the :py:func:`CBVCorrector.spike_sep` function.
+3. An initial fitting are performed for all targets using linear least squares using the :py:func:`CBVCreator.cotrend_ini` function.
+This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
+4. Prior from step 3 are constructed using the :py:func:`CBVCreator.compute_weight_interpolations` function. This
+function saves interpolation functions for each of the CBV coefficient priors.
+
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
@@ -33,14 +42,6 @@ class CBVCreator(BaseCorrector):
 	"""
 	Creation of Cotrending Basis Vectors.
 
-	The CBV init has three import steps run in addition to defining
-	various high-level variables:
-		1: The CBVs for the specific todo list are computed using the :py:func:`CBVCorrector.compute_cbv` function.
-		2: An initial fitting are performed for all targets using linear least squares using the :py:func:`CBVCorrector.cotrend_ini` function.
-		This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
-		3: Prior from step 2 are constructed using the :py:func:`CBVCorrector.compute_weight_interpolations` function. This
-		function saves interpolation functions for each of the CBV coefficient priors.
-
 	Attributes:
 		datasource (string):
 		cbv_area (integer):
@@ -50,6 +51,7 @@ class CBVCreator(BaseCorrector):
 		threshold_snrtest (float):
 		threshold_entropy (float):
 		hdf (`h5py.File`):
+		cbv_plot_folder (string): 
 
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -165,28 +167,27 @@ class CBVCreator(BaseCorrector):
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
+		"""Close the CBV Creator object."""
 		if self.hdf:
 			self.hdf.close()
 
 	#----------------------------------------------------------------------------------------------
-	def lc_matrix_clean(self):
+	def lightcurve_matrix(self):
 		"""
-		Create matrix filled with lightcurves.
+		Load matrix filled with light curves.
 
-		Only targets with a variability below a user-defined threshold are included
-		in the calculation.
-
-		Computes correlation matrix for light curves in a given cbv-area.
-		Returns matrix of the *self.threshold_correlation*% most correlated light curves.
-
-		Performs gap-filling of light curves and removes time stamps where all flux values are nan.
-
-		Parameters:
-			cbv_area: the cbv area to calculate light curve matrix for
+		The steps performed are the following:
+		
+		1. Only targets with a variability below a user-defined threshold are included.
+		2. Computes correlation matrix for light curves in a given cbv-area and only includes the self.threshold_correlation most correlated light curves.
+		3. Performs gap-filling of light curves and removes time stamps where all flux values are nan.
 
 		Returns:
-			mat: matrix of *self.threshold_correlation*% most correlated light curves, to be used in CBV calculation
-			indx_nancol: the indices for the timestamps with nans in all light curves
+	    	tuple containing
+
+			- `numpy.array`: matrix of light curves to be used in CBV calculation.
+			- `numpy.array`: the indices for the timestamps with nans in all light curves.
+			- integer: Number of timestamps.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -199,7 +200,7 @@ class CBVCreator(BaseCorrector):
 			logger.info("Loading existing file...")
 			return self.hdf['matrix'], self.hdf['nancol'], self.hdf.attrs['Ntimes']
 
-		logger.info("We are running CBV_AREA=%d" % self.cbv_area)
+		logger.info("We are running CBV_AREA=%d", self.cbv_area)
 
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
@@ -323,6 +324,11 @@ class CBVCreator(BaseCorrector):
 	def entropy_cleaning(self, matrix, targ_limit=150):
 		"""
 		Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
+		
+		Parameters:
+			matrix: 
+			targ_limit:
+		
 		"""
 		logger = logging.getLogger(__name__)
 
@@ -369,14 +375,15 @@ class CBVCreator(BaseCorrector):
 		Main function for computing CBVs.
 
 		The steps taken in the function are:
-			1: run :py:func:`CBVCorrector.lc_matrix_clean` to obtain matrix with gap-filled, nan-removed light curves
+		
+			1. run :py:func:`CBVCorrector.lightcurve_matrix` to obtain matrix with gap-filled, nan-removed light curves
 			for the most correlated stars in a given cbv-area
-			2: compute principal components and remove significant single-star contributers based on entropy
-			3: reun SNR test on CBVs, and only retain CBVs that pass the test
-			4: save CBVs and make diagnostics plots
+			2. Compute principal components and remove significant single-star contributers based on entropy
+			3. reun SNR test on CBVs, and only retain CBVs that pass the test
+			4. Save CBVs and make diagnostics plots
 
 		Parameters:
-			targ_limit:
+			targ_limit (integer):
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -387,13 +394,13 @@ class CBVCreator(BaseCorrector):
 		logger.info('------------------------------------')
 
 		if 'cbv-ini' in self.hdf:
-			logger.info('CBV for area %d already calculated' % self.cbv_area)
+			logger.info('CBV for area %d already calculated', self.cbv_area)
 			return
 
-		logger.info('Computing CBV for %s area %d' % (self.datasource, self.cbv_area))
+		logger.info('Computing CBV for %s area %d', self.datasource, self.cbv_area)
 
 		# Extract or compute cleaned and gapfilled light curve matrix
-		mat, indx_nancol, Ntimes = self.lc_matrix_clean()
+		mat, indx_nancol, Ntimes = self.lightcurve_matrix()
 
 		# Calculate initial CBVs
 		logger.info('Computing %d CBVs', self.ncomponents)
@@ -610,7 +617,9 @@ class CBVCreator(BaseCorrector):
 			search_cadence = "datasource!='ffi'"
 
 		# Load stars from database
-		stars = self.search_database(search=[search_cadence, 'cbv_area=%d' % self.cbv_area])
+		stars = self.search_database(
+			select=['lightcurve', 'pos_column', 'pos_row', 'tmag'],
+			search=[search_cadence, 'cbv_area=%d' % self.cbv_area])
 
 		# Load the cbv from file:
 		cbv = CBV(self.data_folder, self.cbv_area, self.datasource)
@@ -619,9 +628,10 @@ class CBVCreator(BaseCorrector):
 		Ncbvs = cbv.cbv.shape[1]
 		logger.info('Fitting using number of components: %d', Ncbvs)
 
-		# initialize results array, including TIC, CBV components, and an residual offset
-		Nres = 2*Ncbvs+2
-		results = np.zeros([len(stars), Nres])
+		# initialize results array including CBV coefficients, Spike-CBV coefficients and an residual offset
+		Nres = 2*Ncbvs+1
+		coeffs = np.full((len(stars), Nres), np.NaN, dtype='float64')
+		pos = np.full((len(stars), 3), np.NaN, dtype='float64')
 
 		# Loop through stars
 		for kk, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
@@ -636,9 +646,12 @@ class CBVCreator(BaseCorrector):
 			# SAVE TO DIAGNOSTICS FILE::
 			#wn_ratio = GOC_wn(flux, flux-flux_filter)
 
-			res = np.array([res,]).flatten()
-			results[kk, 0] = lc.targetid
-			results[kk, 1:len(res)+1] = res
+			coeffs[k, :] = np.array([res,]).flatten()
+
+			#targets[k] = lc.targetid
+			pos[k, 0] = star['pos_row']
+			pos[k, 1] = star['pos_column']
+			pos[k, 2] = star['tmag']
 
 			if do_ini_plots:
 				lc_corr = (lc.flux/flux_filter-1)*1e6
@@ -647,19 +660,20 @@ class CBVCreator(BaseCorrector):
 				ax1 = fig.add_subplot(211)
 				ax1.plot(lc.time, lc.flux)
 				ax1.plot(lc.time, flux_filter)
-				ax1.set_xlabel('Time (BJD)')
+				ax1.set_xlabel('Time (TBJD)')
 				ax1.set_ylabel('Flux (counts)')
 				ax1.set_xticks([])
 				ax2 = fig.add_subplot(212)
 				ax2.plot(lc.time, lc_corr)
-				ax2.set_xlabel('Time (BJD)')
+				ax2.set_xlabel('Time (TBJD)')
 				ax2.set_ylabel('Relative flux (ppm)')
 				filename = 'lc_corr_ini_TIC%d.png' % lc.targetid
 				fig.savefig(os.path.join(self.plot_folder(lc), filename))
 				plt.close(fig)
 
 		# Save weights for priors if it is an initial run
-		self.hdf.create_dataset('inifit', data=results)
+		self.hdf.create_dataset('inifit', data=coeffs)
+		self.hdf.create_dataset('inifit_targets', data=pos)
 
 		# Plot CBV weights
 		fig = plt.figure(figsize=(15, 15))
@@ -709,25 +723,11 @@ class CBVCreator(BaseCorrector):
 			raise IOError('Trying to make priors without initial corrections')
 
 		results = np.asarray(self.hdf['inifit'])
+		pos_mag0 = np.asarray(self.hdf['inifit_targets'])
 		n_stars = results.shape[0]
 
-		# Convert datasource into query-string for the database:
-		# This will change once more different cadences (i.e. 20s) is defined
-		if self.datasource == 'ffi':
-			search_cadence = "datasource='ffi'"
-		else:
-			search_cadence = "datasource!='ffi'"
-
 		# Load in positions and tmags, in same order as results are saved from ini_fit
-		pos_mag0 = np.zeros([n_stars, 3])
-		for jj, star in enumerate(results[:, 0]):
-			star_single = self.search_database(
-				select=['pos_row', 'pos_column', 'tmag'],
-				search=[search_cadence, 'cbv_area=%d' % self.cbv_area, 'todolist.starid=%d' % int(star)]
-			)
-			pos_mag0[jj, 0] = star_single[0]['pos_row']
-			pos_mag0[jj, 1] = star_single[0]['pos_column']
-			pos_mag0[jj, 2] = np.clip(star_single[0]['tmag'], 2, 20)
+		pos_mag0[:, 2] = np.clip(pos_mag0[:, 2], 2, 20)
 
 		# Relative importance of dimensions
 		#S = np.array([1, 1, 2])
