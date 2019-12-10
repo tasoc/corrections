@@ -26,7 +26,7 @@ class CBVCorrector(BaseCorrector):
 	The CBVCorrector inherits functionality of :py:class:`BaseCorrector`.
 
 	Attributes:
-		cbvs (dict): Dictionary of CBV objects.
+		cbvs (dict): Dictionary of ``CBV`` objects.
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -42,7 +42,7 @@ class CBVCorrector(BaseCorrector):
 
 		# Call the parent initializing:
 		# This will set several default settings
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super().__init__(*args, **kwargs)
 
 		# Dictionary that will hold CBV objects:
 		self.cbvs = {}
@@ -58,8 +58,9 @@ class CBVCorrector(BaseCorrector):
 			use_prior (boolean, optional): Use prior in fitting of CBVs. Default=False.
 
 		Returns:
-			`TessLightcurve`: Corrected lightcurve.
-			`STATUS`: Status of the correction.
+			tuple:
+				- `TessLightcurve`: Corrected lightcurve.
+				- `STATUS`: Status of the correction.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>

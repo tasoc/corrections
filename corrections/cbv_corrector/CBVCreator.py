@@ -76,7 +76,7 @@ class CBVCreator(BaseCorrector):
 
 		# Call the parent initializing:
 		# This will set several default settings
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super().__init__(*args, **kwargs)
 
 		overwrite = False
 
