@@ -120,8 +120,8 @@ class BaseCorrector(object):
 
 	#----------------------------------------------------------------------------------------------
 	def __del__(self):
-		if self.cursor: self.cursor.close()
-		if self.conn: self.conn.close()
+		if hasattr(self, 'cursor') and self.cursor: self.cursor.close()
+		if hasattr(self, 'conn') and self.conn: self.conn.close()
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
