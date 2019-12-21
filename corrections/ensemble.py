@@ -99,21 +99,24 @@ class EnsembleCorrector(BaseCorrector):
 		return nearby_stars
 
 	#----------------------------------------------------------------------------------------------
-	def add_ensemble_member(self, lc, next_star_lc, next_star_index, temp_list, lc_ensemble):
+	def add_ensemble_member(self, lc, next_star_lc):
 		"""
 		Add a given target to the ensemble list
 
 		Parameters:
-			next_star_lc (`TESSLightCurve` object): Lightcurve object for target
+			lc (`TESSLightCurve` object): Lightcurve for target obtained
+				from :func:`load_lightcurve`.
+			next_star_lc (`TESSLightCurve` object): Lightcurve for star to add to ensemble
 				obtained from :func:`load_lightcurve`.
-			temp_list (list): List of TIC ID's for ensemble members as Strings
-			lc_ensemble (list): List of ensemble members flux as ndarrays
+
+		Returns:
+			ndarray: Lightcurve (flux) to add to ensemble.
 
 		.. codeauthor:: Lindsey Carboneau
 		.. codeauthor:: Derek Buzasi
 		"""
 		# Median subtracted flux of target and ensemble candidate
-		target_flux_median = np.nanmedian(lc.flux)
+		target_flux_median = lc.meta['task']['mean_flux']
 		mtarget_flux = lc.flux - target_flux_median
 		ens_flux = next_star_lc.flux
 		mens_flux = ens_flux - nanmedian(ens_flux)
@@ -148,10 +151,8 @@ class EnsembleCorrector(BaseCorrector):
 
 		ens_flux = ens_flux + res.x
 
-		temp_list.append(next_star_index) # , next_star_lc.copy()
-		lc_ensemble.append(ens_flux/nanmedian(ens_flux))
-		# temp_list and lc_ensemble are lists, and don't need to be returned because append() updates in place
-	
+		return ens_flux/nanmedian(ens_flux)
+
 	#----------------------------------------------------------------------------------------------
 	def apply_ensemble(self, lc, lc_ensemble, lc_corr):
 		"""
@@ -240,6 +241,8 @@ class EnsembleCorrector(BaseCorrector):
 		# Define variables to use in the loop to build the ensemble of stars
 		# List of star indexes to be included in the ensemble
 		temp_list = []
+		lc_ensemble = []
+
 		# Test values store current best correction for testing vs. additional ensemble members
 		# NOTE: this might be done more efficiently with further functionalization of the loop below and updated loop bounds/conditions!
 		test_corr = []
@@ -249,7 +252,6 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Start loop to build ensemble
 		ensemble_start = default_timer()
-		lc_ensemble = []
 
 		# Loop through the neighbors to build the ensemble:
 		for next_star_index in nearby_stars:
@@ -274,7 +276,11 @@ class EnsembleCorrector(BaseCorrector):
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
 			if drange < drange_lim and drange < drange_relfactor*lc.meta['drange'] and frange < frange_lim:
 
-				self.add_ensemble_member(lc, next_star_lc, next_star_index, temp_list, lc_ensemble)
+				# Add the star to the ensemble:
+				lc_add_ensemble = self.add_ensemble_member(lc, next_star_lc)
+				temp_list.append({'priority:': next_star_index, 'starid': next_star_lc.targetid})
+				lc_ensemble.append(lc_add_ensemble)
+
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
 				if len(temp_list) >= min_star_count:
 
@@ -291,8 +297,6 @@ class EnsembleCorrector(BaseCorrector):
 						########
 						# NOTE: I think this can be more efficiently, but I'm scared to 'fix' what is currently working - LC
 						########
-						continue
-
 					else:
 						# see if one more member makes the ensemble 'surpass the test'
 						lc_corr = self.apply_ensemble(lc, lc_ensemble, lc_corr)
@@ -304,15 +308,12 @@ class EnsembleCorrector(BaseCorrector):
 							test_ens = lc_ensemble
 							test_list = temp_list
 							test_fom = fom
-							continue
 						else:
 							# adding the next neighbor did not improve the correction, so we're done
 							lc_corr = test_corr
 							lc_ensemble = test_ens
 							temp_list = test_list
 							break
-
-					#break
 
 		# Ensure that we reached the minimum number of stars in the ensemble:
 		if len(temp_list) < min_star_count:
@@ -328,7 +329,7 @@ class EnsembleCorrector(BaseCorrector):
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
 		self.ensemble_starlist = {
-			'starids': temp_list
+			'starids': [tl['starid'] for tl in temp_list]
 		}
 
 		# Set additional headers for FITS output:
