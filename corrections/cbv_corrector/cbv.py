@@ -236,11 +236,13 @@ class CBV(object):
 			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 			KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
-			def kernel_opt(x): return -1*KDE.logpdf(x)
+			def kernel_opt(x):
+				return -1*KDE.logpdf(x)
 			opt = fmin_powell(kernel_opt, 0, disp=0)
 			opts[ncbv] = opt
 
-			def kernel_opts(x): return -1*KDES.logpdf(x)
+			def kernel_opts(x): 
+				return -1*KDES.logpdf(x)
 			opt_s = fmin_powell(kernel_opts, 0, disp=0)
 			opts[ncbv + Ncbvs] = opt_s
 
