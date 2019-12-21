@@ -131,15 +131,11 @@ class EnsembleCorrector(BaseCorrector):
 		absens = np.absolute(mens_flux)
 
 		# sigma clip the flux used to fit, but don't use that flux again
-		clip_target_flux = np.where(
-			np.where(abstarg < targ2sig, True, False) & np.where(absens < ens2sig, True, False),
-			mtarget_flux, 1)
+		with np.errstate(invalid='ignore'):
+			clip_target_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mtarget_flux, 1)
+			clip_ens_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mens_flux, 1)
 
-		clip_ens_flux = np.where(
-			np.where(abstarg < targ2sig, True, False) & np.where(absens < ens2sig, True, False),
-			mens_flux, 1)
-
-		args = tuple((clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median))
+		args = (clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median)
 
 		def func1(scaleK, *args):
 			#temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
@@ -215,10 +211,8 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
 		# these values need to be removed, or they will affect the ensemble later
-		og_time = lc.time.copy()
-		lc = lc.remove_nans()
 		lc_quality_mask = TESSQualityFlags.filter(lc.quality, TESSQualityFlags.HARDEST_BITMASK)
-		lc = lc[lc_quality_mask]
+		lc.flux[lc_quality_mask] = np.NaN
 		lc_corr = lc.copy()
 
 		# Set up basic statistical parameters for the light curves.
@@ -253,17 +247,18 @@ class EnsembleCorrector(BaseCorrector):
 		# Loop through the neighbors to build the ensemble:
 		for next_star_index in nearby_stars:
 			# Get lightkurve for next star closest to target:
-			next_star_lc = self.load_lightcurve(next_star_index).remove_nans()
+			next_star_lc = self.load_lightcurve(next_star_index)
 
-			next_star_lc_quality_mask = (next_star_lc.quality == 0)
-			next_star_lc = next_star_lc[next_star_lc_quality_mask]
+			# Remove bad points by setting them to NaN:
+			next_star_lc_quality_mask = TESSQualityFlags.filter(next_star_lc.quality, TESSQualityFlags.HARDEST_BITMASK)
+			next_star_lc.flux[next_star_lc_quality_mask] = np.NaN
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
 			frange = np.diff(np.nanpercentile(next_star_lc.flux, [5, 95])) / next_star_lc.meta['task']['mean_flux']
 			drange = nanstd(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
 
 			logger.debug("drange=%f, frange=%f", drange, frange)
-			logger.debug("lc size: %f", len(next_star_lc.flux))
+			logger.debug("lc size: %f", len(next_star_lc))
 
 			# Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
@@ -314,7 +309,7 @@ class EnsembleCorrector(BaseCorrector):
 			return None, STATUS.ERROR
 
 		logger.info("Build ensemble, Time: %f", default_timer()-ensemble_start)
-		logger.debug("len(lc) vs len(ens): %f vs %f", len(lc.flux), len(lc_ensemble[0]))
+		logger.debug("len(lc) vs len(ens): %f vs %f", len(lc), len(lc_ensemble[0]))
 
 		# Convert to parts-per-million:
 		lc_corr = 1e6*(lc_corr/nanmedian(lc_corr.flux) - 1)
@@ -330,21 +325,6 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr.meta['additional_headers']['ENS_DLIM'] = (drange_lim, 'Limit on differenced range metric')
 		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
 		lc_corr.meta['additional_headers']['ENS_RLIM'] = (frange_lim, 'Limit on flux range metric')
-
-		# Replace removed points with NaN's so the info can be saved to the FITS
-		if len(lc_corr.flux) != len(og_time):
-			fix_flux = np.asarray(lc_corr.flux.copy())
-			fix_err = np.asarray(lc_corr.flux_err.copy())
-			indices = np.array(np.where(np.isin(og_time, lc_corr.time, assume_unique=True, invert=True)))[0]
-			indices.tolist()
-
-			for ind in indices:
-				fix_flux = np.insert(fix_flux, ind, np.nan)
-				fix_err = np.insert(fix_err, ind, np.nan)
-
-			lc_corr.flux = fix_flux.tolist()
-			lc_corr.flux_err = fix_err.tolist()
-			lc_corr.time = og_time
 
 		#------------------------------------------------------------------------------------------
 		if self.plot and self.debug:

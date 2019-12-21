@@ -9,7 +9,7 @@ Tests of Ensemble Corrector.
 """
 
 import sys
-import os
+import os.path
 import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
@@ -29,8 +29,8 @@ def test_ensemble_basics():
 		assert ec.plot == True, "Plot parameter passed appropriately"
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(os.environ.get('CI') == 'true' and os.environ.get('TRAVIS') == 'true',
-					reason="This requires a sector of data. Impossible to run with Travis")
+@pytest.mark.skipif(not os.path.exists('input/test_data_available.txt'),
+	reason="This requires a sector of data. Impossible to run with Travis")
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
 	tm = corrections.TaskManager(INPUT_DIR)
@@ -38,27 +38,40 @@ def test_ensemble_returned_values():
 
 	#Initiate the class
 	CorrClass = corrections.corrclass('ensemble')
-	corr = CorrClass(INPUT_DIR, plot=False)
-	inlc = corr.load_lightcurve(task)
-	outlc, status = corr.do_correction(inlc.copy())
+	with CorrClass(INPUT_DIR, plot=False) as corr:
+		inlc = corr.load_lightcurve(task)
+		outlc, status = corr.do_correction(inlc.copy())
+
+	assert outlc is not None, "Ensemble fails"
 
 	# Check input validation
 	#with pytest.raises(ValueError) as err:
 	#	outlc, status = corr.do_correction('hello world')
 	#	assert('The input to `do_correction` is not a TessLightCurve object!' in err.value.args[0])
 
-	#C heck contents
-	assert len(outlc.flux) == len(inlc.flux), "Input flux ix different length to output flux"
+	print( inlc.show_properties() )
+	print( outlc.show_properties() )
+
+	# Check contents
+	assert len(outlc) == len(inlc), "Input flux ix different length to output flux"
 	assert all(inlc.time == outlc.time), "Input time is nonidentical to output time"
 	assert all(outlc.flux != inlc.flux), "Input and output flux are identical."
-	assert len(outlc.flux) == len(outlc.time), "Check time and flux have same length"
+
+	assert len(outlc.flux) == len(outlc.time), "Check TIME and FLUX have same length"
+	assert len(outlc.flux_err) == len(outlc.time), "Check TIME and FLUX_ERR have same length"
+	assert len(outlc.quality) == len(outlc.time), "Check TIME and QUALITY have same length"
+	assert len(outlc.pixel_quality) == len(outlc.time), "Check TIME and QUALITY have same length"
+	assert len(outlc.cadenceno) == len(outlc.time), "Check TIME and CADENCENO have same length"
+	assert len(outlc.centroid_col) == len(outlc.time), "Check TIME and CENTROID_COL have same length"
+	assert len(outlc.centroid_row) == len(outlc.time), "Check TIME and CENTROID_ROW have same length"
+	assert len(outlc.timecorr) == len(outlc.time), "Check TIME and TIMECORR have same length"
 
 	# Check status
 	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(os.environ.get('CI') == 'true' and os.environ.get('TRAVIS') == 'true',
-					reason="This requires a sector of data. Impossible to run with Travis")
+@pytest.mark.skipif(not os.path.exists('input/test_data_available.txt'),
+	reason="This requires a sector of data. Impossible to run with Travis")
 def test_run_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
 	tm = corrections.TaskManager(INPUT_DIR)
@@ -66,15 +79,16 @@ def test_run_metadata():
 
 	#Initiate the class
 	CorrClass = corrections.corrclass('ensemble')
-	corr = CorrClass(INPUT_DIR, plot=False)
-	inlc = corr.load_lightcurve(task)
-	outlc, status = corr.do_correction(inlc.copy())
+	with CorrClass(INPUT_DIR, plot=False) as corr:
+		inlc = corr.load_lightcurve(task)
+		outlc, status = corr.do_correction(inlc.copy())
+
+	assert outlc is not None, "Ensemble fails"
+
+	print( inlc.show_properties() )
+	print( outlc.show_properties() )
 
 	# Check metadata
-	#assert 'fmean' in outlc.meta, "Metadata is incomplete"
-	#assert 'fstd' in outlc.meta, "Metadata is incomplete"
-	#assert 'frange' in outlc.meta, "Metadata is incomplete"
-	#assert 'drange' in outlc.meta, "Metadata is incomplete"
 	assert outlc.meta['task']['starid'] == inlc.meta['task']['starid'], "Metadata is incomplete"
 	assert outlc.meta['task'] == inlc.meta['task'], "Metadata is incomplete"
 
