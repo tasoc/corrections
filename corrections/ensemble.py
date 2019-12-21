@@ -101,10 +101,11 @@ class EnsembleCorrector(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def add_ensemble_member(self, lc, next_star_lc, next_star_index, temp_list, lc_ensemble):
 		"""
-		Add a given target to the ensemble list 
+		Add a given target to the ensemble list
 
 		Parameters:
-			next_star_lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			next_star_lc (`TESSLightCurve` object): Lightcurve object for target
+				obtained from :func:`load_lightcurve`.
 			temp_list (list): List of TIC ID's for ensemble members as Strings
 			lc_ensemble (list): List of ensemble members flux as ndarrays
 
@@ -157,13 +158,14 @@ class EnsembleCorrector(BaseCorrector):
 		Apply the ensemble correction method to the target light curve
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			lc (`TESSLightCurve` object): Lightcurve object for target obtained
+				from :func:`load_lightcurve`.
 			lc_ensemble (list): List of ensemble members flux as ndarrays
-			lc_corr (`TESSLightCurve` object): Lightcurve object which stores the ensemble corrected flux values.
+			lc_corr (`TESSLightCurve` object): Lightcurve object which stores the ensemble
+				corrected flux values.
 
 		Returns:
-			lc_corr (`TESSLightCurve` object): The updated object with corrected flux values;
-				the object must be returned explicitly because passed object values do not update in place
+			lc_corr (`TESSLightCurve` object): The updated object with corrected flux values.
 
 		.. codeauthor:: Lindsey Carboneau
 		.. codeauthor:: Derek Buzasi
@@ -176,8 +178,7 @@ class EnsembleCorrector(BaseCorrector):
 			denom1 = np.median(np.divide(args[0],args[1]+scalef))
 			return num1/denom1
 
-		scale0 = 1.0
-		res = minimize(func2, scale0, args=(lc.flux, lc_medians))
+		res = minimize(func2, 1.0, args=(lc.flux, lc_medians))
 		k_corr = res.x
 
 		# Correct the lightcurve:
@@ -208,7 +209,6 @@ class EnsembleCorrector(BaseCorrector):
 		drange_lim = 1.0 # Limit on differenced range - not in log10!
 		drange_relfactor = 10 # Limit on differenced range, relative to target d.range.
 		frange_lim = 0.4 # Limit on flux range.
-		star_count = 5 # Number of stars wanted for ensemble.
 		min_star_count = 5 # Minimum number of stars to have in the ensemble.
 		max_neighbors = 100 # Maximal number of neighbors to check.
 
@@ -250,7 +250,6 @@ class EnsembleCorrector(BaseCorrector):
 		# Start loop to build ensemble
 		ensemble_start = default_timer()
 		lc_ensemble = []
-		mtarget_flux = lc.flux - target_flux_median
 
 		# Loop through the neighbors to build the ensemble:
 		for next_star_index in nearby_stars:
@@ -277,9 +276,9 @@ class EnsembleCorrector(BaseCorrector):
 
 				self.add_ensemble_member(lc, next_star_lc, next_star_index, temp_list, lc_ensemble)
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
-				if len(temp_list) >= star_count:
+				if len(temp_list) >= min_star_count:
 
-					if fom is np.nan:
+					if np.isnan(fom):
 						# the first time we hit the minimum ensemble size, try to correct the target
 						# storing all these as 'test' - we'll revert to these values if adding the next star doesn't 'surpass the test'
 						# `deepcopy` because otherwise it uses pointers and overwrites the value we need
@@ -359,5 +358,6 @@ class EnsembleCorrector(BaseCorrector):
 			ax = fig.add_subplot(111)
 			ax.plot(lc.time, nanmedian(np.asarray(lc_ensemble), axis=0), label='Medians')
 			save_figure(os.path.join(self.plot_folder(lc), 'ensemble_lc_medians'), fig=fig)
+			plt.close(fig)
 
 		return lc_corr, STATUS.OK
