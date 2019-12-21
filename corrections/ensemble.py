@@ -12,13 +12,14 @@ The ensemble photometry detrending class.
 
 import numpy as np
 import os.path
-from bottleneck import nanmedian, nanstd
+from bottleneck import nanmedian, nanstd, nansum, ss
 from timeit import default_timer
 import logging
 from scipy.optimize import minimize # minimize_scalar
 from sklearn.neighbors import NearestNeighbors
 import copy
 from .plots import plt, save_figure
+from .quality import TESSQualityFlags
 from . import BaseCorrector, STATUS
 
 #--------------------------------------------------------------------------------------------------
@@ -122,8 +123,8 @@ class EnsembleCorrector(BaseCorrector):
 		mens_flux = ens_flux - nanmedian(ens_flux)
 
 		# 2 sigma
-		ens2sig = 2 * np.std(mens_flux)
-		targ2sig = 2 * np.std(mtarget_flux)
+		ens2sig = 2 * nanstd(mens_flux)
+		targ2sig = 2 * nanstd(mtarget_flux)
 
 		# absolute balue
 		abstarg = np.absolute(mtarget_flux)
@@ -141,13 +142,12 @@ class EnsembleCorrector(BaseCorrector):
 		args = tuple((clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median))
 
 		def func1(scaleK, *args):
-			temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
-			temp = (args[1]/np.median(args[1])) - ((args[0]+scaleK)/np.median(args[0]+scaleK))
-			temp = temp - np.median(temp)
-			return np.sum(np.square(temp))
+			#temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
+			temp = (args[1]/nanmedian(args[1])) - ((args[0]+scaleK)/nanmedian(args[0]+scaleK))
+			temp -= nanmedian(temp)
+			return ss(temp)
 
-		scale0 = 100
-		res = minimize(func1, scale0, args=args, method='Powell')
+		res = minimize(func1, 100, args=args, method='Powell')
 
 		ens_flux = ens_flux + res.x
 
@@ -175,8 +175,8 @@ class EnsembleCorrector(BaseCorrector):
 		lc_medians = nanmedian(np.asarray(lc_ensemble), axis=0)
 
 		def func2(scalef, *args):
-			num1 = np.sum(np.abs(np.diff(np.divide(args[0],args[1]+scalef))))
-			denom1 = np.median(np.divide(args[0],args[1]+scalef))
+			num1 = nansum(np.abs(np.diff(args[0] / (args[1] + scalef))))
+			denom1 = nanmedian(args[0] / (args[1] + scalef))
 			return num1/denom1
 
 		res = minimize(func2, 1.0, args=(lc.flux, lc_medians))
@@ -217,7 +217,7 @@ class EnsembleCorrector(BaseCorrector):
 		# these values need to be removed, or they will affect the ensemble later
 		og_time = lc.time.copy()
 		lc = lc.remove_nans()
-		lc_quality_mask = (lc.quality == 0)
+		lc_quality_mask = TESSQualityFlags.filter(lc.quality, TESSQualityFlags.HARDEST_BITMASK)
 		lc = lc[lc_quality_mask]
 		lc_corr = lc.copy()
 
@@ -225,7 +225,7 @@ class EnsembleCorrector(BaseCorrector):
 		# frange is the light curve range from the 5th to the 95th percentile,
 		# drange is the relative standard deviation of the differenced light curve (to whiten the noise)
 		target_flux_median = lc.meta['task']['mean_flux']
-		target_frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)) / target_flux_median
+		target_frange = np.diff(np.nanpercentile(lc.flux, [5, 95])) / target_flux_median
 		target_drange = nanstd(np.diff(lc.flux)) / target_flux_median
 
 		logger.debug("Main target: drange=%f, frange=%f", target_drange, target_frange)
@@ -259,7 +259,7 @@ class EnsembleCorrector(BaseCorrector):
 			next_star_lc = next_star_lc[next_star_lc_quality_mask]
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
-			frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5)) / next_star_lc.meta['task']['mean_flux']
+			frange = np.diff(np.nanpercentile(next_star_lc.flux, [5, 95])) / next_star_lc.meta['task']['mean_flux']
 			drange = nanstd(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
 
 			logger.debug("drange=%f, frange=%f", drange, frange)
