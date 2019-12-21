@@ -13,32 +13,23 @@ The ensemble photometry detrending class.
 import numpy as np
 import os.path
 from bottleneck import nanmedian
-#import scipy.interpolate
-#import scipy.optimize as sciopt
 from timeit import default_timer
 import logging
-from scipy.optimize import minimize
-#from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize # minimize_scalar
 from sklearn.neighbors import NearestNeighbors
 import copy
 from .plots import plt, save_figure
 from . import BaseCorrector, STATUS
 
-
+#--------------------------------------------------------------------------------------------------
 class EnsembleCorrector(BaseCorrector):
-	"""
-	DOCSTRING
-	"""
 
 	#----------------------------------------------------------------------------------------------
 	def __init__(self, *args, **kwargs):
 		"""
-		Initialize the correction object
-		Parameters:
-			*args: Arguments for the BaseCorrector class
-			**kwargs: Keyword Arguments for the BaseCorrector class
+		Initialize the correction object.
 		"""
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super().__init__(*args, **kwargs)
 
 		logger = logging.getLogger(__name__)
 		self.debug = logger.isEnabledFor(logging.DEBUG)
@@ -57,7 +48,8 @@ class EnsembleCorrector(BaseCorrector):
 
 		Returns:
 			list: List of `priority` identifiers of the `n_neighbors` nearest stars.
-				Thest values can be passed directly to :func:`load_lightcurve` to load the lightcurves of the targets.
+				These values can be passed directly to :func:`load_lightcurve` to load the
+				lightcurves of the targets.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
@@ -96,7 +88,7 @@ class EnsembleCorrector(BaseCorrector):
 		X = np.array([[lc.meta['task']['pos_row'], lc.meta['task']['pos_column']]])
 
 		# Use the NearestNeighbor object to find the targets closest to the main target:
-		distance_index = nn.kneighbors(X, n_neighbors=n_neighbors+1, return_distance=False)
+		distance_index = nn.kneighbors(X, n_neighbors=min(n_neighbors+1, len(priority)), return_distance=False)
 		nearby_stars = priority[distance_index.flatten()]
 
 		# Remove the main target from the list, if it is included:
@@ -104,7 +96,6 @@ class EnsembleCorrector(BaseCorrector):
 		nearby_stars = nearby_stars[indx]
 
 		# Return the list of nearby stars:
-		print(nearby_stars)
 		return nearby_stars
 
 	#----------------------------------------------------------------------------------------------
@@ -136,14 +127,11 @@ class EnsembleCorrector(BaseCorrector):
 
 		# sigma clip the flux used to fit, but don't use that flux again
 		clip_target_flux = np.where(
-			np.where(abstarg < targ2sig, True, False)
-			&
-			np.where(absens < ens2sig, True, False),
+			np.where(abstarg < targ2sig, True, False) & np.where(absens < ens2sig, True, False),
 			mtarget_flux, 1)
+
 		clip_ens_flux = np.where(
-			np.where(abstarg < targ2sig, True, False)
-			&
-			np.where(absens < ens2sig, True, False),
+			np.where(abstarg < targ2sig, True, False) & np.where(absens < ens2sig, True, False),
 			mens_flux, 1)
 
 		args = tuple((clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median))
@@ -166,16 +154,16 @@ class EnsembleCorrector(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def apply_ensemble(self, lc, lc_ensemble, lc_corr):
 		"""
-		Apply the ensemble correction method to the target light curve 
+		Apply the ensemble correction method to the target light curve
 
 		Parameters:
 			lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
 			lc_ensemble (list): List of ensemble members flux as ndarrays
-			lc_corr (`TESSLightCurve` object): Lightcurve object which stores in `flux` the ensemble corrected flux values.
+			lc_corr (`TESSLightCurve` object): Lightcurve object which stores the ensemble corrected flux values.
 
-        Returns: 
-            lc_corr (`TESSLightCurve` object): The updated object with corrected flux values;
-                the object must be returned explicitly because passed object values do not update in place
+		Returns:
+			lc_corr (`TESSLightCurve` object): The updated object with corrected flux values;
+				the object must be returned explicitly because passed object values do not update in place
 
 		.. codeauthor:: Lindsey Carboneau
 		.. codeauthor:: Derek Buzasi
@@ -197,8 +185,7 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr /= nanmedian(lc_corr.flux)
 		lc_corr *= nanmedian(lc.flux)
 		return lc_corr
-	
-	
+
 	#----------------------------------------------------------------------------------------------
 	def do_correction(self, lc):
 		"""
@@ -253,8 +240,8 @@ class EnsembleCorrector(BaseCorrector):
 		# Define variables to use in the loop to build the ensemble of stars
 		# List of star indexes to be included in the ensemble
 		temp_list = []
-        # Test values store current best correction for testing vs. additional ensemble members
-        # NOTE: this might be done more efficiently with further functionalization of the loop below and updated loop bounds/conditions!
+		# Test values store current best correction for testing vs. additional ensemble members
+		# NOTE: this might be done more efficiently with further functionalization of the loop below and updated loop bounds/conditions!
 		test_corr = []
 		test_ens = []
 		test_list = []
@@ -291,11 +278,11 @@ class EnsembleCorrector(BaseCorrector):
 				self.add_ensemble_member(lc, next_star_lc, next_star_index, temp_list, lc_ensemble)
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
 				if len(temp_list) >= star_count:
-					
+
 					if fom is np.nan:
 						# the first time we hit the minimum ensemble size, try to correct the target
 						# storing all these as 'test' - we'll revert to these values if adding the next star doesn't 'surpass the test'
-                        # `deepcopy` because otherwise it uses pointers and overwrites the value we need
+						# `deepcopy` because otherwise it uses pointers and overwrites the value we need
 						test_corr = self.apply_ensemble(lc, lc_ensemble, lc_corr)
 						test_ens = copy.deepcopy(lc_ensemble)
 						test_list = copy.deepcopy(temp_list)
@@ -306,12 +293,12 @@ class EnsembleCorrector(BaseCorrector):
 						# NOTE: I think this can be more efficiently, but I'm scared to 'fix' what is currently working - LC
 						########
 						continue
-					
+
 					else:
 						# see if one more member makes the ensemble 'surpass the test'
 						lc_corr = self.apply_ensemble(lc, lc_ensemble, lc_corr)
 						fom = np.sum(np.abs(np.diff(lc_corr.flux)))
-						
+
 						if fom < test_fom:
 							# the correction "got better" (less noisy) so update and try against another additional member
 							test_corr = lc_corr
@@ -320,13 +307,12 @@ class EnsembleCorrector(BaseCorrector):
 							test_fom = fom
 							continue
 						else:
-                            # adding the next neighbor did not improve the correction, so we're done
+							# adding the next neighbor did not improve the correction, so we're done
 							lc_corr = test_corr
 							lc_ensemble = test_ens
 							temp_list = test_list
 							break
 
-					
 					#break
 
 		# Ensure that we reached the minimum number of stars in the ensemble:
@@ -352,26 +338,23 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
 		lc_corr.meta['additional_headers']['ENS_RLIM'] = (frange_lim, 'Limit on flux range metric')
 
-
-        # Replace removed points with NaN's so the info can be saved to the FITS
+		# Replace removed points with NaN's so the info can be saved to the FITS
 		if len(lc_corr.flux) != len(og_time):
 			fix_flux = np.asarray(lc_corr.flux.copy())
 			fix_err = np.asarray(lc_corr.flux_err.copy())
 			indices = np.array(np.where(np.isin(og_time, lc_corr.time, assume_unique=True, invert=True)))[0]
 			indices.tolist()
-			
+
 			for ind in indices:
 				fix_flux = np.insert(fix_flux, ind, np.nan)
 				fix_err = np.insert(fix_err, ind, np.nan)
-			
+
 			lc_corr.flux = fix_flux.tolist()
 			lc_corr.flux_err = fix_err.tolist()
 			lc_corr.time = og_time
-            
 
-		#######################################################################################################
+		#------------------------------------------------------------------------------------------
 		if self.plot and self.debug:
-
 			fig = plt.figure()
 			ax = fig.add_subplot(111)
 			ax.plot(lc.time, nanmedian(np.asarray(lc_ensemble), axis=0), label='Medians')
