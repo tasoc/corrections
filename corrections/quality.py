@@ -9,11 +9,15 @@ Handling of TESS data quality flags.
 import numpy as np
 #from enum import IntFlag
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class QualityFlagsBase(object):
 
 	# Using this bitmask only QUALITY == 0 cadences will remain
 	HARDEST_BITMASK = 2**32-1
+
+	# Ignore the STRINGS keyword as a member of the Enum:
+	# Requires Python 3.7
+	_ignore_ = ['STRINGS']
 
 	@classmethod
 	def decode(cls, quality):
@@ -70,7 +74,7 @@ class QualityFlagsBase(object):
 		else:
 			return np.binary_repr(quality, width=32)
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class CorrectorQualityFlags(QualityFlagsBase):
 	"""
 	This class encodes the meaning of the various TESS QUALITY bitmask flags.
@@ -102,7 +106,7 @@ class CorrectorQualityFlags(QualityFlagsBase):
 		Interpolated: "Point is interpolated"
 	}
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class TESSQualityFlags(QualityFlagsBase):
 	"""
 	This class encodes the meaning of the various TESS PIXEL_QUALITY bitmask flags.
