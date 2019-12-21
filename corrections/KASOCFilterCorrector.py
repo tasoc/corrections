@@ -16,10 +16,11 @@ from .quality import CorrectorQualityFlags
 
 class KASOCFilterCorrector(BaseCorrector):
 
+	#----------------------------------------------------------------------------------------------
 	def __init__(self, *args, **kwargs):
 		# Call the parent initializing:
 		# This will set several default settings
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super().__init__(*args, **kwargs)
 
 		logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class KASOCFilterCorrector(BaseCorrector):
 
 		logger.debug(self.tois_periods)
 
-
+	#----------------------------------------------------------------------------------------------
 	def do_correction(self, lc):
 
 		logger = logging.getLogger(__name__)
@@ -114,11 +115,12 @@ class KASOCFilterCorrector(BaseCorrector):
 		lc.meta['additional_headers']['KF_TCLIP'] = (filter_turnover_clip, 'KASOC filter: turnover clip')
 		lc.meta['additional_headers']['KF_TWDTH'] = (filter_turnover_width, 'KASOC filter: turnover width')
 		lc.meta['additional_headers']['KF_PSMTH'] = (filter_phase_smooth_factor, 'KASOC filter: phase smooth factor')
+
 		# Add information about removed periods to the header:
-		if not periods is None:
+		if periods is not None:
 			lc.meta['additional_headers']['NUM_PER'] = (len(periods), 'number of periods removed')
-			for k,p in enumerate(periods):
-				lc.meta['additional_headers']['PER_%d'%(k+1)] = (p, 'period removed (days)')
+			for k, p in enumerate(periods):
+				lc.meta['additional_headers']['PER_%d' % (k+1)] = (p, 'period removed (days)')
 		else:
 			lc.meta['additional_headers']['NUM_PER'] = (0, 'number of periods removed')
 
