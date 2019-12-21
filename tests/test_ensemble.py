@@ -15,6 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available.txt'))
 starid = 29281992
 camera = 1
 ccd = 4
@@ -29,8 +30,7 @@ def test_ensemble_basics():
 		assert ec.plot == True, "Plot parameter passed appropriately"
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(not os.path.exists('input/test_data_available.txt'),
-	reason="This requires a sector of data. Impossible to run with Travis")
+@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
 	tm = corrections.TaskManager(INPUT_DIR)
@@ -42,7 +42,9 @@ def test_ensemble_returned_values():
 		inlc = corr.load_lightcurve(task)
 		outlc, status = corr.do_correction(inlc.copy())
 
+	# Check status
 	assert outlc is not None, "Ensemble fails"
+	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
 
 	# Check input validation
 	#with pytest.raises(ValueError) as err:
@@ -66,12 +68,8 @@ def test_ensemble_returned_values():
 	assert len(outlc.centroid_row) == len(outlc.time), "Check TIME and CENTROID_ROW have same length"
 	assert len(outlc.timecorr) == len(outlc.time), "Check TIME and TIMECORR have same length"
 
-	# Check status
-	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
-
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(not os.path.exists('input/test_data_available.txt'),
-	reason="This requires a sector of data. Impossible to run with Travis")
+@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
 def test_run_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
 	tm = corrections.TaskManager(INPUT_DIR)
