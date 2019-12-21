@@ -12,7 +12,7 @@ The ensemble photometry detrending class.
 
 import numpy as np
 import os.path
-from bottleneck import nanmedian
+from bottleneck import nanmedian, nanstd
 from timeit import default_timer
 import logging
 from scipy.optimize import minimize # minimize_scalar
@@ -218,20 +218,17 @@ class EnsembleCorrector(BaseCorrector):
 		og_time = lc.time.copy()
 		lc = lc.remove_nans()
 		lc_quality_mask = (lc.quality == 0)
-		lc.time = lc.time[lc_quality_mask]
-		lc.flux = lc.flux[lc_quality_mask]
-		lc.flux_err = lc.flux_err[lc_quality_mask]
+		lc = lc[lc_quality_mask]
 		lc_corr = lc.copy()
 
 		# Set up basic statistical parameters for the light curves.
 		# frange is the light curve range from the 5th to the 95th percentile,
 		# drange is the relative standard deviation of the differenced light curve (to whiten the noise)
 		target_flux_median = lc.meta['task']['mean_flux']
-		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)) / target_flux_median
-		drange = np.std(np.diff(lc.flux)) / target_flux_median
-		lc.meta.update({'frange': frange, 'drange': drange})
+		target_frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)) / target_flux_median
+		target_drange = nanstd(np.diff(lc.flux)) / target_flux_median
 
-		logger.debug("Main target: drange=%f, frange=%f", drange, frange)
+		logger.debug("Main target: drange=%f, frange=%f", target_drange, target_frange)
 		logger.debug("lc size: %f", len(lc.flux))
 
 		# Query for a list of the nearest neigbors to test:
@@ -259,22 +256,18 @@ class EnsembleCorrector(BaseCorrector):
 			next_star_lc = self.load_lightcurve(next_star_index).remove_nans()
 
 			next_star_lc_quality_mask = (next_star_lc.quality == 0)
-			next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
-			next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
-			next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
+			next_star_lc = next_star_lc[next_star_lc_quality_mask]
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
 			frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5)) / next_star_lc.meta['task']['mean_flux']
-			drange = np.std(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
-
-			next_star_lc.meta.update({'frange': frange, 'drange': drange})
+			drange = nanstd(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
 
 			logger.debug("drange=%f, frange=%f", drange, frange)
 			logger.debug("lc size: %f", len(next_star_lc.flux))
 
 			# Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
-			if drange < drange_lim and drange < drange_relfactor*lc.meta['drange'] and frange < frange_lim:
+			if drange < drange_lim and drange < drange_relfactor*target_drange and frange < frange_lim:
 
 				# Add the star to the ensemble:
 				lc_add_ensemble = self.add_ensemble_member(lc, next_star_lc)
