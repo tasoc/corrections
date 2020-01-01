@@ -41,7 +41,7 @@ def download_file(url, destination):
 		if os.path.getsize(destination) != total_size:
 			raise Exception("File not downloaded correctly")
 
-	except:
+	except: # noqa: E722
 		if os.path.exists(destination):
 			os.remove(destination)
 		raise

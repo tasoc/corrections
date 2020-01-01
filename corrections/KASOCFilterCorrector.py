@@ -8,8 +8,7 @@ Lightcurve correction using the KASOC Filter (Handberg et al. 2015).
 
 import numpy as np
 import logging
-import psycopg2 as psql
-import getpass
+import requests
 from . import kasoc_filter as kf
 from . import BaseCorrector, STATUS
 from .quality import CorrectorQualityFlags
@@ -27,22 +26,14 @@ class KASOCFilterCorrector(BaseCorrector):
 		# Store a list of known periods of TESS Objects of Interest (TOIs):
 		self.tois_periods = {}
 
-		# Ask for username and password for the TASOC database:
-		default_username = getpass.getuser()
-		username = input('Username [%s]: ' % default_username)
-		if username == '':
-			username = default_username
-		passwd = getpass.getpass('Password: ')
-
 		# Contact TASOC database for list of TOIs:
-		with psql.connect(host='trinity.phys.au.dk', user=username, password=passwd, database='db_aadc') as conn:
-			with conn.cursor() as cursor:
-				cursor.execute("SELECT starid,period FROM tasoc.toi WHERE NOT period IS NULL;")
-				for row in cursor.fetchall():
-					if row[0] in self.tois_periods:
-						self.tois_periods[row[0]].append(row[1])
-					else:
-						self.tois_periods[row[0]] = [row[1]]
+		r = requests.get('https://tasoc.dk/pipeline/toilist.php')
+		r.raise_for_status()
+		for row in r.json():
+			if row['tic'] in self.tois_periods:
+				self.tois_periods[row['tic']].append(row['period'])
+			else:
+				self.tois_periods[row['tic']] = [row['period']]
 
 		logger.debug(self.tois_periods)
 

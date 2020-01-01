@@ -19,11 +19,11 @@ def capture(command):
 	cmd = shlex.split(command)
 	proc = subprocess.Popen(cmd,
 		cwd=os.path.join(os.path.dirname(__file__), '..'),
-		stdout = subprocess.PIPE,
-		stderr = subprocess.PIPE,
+		stdout=subprocess.PIPE,
+		stderr=subprocess.PIPE,
 		universal_newlines=True
-    )
-	out,err = proc.communicate()
+	)
+	out, err = proc.communicate()
 	exitcode = proc.returncode
 
 	print(out)

@@ -11,16 +11,20 @@ import os
 import numpy as np
 from bottleneck import allnan
 import matplotlib
-matplotlib.use('agg', warn=False)
 from matplotlib.ticker import MaxNLocator
 import matplotlib.pyplot as plt
 from astropy.visualization import (PercentileInterval, ImageNormalize,
-							SqrtStretch, LogStretch, LinearStretch)
+	SqrtStretch, LogStretch, LinearStretch)
+
+# Change to a non-GUI backend since this
+# should be able to run on a cluster:
+plt.switch_backend('Agg')
 
 #--------------------------------------------------------------------------------------------------
 def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 	ylabel='Pixel Row Number', make_cbar=False, clabel='Flux ($e^{-}s^{-1}$)',
-	title=None, percentile=95.0, ax=None, cmap=plt.cm.Blues, offset_axes=None, **kwargs):
+	title=None, percentile=95.0, vmin=None, vmax=None, ax=None, cmap=plt.cm.Blues,
+	offset_axes=None, **kwargs):
 	"""
 	Utility function to plot a 2D image.
 
@@ -51,7 +55,11 @@ def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 		return None
 
 	# Calculate limits of color scaling:
-	vmin, vmax = PercentileInterval(percentile).get_limits(image)
+	# Calcualte limits of color scaling:
+	if vmin is None or vmax is None:
+		vmin1, vmax1 = PercentileInterval(percentile).get_limits(image)
+		if vmin is None: vmin = vmin1
+		if vmax is None: vmax = vmax1
 
 	# Create ImageNormalize object with extracted limits:
 	if scale == 'log':
@@ -84,8 +92,7 @@ def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 	ax.set_ylim([extent[2], extent[3]])
 
 	if make_cbar:
-		# TODO: In cases where image was rescaled, should we change something here?
-		cbar = plt.colorbar(im, norm=norm)
+		cbar = plt.colorbar(im, ax=ax, norm=norm)
 		cbar.set_label(clabel)
 
 	# Settings for ticks (to make Mikkel happy):
