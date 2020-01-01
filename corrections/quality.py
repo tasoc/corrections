@@ -126,7 +126,7 @@ class TESSQualityFlags(QualityFlagsBase):
 
 	# Which is the recommended QUALITY mask to identify bad data?
 	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint | Desat
-						| ApertureCosmic | ManualExclude)
+		| ApertureCosmic | ManualExclude)
 
 	# Preferred bitmask for CBV corrections
 	CBV_BITMASK = (SafeMode | EarthPoint | Desat | ManualExclude)

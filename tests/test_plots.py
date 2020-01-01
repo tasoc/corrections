@@ -10,13 +10,13 @@ Tests of plots
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
+import pytest
 import sys
 import os.path
 import numpy as np
 import scipy
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from corrections.plots import matplotlib, plt, plot_image, plot_image_fit_residuals
-import pytest
+from corrections.plots import plt, plot_image, plot_image_fit_residuals
 
 kwargs = {'baseline_dir': 'baseline_images'}
 
@@ -54,15 +54,15 @@ def test_plot_image_invalid():
 
 	fig = plt.figure(figsize=(12,6))
 	ax1 = fig.add_subplot(111)
-	
+
 	# Run with invalid scale:
 	with pytest.raises(ValueError):
 		plot_image(gauss, ax=ax1, scale='invalid-scale')
-	
+
 	# Run with all-NaN image:
 	gauss[:, :] = np.NaN
 	assert plot_image(gauss, ax=ax1) is None
-	
+
 	plt.close(fig)
 
 #-------------------------------------------------------------------------------------------------
@@ -132,7 +132,8 @@ def test_plot_image_data_change():
 
 #-------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	matplotlib.use('TkAgg')
+	plt.switch_backend('TkAgg')
+	#matplotlib.use('TkAgg')
 	plt.close('all')
 	test_plot_image()
 	test_plot_image_invalid()

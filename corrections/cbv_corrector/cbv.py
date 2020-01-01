@@ -15,8 +15,6 @@ from bottleneck import nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
 from scipy import stats
 import functools
-import warnings
-warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from ..utilities import loadPickle, fix_fits_table_headers
 from ..quality import CorrectorQualityFlags
 from .cbv_utilities import MAD_model, MAD_model2
@@ -241,7 +239,7 @@ class CBV(object):
 			opt = fmin_powell(kernel_opt, 0, disp=0)
 			opts[ncbv] = opt
 
-			def kernel_opts(x): 
+			def kernel_opts(x):
 				return -1*KDES.logpdf(x)
 			opt_s = fmin_powell(kernel_opts, 0, disp=0)
 			opts[ncbv + Ncbvs] = opt_s
@@ -282,7 +280,9 @@ class CBV(object):
 		dist, ind = tree.query(np.array([pos]), k=N_neigh+1)
 		W = 1/dist[0][1::]**2
 
-		posterior = lambda coeff: self._lhood1d(coeff, flux, Ncbvs) - prior(coeff)
+		# Define posterior function to be minimized:
+		def logposterior(coeff):
+			return self._lhood1d(coeff, flux, Ncbvs) - prior(coeff)
 
 #
 #
@@ -504,9 +504,10 @@ class CBV(object):
 				#W = 1/dist[0][1:]**2
 				#V = self.inifit[ind, 1+jj][0][1:]
 				#KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-				#prior = lambda coeff: wscale * KDE.logpdf(coeff)
+				#def logprior(coeff):
+				#	return wscale * KDE.logpdf(coeff)
 
-				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=prior, start_guess=opts)
+				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=logprior, start_guess=opts)
 
 				diagnostics.update({
 					'method': 'MAP',
