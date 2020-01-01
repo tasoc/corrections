@@ -27,14 +27,14 @@ def test_ensemble_basics():
 	with corrections.EnsembleCorrector(INPUT_DIR, plot=True) as ec:
 		assert ec.__class__.__name__ == 'EnsembleCorrector', "Did not get the correct class name back"
 		assert ec.input_folder == INPUT_DIR, "Incorrect input folder"
-		assert ec.plot == True, "Plot parameter passed appropriately"
+		assert ec.plot, "Plot parameter passed appropriately"
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
-	tm = corrections.TaskManager(INPUT_DIR)
-	task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
+	with corrections.TaskManager(INPUT_DIR) as tm:
+		task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
 
 	#Initiate the class
 	CorrClass = corrections.corrclass('ensemble')
@@ -72,8 +72,8 @@ def test_ensemble_returned_values():
 @pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
 def test_run_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
-	tm = corrections.TaskManager(INPUT_DIR)
-	task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
+	with corrections.TaskManager(INPUT_DIR) as tm:
+		task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
 
 	#Initiate the class
 	CorrClass = corrections.corrclass('ensemble')
