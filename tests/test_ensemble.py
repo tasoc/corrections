@@ -9,12 +9,13 @@ Tests of Ensemble Corrector.
 """
 
 import sys
-import os
+import os.path
 import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available.txt'))
 starid = 29281992
 camera = 1
 ccd = 4
@@ -26,55 +27,66 @@ def test_ensemble_basics():
 	with corrections.EnsembleCorrector(INPUT_DIR, plot=True) as ec:
 		assert ec.__class__.__name__ == 'EnsembleCorrector', "Did not get the correct class name back"
 		assert ec.input_folder == INPUT_DIR, "Incorrect input folder"
-		assert ec.plot == True, "Plot parameter passed appropriately"
+		assert ec.plot, "Plot parameter passed appropriately"
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(os.environ.get('CI') == 'true' and os.environ.get('TRAVIS') == 'true',
-					reason="This requires a sector of data. Impossible to run with Travis")
+@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
 def test_ensemble_returned_values():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
-	tm = corrections.TaskManager(INPUT_DIR)
-	task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
+	with corrections.TaskManager(INPUT_DIR) as tm:
+		task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
 
 	#Initiate the class
 	CorrClass = corrections.corrclass('ensemble')
-	corr = CorrClass(INPUT_DIR, plot=False)
-	inlc = corr.load_lightcurve(task)
-	outlc, status = corr.do_correction(inlc.copy())
+	with CorrClass(INPUT_DIR, plot=False) as corr:
+		inlc = corr.load_lightcurve(task)
+		outlc, status = corr.do_correction(inlc.copy())
+
+	# Check status
+	assert outlc is not None, "Ensemble fails"
+	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
 
 	# Check input validation
 	#with pytest.raises(ValueError) as err:
 	#	outlc, status = corr.do_correction('hello world')
 	#	assert('The input to `do_correction` is not a TessLightCurve object!' in err.value.args[0])
 
-	#C heck contents
-	assert len(outlc.flux) == len(inlc.flux), "Input flux ix different length to output flux"
+	print( inlc.show_properties() )
+	print( outlc.show_properties() )
+
+	# Check contents
+	assert len(outlc) == len(inlc), "Input flux ix different length to output flux"
 	assert all(inlc.time == outlc.time), "Input time is nonidentical to output time"
 	assert all(outlc.flux != inlc.flux), "Input and output flux are identical."
-	assert len(outlc.flux) == len(outlc.time), "Check time and flux have same length"
 
-	# Check status
-	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
+	assert len(outlc.flux) == len(outlc.time), "Check TIME and FLUX have same length"
+	assert len(outlc.flux_err) == len(outlc.time), "Check TIME and FLUX_ERR have same length"
+	assert len(outlc.quality) == len(outlc.time), "Check TIME and QUALITY have same length"
+	assert len(outlc.pixel_quality) == len(outlc.time), "Check TIME and QUALITY have same length"
+	assert len(outlc.cadenceno) == len(outlc.time), "Check TIME and CADENCENO have same length"
+	assert len(outlc.centroid_col) == len(outlc.time), "Check TIME and CENTROID_COL have same length"
+	assert len(outlc.centroid_row) == len(outlc.time), "Check TIME and CENTROID_ROW have same length"
+	assert len(outlc.timecorr) == len(outlc.time), "Check TIME and TIMECORR have same length"
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(os.environ.get('CI') == 'true' and os.environ.get('TRAVIS') == 'true',
-					reason="This requires a sector of data. Impossible to run with Travis")
+@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
 def test_run_metadata():
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
-	tm = corrections.TaskManager(INPUT_DIR)
-	task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
+	with corrections.TaskManager(INPUT_DIR) as tm:
+		task = tm.get_task(starid=starid, camera=camera, ccd=ccd)
 
 	#Initiate the class
 	CorrClass = corrections.corrclass('ensemble')
-	corr = CorrClass(INPUT_DIR, plot=False)
-	inlc = corr.load_lightcurve(task)
-	outlc, status = corr.do_correction(inlc.copy())
+	with CorrClass(INPUT_DIR, plot=False) as corr:
+		inlc = corr.load_lightcurve(task)
+		outlc, status = corr.do_correction(inlc.copy())
+
+	assert outlc is not None, "Ensemble fails"
+
+	print( inlc.show_properties() )
+	print( outlc.show_properties() )
 
 	# Check metadata
-	#assert 'fmean' in outlc.meta, "Metadata is incomplete"
-	#assert 'fstd' in outlc.meta, "Metadata is incomplete"
-	#assert 'frange' in outlc.meta, "Metadata is incomplete"
-	#assert 'drange' in outlc.meta, "Metadata is incomplete"
 	assert outlc.meta['task']['starid'] == inlc.meta['task']['starid'], "Metadata is incomplete"
 	assert outlc.meta['task'] == inlc.meta['task'], "Metadata is incomplete"
 
