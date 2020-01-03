@@ -123,10 +123,11 @@ class TESSQualityFlags(QualityFlagsBase):
 	ImpulsiveOutlier = 512
 	CollateralCosmic = 1024
 	EarthMoonPlanetInFOV = 2048
+	ScatteredLight = 4096
 
 	# Which is the recommended QUALITY mask to identify bad data?
 	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint | Desat
-		| ApertureCosmic | ManualExclude)
+		| ApertureCosmic | ManualExclude | ScatteredLight)
 
 	# Preferred bitmask for CBV corrections
 	CBV_BITMASK = (SafeMode | EarthPoint | Desat | ManualExclude)
@@ -148,5 +149,6 @@ class TESSQualityFlags(QualityFlagsBase):
 		SensitivityDropout: "Sudden sensitivity dropout",
 		ImpulsiveOutlier: "Impulsive outlier",
 		CollateralCosmic: "Cosmic ray in collateral data",
-		EarthMoonPlanetInFOV: "Earth, Moon or other planet in camera FOV"
+		EarthMoonPlanetInFOV: "Earth, Moon or other planet in camera FOV",
+		ScatteredLight: "Scattered light from Earth or Moon in CCD"
 	}

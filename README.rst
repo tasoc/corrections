@@ -11,7 +11,7 @@ The TASOC Lightcurve Corrections module
 
 This module provides the lightcurve corrections setup for the TESS Asteroseismic Science Operations Center (TASOC).
 
-The code is available through our GitHub organisation (https://github.com/tasoc/corrections) and full documentation for this code can be found on https://tasoc.dk/code/.
+The code is available through our GitHub organization (https://github.com/tasoc/corrections) and full documentation for this code can be found on https://tasoc.dk/code/.
 
 Installation instructions
 =========================
