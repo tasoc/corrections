@@ -5,10 +5,8 @@ Structure from `tessphot by Rasmus Handberg <https://github.com/tasoc/photometry
 
 .. codeauthor:: Lindsey Carboneau
 .. codeauthor:: Filipe Pereira
-
 """
 
-from __future__ import absolute_import
 from . import KASOCFilterCorrector, EnsembleCorrector, CBVCorrector
 
 #------------------------------------------------------------------------------

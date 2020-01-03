@@ -31,7 +31,7 @@ import enum
 import corrections
 from timeit import default_timer
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def main():
 	# Parse command line arguments:
 	parser = argparse.ArgumentParser(description='Run TESS Corrections in parallel using MPI.')
@@ -109,7 +109,7 @@ def main():
 
 				tm.logger.info("Master finishing")
 
-		except:
+		except: # noqa: E731
 			# If something fails in the master
 			print(traceback.format_exc().strip())
 			comm.Abort(1)
@@ -146,7 +146,7 @@ def main():
 						# Run the correction:
 						try:
 							result = corr.correct(task)
-						except:
+						except: # noqa: E722
 							# Something went wrong
 							error_msg = traceback.format_exc().strip()
 							result.update({
@@ -154,7 +154,6 @@ def main():
 								'details': {'errors': error_msg},
 							})
 
-	
 						result.update({'worker_wait_time': toc-tic})
 						# Send the result back to the master:
 						comm.send(result, dest=0, tag=tags.DONE)
@@ -172,7 +171,7 @@ def main():
 						# make sure we don't run into an infinite loop:
 						raise Exception("Worker received an unknown tag: '{0}'".format(tag))
 
-		except:
+		except: # noqa: E731
 			logger.exception("Something failed in worker")
 
 		finally:

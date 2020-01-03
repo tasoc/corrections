@@ -6,11 +6,18 @@ Handling of TESS data quality flags.
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
-from __future__ import division, with_statement, print_function, absolute_import
 import numpy as np
+#from enum import IntFlag
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class QualityFlagsBase(object):
+
+	# Using this bitmask only QUALITY == 0 cadences will remain
+	HARDEST_BITMASK = 2**32-1
+
+	# Ignore the STRINGS keyword as a member of the Enum:
+	# Requires Python 3.7
+	_ignore_ = ['STRINGS']
 
 	@classmethod
 	def decode(cls, quality):
@@ -25,8 +32,8 @@ class QualityFlagsBase(object):
 
 		Returns:
 			list of str: List of human-readable strings giving a short
-			             description of the quality flags raised.
-						 Returns an empty list if no flags raised.
+				description of the quality flags raised.
+				Returns an empty list if no flags raised.
 		"""
 		result = []
 		for flag in cls.STRINGS.keys():
@@ -67,7 +74,7 @@ class QualityFlagsBase(object):
 		else:
 			return np.binary_repr(quality, width=32)
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class CorrectorQualityFlags(QualityFlagsBase):
 	"""
 	This class encodes the meaning of the various TESS QUALITY bitmask flags.
@@ -83,7 +90,7 @@ class CorrectorQualityFlags(QualityFlagsBase):
 
 	# Default bitmask
 	DEFAULT_BITMASK = (FlaggedBadData | ManualExclude)
-	
+
 	# Preferred bitmask for CBV corrections
 	CBV_BITMASK = (ManualExclude)
 
@@ -99,7 +106,7 @@ class CorrectorQualityFlags(QualityFlagsBase):
 		Interpolated: "Point is interpolated"
 	}
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 class TESSQualityFlags(QualityFlagsBase):
 	"""
 	This class encodes the meaning of the various TESS PIXEL_QUALITY bitmask flags.
@@ -116,20 +123,18 @@ class TESSQualityFlags(QualityFlagsBase):
 	ImpulsiveOutlier = 512
 	CollateralCosmic = 1024
 	EarthMoonPlanetInFOV = 2048
+	ScatteredLight = 4096
 
 	# Which is the recommended QUALITY mask to identify bad data?
-	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint |
-					   Desat | ApertureCosmic | ManualExclude)
-	
+	DEFAULT_BITMASK = (AttitudeTweak | SafeMode | CoarsePoint | EarthPoint | Desat
+		| ApertureCosmic | ManualExclude | ScatteredLight)
+
 	# Preferred bitmask for CBV corrections
 	CBV_BITMASK = (SafeMode | EarthPoint | Desat | ManualExclude)
 
 	# This bitmask includes flags that are known to identify both good and bad cadences.
 	# Use it wisely.
 	HARD_BITMASK = (DEFAULT_BITMASK | SensitivityDropout | CollateralCosmic)
-
-	# Using this bitmask only QUALITY == 0 cadences will remain
-	HARDEST_BITMASK = 2**32-1
 
 	# Pretty string descriptions for each flag
 	STRINGS = {
@@ -144,5 +149,6 @@ class TESSQualityFlags(QualityFlagsBase):
 		SensitivityDropout: "Sudden sensitivity dropout",
 		ImpulsiveOutlier: "Impulsive outlier",
 		CollateralCosmic: "Cosmic ray in collateral data",
-		EarthMoonPlanetInFOV: "Earth, Moon or other planet in camera FOV"
+		EarthMoonPlanetInFOV: "Earth, Moon or other planet in camera FOV",
+		ScatteredLight: "Scattered light from Earth or Moon in CCD"
 	}

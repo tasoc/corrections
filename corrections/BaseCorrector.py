@@ -9,7 +9,6 @@ All other specific correction classes will inherit from BaseCorrector.
 .. codeauthor:: Filipe Pereira
 """
 
-import six
 import os.path
 import shutil
 import enum
@@ -22,12 +21,12 @@ from bottleneck import nanmedian, nanvar
 from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
-from .version import get_version
 from .quality import TESSQualityFlags, CorrectorQualityFlags
 from .utilities import rms_timescale
 from .manual_filters import manual_exclude
+from .version import get_version
 
-__version__ = get_version()
+__version__ = get_version(pep440=False)
 
 __docformat__ = 'restructuredtext'
 
@@ -83,6 +82,7 @@ class BaseCorrector(object):
 			'BaseCorrector': 'base',
 			'EnsembleCorrector': 'ensemble',
 			'CBVCorrector': 'cbv',
+			'CBVCreator': 'cbv',
 			'KASOCFilterCorrector': 'kasoc_filter'
 		}.get(self.__class__.__name__)
 
@@ -110,18 +110,25 @@ class BaseCorrector(object):
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
 
+	#----------------------------------------------------------------------------------------------
 	def __enter__(self):
 		return self
 
+	#----------------------------------------------------------------------------------------------
 	def __exit__(self, *args):
 		self.close()
 
+	#----------------------------------------------------------------------------------------------
+	def __del__(self):
+		if hasattr(self, 'cursor') and self.cursor: self.cursor.close()
+		if hasattr(self, 'conn') and self.conn: self.conn.close()
+
+	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close correction object."""
-		if self.cursor: self.cursor.close()
-		if self.conn: self.conn.close()
+		pass
 
-
+	#----------------------------------------------------------------------------------------------
 	def plot_folder(self, lc):
 		"""
 		Return folder path where plots for a given lightcurve should be saved.
@@ -136,9 +143,11 @@ class BaseCorrector(object):
 		"""
 		lcfile = os.path.join(self.input_folder, lc.meta['task']['lightcurve'])
 		plot_folder = os.path.join(os.path.dirname(lcfile), 'plots', '%011d' % lc.targetid)
+		if self.plot:
+			os.makedirs(plot_folder, exist_ok=True)
 		return plot_folder
 
-
+	#----------------------------------------------------------------------------------------------
 	def do_correction(self, lightcurve):
 		"""
 		Apply corrections to target lightcurve.
@@ -154,7 +163,7 @@ class BaseCorrector(object):
 		"""
 		raise NotImplementedError("A helpful error message goes here")
 
-
+	#----------------------------------------------------------------------------------------------
 	def correct(self, task, output_folder=None):
 		"""
 		Run correction.
@@ -187,7 +196,7 @@ class BaseCorrector(object):
 			status = STATUS.ABORT
 			logger.warning("Correction was aborted.")
 
-		except:
+		except: # noqa: E722
 			status = STATUS.ERROR
 			error_msg = traceback.format_exc().strip()
 			logger.exception("Correction failed.")
@@ -235,8 +244,8 @@ class BaseCorrector(object):
 
 		return result
 
-
-	def search_database(self, select=None, search=None, order_by=None, limit=None, distinct=False):
+	#----------------------------------------------------------------------------------------------
+	def search_database(self, select=None, join=None, search=None, order_by=None, limit=None, distinct=False):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
@@ -259,6 +268,18 @@ class BaseCorrector(object):
 		elif isinstance(select, (list, tuple)):
 			select = ",".join(select)
 
+		joins = [
+			'INNER JOIN diagnostics ON todolist.priority=diagnostics.priority',
+			'INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority'
+		]
+		if join is None:
+			pass
+		elif isinstance(join, (list, tuple)):
+			joins += list(join)
+		else:
+			joins.append(join)
+		joins = ' '.join(joins)
+
 		if search is None:
 			search = ''
 		elif isinstance(search, (list, tuple)):
@@ -270,14 +291,15 @@ class BaseCorrector(object):
 			order_by = ''
 		elif isinstance(order_by, (list, tuple)):
 			order_by = " ORDER BY " + ",".join(order_by)
-		elif isinstance(order_by, six.string_types):
+		elif isinstance(order_by, str):
 			order_by = " ORDER BY " + order_by
 
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT {distinct:s}{select:s} FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {distinct:s}{select:s} FROM todolist {join:s} WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
 			distinct='DISTINCT ' if distinct else '',
 			select=select,
+			join=joins,
 			search=search,
 			order_by=order_by,
 			limit=limit
@@ -288,7 +310,7 @@ class BaseCorrector(object):
 		self.cursor.execute(query)
 		return [dict(row) for row in self.cursor.fetchall()]
 
-
+	#----------------------------------------------------------------------------------------------
 	def load_lightcurve(self, task):
 		"""
 		Load lightcurve from task ID or full task dictionary.
@@ -331,6 +353,9 @@ class BaseCorrector(object):
 			# Quality flags from the pixels:
 			pixel_quality = np.asarray(data[:,3], dtype='int32')
 
+			# Corrections applied to timestamps:
+			timecorr = np.zeros(data.shape[0], dtype='float32')
+
 			# Change the Manual Exclude flag, since the simulated data
 			# and the real TESS quality flags differ in the definition:
 			indx = (pixel_quality & 256 != 0)
@@ -368,6 +393,9 @@ class BaseCorrector(object):
 				# Quality flags from the pixels:
 				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
 
+				# Corrections applied to timestamps:
+				timecorr = hdu['LIGHTCURVE'].data['TIMECORR']
+
 				# Create the QUALITY column and fill it with flags of bad data points:
 				quality = np.zeros_like(hdu['LIGHTCURVE'].data['TIME'], dtype='int32')
 				bad_data = ~np.isfinite(hdu['LIGHTCURVE'].data['FLUX_RAW'])
@@ -399,12 +427,12 @@ class BaseCorrector(object):
 				# Apply manual exclude flag:
 				manexcl = manual_exclude(lc)
 				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
-
 		else:
 			raise ValueError("Invalid file format")
 
 		# Add additional attributes to lightcurve object:
 		lc.pixel_quality = pixel_quality
+		lc.timecorr = timecorr
 
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
@@ -415,7 +443,7 @@ class BaseCorrector(object):
 
 		return lc
 
-
+	#----------------------------------------------------------------------------------------------
 	def save_lightcurve(self, lc, output_folder=None):
 		"""
 		Save generated lightcurve to file.

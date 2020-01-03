@@ -91,7 +91,7 @@ class TaskManager(object):
 		self.conn.commit()
 
 		# Reset calculations with status STARTED or ABORT:
-		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' +  str(STATUS.ERROR.value)
+		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' + str(STATUS.ERROR.value)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
 		self.conn.commit()
@@ -127,21 +127,23 @@ class TaskManager(object):
 			try:
 				self.conn.isolation_level = None
 				self.cursor.execute("VACUUM;")
-			except:
-				raise
 			finally:
 				self.conn.isolation_level = ''
 
+	#----------------------------------------------------------------------------------------------
 	def __enter__(self):
 		return self
 
+	#----------------------------------------------------------------------------------------------
 	def __exit__(self, *args):
 		self.close()
 
+	#----------------------------------------------------------------------------------------------
 	def close(self):
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
 
+	#----------------------------------------------------------------------------------------------
 	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
 		Get number of tasks due to be processed.
@@ -165,7 +167,7 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s;" % (
 			STATUS.OK.value,
 			STATUS.WARNING.value,
 			constraints
@@ -174,7 +176,7 @@ class TaskManager(object):
 		num = int(self.cursor.fetchone()['num'])
 		return num
 
-
+	#----------------------------------------------------------------------------------------------
 	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
 		"""
 		Get next task to be processed.
@@ -207,6 +209,7 @@ class TaskManager(object):
 		if task: return dict(task)
 		return None
 
+	#----------------------------------------------------------------------------------------------
 	def save_results(self, result):
 
 		# Extract details dictionary:
@@ -243,7 +246,7 @@ class TaskManager(object):
 				details.get('errors', None)
 			))
 			self.conn.commit()
-		except:
+		except: # noqa: E722
 			self.conn.rollback()
 			raise
 
@@ -263,6 +266,7 @@ class TaskManager(object):
 		if self.summary_file and self.summary['tasks_run'] % self.summary_interval == 0:
 			self.write_summary()
 
+	#----------------------------------------------------------------------------------------------
 	def start_task(self, taskid):
 		"""
 		Mark a task as STARTED in the TODO-list.
@@ -271,7 +275,7 @@ class TaskManager(object):
 		self.conn.commit()
 		self.summary['STARTED'] += 1
 
-
+	#----------------------------------------------------------------------------------------------
 	def get_random_task(self):
 		"""
 		Get random task to be processed.
@@ -283,11 +287,12 @@ class TaskManager(object):
 		if task: return dict(task)
 		return None
 
+	#----------------------------------------------------------------------------------------------
 	def write_summary(self):
 		"""Write summary of progress to file. The summary file will be in JSON format."""
 		if self.summary_file:
 			try:
 				with open(self.summary_file, 'w') as fid:
 					json.dump(self.summary, fid)
-			except:
+			except: # noqa: E722
 				self.logger.exception("Could not write summary file")

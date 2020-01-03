@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# flake8: noqa
 
-from __future__ import absolute_import
 from .BaseCorrector import BaseCorrector, STATUS
 from .KASOCFilterCorrector import KASOCFilterCorrector
-from .cbv_corrector.CBVCorrector import CBVCorrector
+from .cbv_corrector import CBVCorrector, CBVCreator, CBV
 from .ensemble import EnsembleCorrector
 from .tesscorr import corrclass
 from .taskmanager import TaskManager
+
+from .version import get_version
+__version__ = get_version(pep440=False)

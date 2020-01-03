@@ -15,7 +15,7 @@ from corrections import BaseCorrector
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
-#----------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def test_import():
 	"""
 	Tests if the module can even be imported.
@@ -26,7 +26,7 @@ def test_import():
 		assert bc.__class__.__name__ == 'BaseCorrector', "Did not get the correct class name back"
 		assert bc.input_folder == INPUT_DIR, "Incorrect input folder"
 
-#----------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def test_import_nonexistent():
 	"""
 	Tests that BaseCorrector handles being called with non-existing input directory.
@@ -36,7 +36,7 @@ def test_import_nonexistent():
 		with BaseCorrector(INPUT_DIR + '/does/not/exist/'):
 			pass
 
-#----------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def test_search_database():
 	"""
 	Tests the search_database method of BaseCorrector.
