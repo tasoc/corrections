@@ -28,23 +28,30 @@ import logging
 import traceback
 import os
 import enum
-import corrections
 from timeit import default_timer
+import corrections
 
 #--------------------------------------------------------------------------------------------------
 def main():
 	# Parse command line arguments:
 	parser = argparse.ArgumentParser(description='Run TESS Corrections in parallel using MPI.')
-	#parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
-	#parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
+	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
+	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-m', '--method', help='Corrector method to use.', default=None, choices=('ensemble', 'cbv', 'kasoc_filter'))
 	parser.add_argument('-o', '--overwrite', help='Overwrite existing results.', action='store_true')
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
-	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default='ffi', help='Data source or cadence.')
+	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default=None, help='Data source or cadence. Default is to run all.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 	args = parser.parse_args()
+
+	# Set logging level:
+	logging_level = logging.INFO
+	if args.quiet:
+		logging_level = logging.WARNING
+	elif args.debug:
+		logging_level = logging.DEBUG
 
 	# Get input and output folder from environment variables:
 	input_folder = args.input_folder
@@ -66,6 +73,9 @@ def main():
 	if rank == 0:
 		try:
 			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite, summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
+				# Set level of TaskManager logger:
+				tm.logger.setLevel(logging_level)
+				
 				# Get list of tasks:
 				numtasks = tm.get_number_tasks(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
 				tm.logger.info("%d tasks to be run", numtasks)
@@ -83,7 +93,7 @@ def main():
 
 					if tag == tags.DONE:
 						# The worker is done with a task
-						tm.logger.info("Got data from worker %d: %s", source, data)
+						tm.logger.debug("Got data from worker %d: %s", source, data)
 						tm.save_results(data)
 
 					if tag in (tags.DONE, tags.READY):
@@ -93,7 +103,7 @@ def main():
 							task_index = task['priority']
 							tm.start_task(task_index)
 							comm.send(task, dest=source, tag=tags.START)
-							tm.logger.info("Sending task %d to worker %d", task_index, source)
+							tm.logger.debug("Sending task %d to worker %d", task_index, source)
 						else:
 							comm.send(None, dest=source, tag=tags.EXIT)
 
