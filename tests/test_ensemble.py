@@ -8,9 +8,10 @@ Tests of Ensemble Corrector.
 .. codeauthor:: Lindsey Carboneau <lmcarboneau@gmail.com>
 """
 
+import pytest
+import numpy as np
 import sys
 import os.path
-import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
 
@@ -58,6 +59,7 @@ def test_ensemble_returned_values():
 	assert len(outlc) == len(inlc), "Input flux ix different length to output flux"
 	assert all(inlc.time == outlc.time), "Input time is nonidentical to output time"
 	assert all(outlc.flux != inlc.flux), "Input and output flux are identical."
+	assert np.sum(np.isnan(outlc.flux)) < 0.5*len(outlc), "More than half the lightcurve is NaN"
 
 	assert len(outlc.flux) == len(outlc.time), "Check TIME and FLUX have same length"
 	assert len(outlc.flux_err) == len(outlc.time), "Check TIME and FLUX_ERR have same length"
