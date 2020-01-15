@@ -78,7 +78,7 @@ def test_run_tesscorr_cbv(datasource):
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.skipif(not test_data_available,
 	reason="This requires a sector of data. Only run if available.")
-@pytest.mark.parametrize("datasource", ['ffi', 'tpf'])
+@pytest.mark.parametrize("datasource", ['ffi']) #  'tpf'
 def test_run_tesscorr_ensemble(datasource):
 	command = "python run_tesscorr.py -t -o -p --starid=29281992 -m ensemble --datasource=%s" % (
 		datasource
