@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Tests of Ensemble Corrector.
+Tests of CBV Corrector.
 
-.. codeauthor:: Oliver James Hall <ojh251@student.bham.ac.uk>
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
-.. codeauthor:: Lindsey Carboneau <lmcarboneau@gmail.com>
 """
 
 import pytest
@@ -17,38 +15,36 @@ import corrections
 #from corrections.plots import plt
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available.txt'))
 starid = 29281992
 camera = 1
 ccd = 4
 sector = 1
 
 #--------------------------------------------------------------------------------------------------
-def test_ensemble_basics():
+def test_cbvcorrector_basics():
 	"""Check that the Ensemblecorrector can be initiated at all"""
-	with corrections.EnsembleCorrector(INPUT_DIR, plot=True) as ec:
-		assert ec.__class__.__name__ == 'EnsembleCorrector', "Did not get the correct class name back"
+	with corrections.CBVCorrector(INPUT_DIR, plot=True) as ec:
+		assert ec.__class__.__name__ == 'CBVCorrector', "Did not get the correct class name back"
 		assert ec.input_folder == INPUT_DIR, "Incorrect input folder"
 		assert ec.plot, "Plot parameter passed appropriately"
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a sector of data.")
-@pytest.mark.parametrize('datasource', ['ffi']) # 'tpf'
-def test_ensemble_returned_values(datasource):
+@pytest.mark.parametrize('datasource', ['tpf', 'ffi'])
+def test_cbvcorrector_returned_values(datasource):
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
 	with corrections.TaskManager(INPUT_DIR) as tm:
 		task = tm.get_task(starid=starid, camera=camera, ccd=ccd, datasource=datasource)
 
 	#Initiate the class
-	CorrClass = corrections.corrclass('ensemble')
+	CorrClass = corrections.corrclass('cbv')
 	with CorrClass(INPUT_DIR, plot=False) as corr:
 		inlc = corr.load_lightcurve(task)
 		outlc, status = corr.do_correction(inlc.copy())
 
 	# Check status
-	assert outlc is not None, "Ensemble fails"
+	assert outlc is not None, "CBV Corrector fails"
 	print(status)
-	assert status == corrections.STATUS.OK, "STATUS was not set appropriately"
+	assert status in (corrections.STATUS.OK, corrections.STATUS.WARNING), "STATUS was not set appropriately"
 
 	# Check input validation
 	#with pytest.raises(ValueError) as err:
@@ -85,6 +81,6 @@ def test_ensemble_returned_values(datasource):
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
-	test_ensemble_basics()
-	#test_ensemble_returned_values('tpf')
-	test_ensemble_returned_values('ffi')
+	test_cbvcorrector_basics()
+	test_cbvcorrector_returned_values('tpf')
+	test_cbvcorrector_returned_values('ffi')

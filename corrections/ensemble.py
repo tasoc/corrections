@@ -211,7 +211,7 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
 		# these values need to be removed, or they will affect the ensemble later
-		lc_quality_mask = TESSQualityFlags.filter(lc.quality, TESSQualityFlags.HARDEST_BITMASK)
+		lc_quality_mask = ~TESSQualityFlags.filter(lc.quality, TESSQualityFlags.HARDEST_BITMASK)
 		lc.flux[lc_quality_mask] = np.NaN
 		lc_corr = lc.copy()
 
