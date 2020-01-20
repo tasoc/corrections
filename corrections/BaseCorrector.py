@@ -86,7 +86,7 @@ class BaseCorrector(object):
 			'KASOCFilterCorrector': 'kasoc_filter'
 		}.get(self.__class__.__name__)
 
-		# Find the auxillary data directory based on which corrector is running:
+		# Find the axillary data directory based on which corrector is running:
 		if self.CorrMethod == 'base':
 			self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		else:
