@@ -232,6 +232,7 @@ class TaskManager(object):
 			# Save additional diagnostics:
 			error_msg = details.get('errors', None)
 			if error_msg:
+				error_msg = "\n".join(error_msg) if isinstance(error_msg, (list, tuple)) else error_msg.strip()
 				self.summary['last_error'] = error_msg
 
 			# Save additional diagnostics:
@@ -243,7 +244,7 @@ class TaskManager(object):
 				details.get('variance', None),
 				details.get('rms_hour', None),
 				details.get('ptp', None),
-				details.get('errors', None)
+				error_msg
 			))
 			self.conn.commit()
 		except: # noqa: E722

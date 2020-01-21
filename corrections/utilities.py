@@ -10,6 +10,7 @@ the corrections package.
 import numpy as np
 import pickle
 import gzip
+import logging
 from astropy.io import fits
 from bottleneck import nanmedian, nanmean, allnan
 from scipy.stats import binned_statistic
@@ -157,3 +158,25 @@ def fix_fits_table_headers(table, column_titles=None):
 			key = table.get('TTYPE%d' % k)
 			if key and key in column_titles:
 				table.comments['TTYPE%d' % k] = column_titles[table.get('TTYPE%d' % k)]
+
+#--------------------------------------------------------------------------------------------------
+class ListHandler(logging.Handler):
+	"""
+	A logging.Handler that writes messages into a list object.
+
+	The standard logging.QueueHandler/logging.QueueListener can not be used
+	for this because the QueueListener runs in a private thread, not the
+	main thread.
+
+	.. warning::
+		This handler is not thread-safe. Do not use it in threaded environments.
+	"""
+
+	def __init__(self, *args, message_queue, **kwargs):
+		"""Initialize by copying the queue and sending everything else to superclass."""
+		logging.Handler.__init__(self, *args, **kwargs)
+		self.message_queue = message_queue
+
+	def emit(self, record):
+		"""Add the formatted log message (sans newlines) to the queue."""
+		self.message_queue.append(self.format(record).rstrip('\n'))

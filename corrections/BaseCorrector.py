@@ -22,7 +22,7 @@ from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
 from .quality import TESSQualityFlags, CorrectorQualityFlags
-from .utilities import rms_timescale
+from .utilities import rms_timescale, ListHandler
 from .manual_filters import manual_exclude
 from .version import get_version
 
@@ -30,6 +30,7 @@ __version__ = get_version(pep440=False)
 
 __docformat__ = 'restructuredtext'
 
+#--------------------------------------------------------------------------------------------------
 class STATUS(enum.Enum):
 	"""
 	Status indicator of the status of the correction.
@@ -43,6 +44,7 @@ class STATUS(enum.Enum):
 	ABORT = 4   #: The calculation was aborted.
 	SKIPPED = 5 #: The target was skipped because the algorithm found that to be the best solution.
 
+#--------------------------------------------------------------------------------------------------
 class BaseCorrector(object):
 	"""
 	The basic correction class for the TASOC Photometry pipeline.
@@ -73,6 +75,16 @@ class BaseCorrector(object):
 		"""
 
 		logger = logging.getLogger(__name__)
+
+		# Add a ListHandler to the logging of the corrections module.
+		# This is needed to catch any errors and warnings made by the correctors
+		# for ultimately storing them in the TODO-file.
+		# https://stackoverflow.com/questions/36408496/python-logging-handler-to-append-to-list
+		self.message_queue = []
+		handler = ListHandler(message_queue=self.message_queue, level=logging.WARNING)
+		formatter = logging.Formatter('%(levelname)s: %(message)s')
+		handler.setFormatter(formatter)
+		logging.getLogger('corrections').addHandler(handler)
 
 		# Save inputs:
 		self.input_folder = input_folder
@@ -182,7 +194,7 @@ class BaseCorrector(object):
 
 		t1 = default_timer()
 
-		error_msg = None
+		error_msg = []
 		save_file = None
 		result = task.copy()
 		try:
@@ -198,7 +210,7 @@ class BaseCorrector(object):
 
 		except: # noqa: E722
 			status = STATUS.ERROR
-			error_msg = traceback.format_exc().strip()
+			error_msg.append(traceback.format_exc().strip())
 			logger.exception("Correction failed.")
 
 		# Check that the status has been changed:
@@ -207,6 +219,13 @@ class BaseCorrector(object):
 
 		# Calculate diagnostics:
 		details = {}
+
+		# Unpack any errors or warnings that were sent to the logger during the correction:
+		if self.message_queue:
+			error_msg += self.message_queue
+			self.message_queue.clear()
+		if not error_msg:
+			error_msg = None
 
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
