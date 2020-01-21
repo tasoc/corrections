@@ -77,6 +77,12 @@ def test_rms_timescale():
 			warnings.filterwarnings('ignore', category=LightkurveWarning, message='LightCurve object contains NaN times')
 			rms = rms_timescale(LightCurve(time=time*np.nan, flux=flux))
 
+	# Time with invalid contents (e.g. Inf) should throw an ValueError:
+	time_invalid = time.copy()
+	time_invalid[2] = np.inf
+	with np.testing.assert_raises(ValueError):
+		rms = rms_timescale(LightCurve(time=time_invalid, flux=flux))
+
 	# Test with timescale longer than timespan should return zero:
 	flux = np.random.randn(1000)
 	time = np.linspace(0, 27, len(flux))
