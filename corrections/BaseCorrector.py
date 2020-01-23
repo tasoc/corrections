@@ -14,7 +14,6 @@ import shutil
 import enum
 import logging
 import sqlite3
-import traceback
 import numpy as np
 from timeit import default_timer
 from bottleneck import nanmedian, nanvar
@@ -68,8 +67,7 @@ class BaseCorrector(object):
 			plot (boolean, optional):
 
 		Raises:
-			IOError: If (target ID) could not be found (TODO: other values as well?)
-			ValueError: (TODO: on a lot of places)
+			FileNotFoundError: TODO-file not found in directory.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
@@ -114,8 +112,8 @@ class BaseCorrector(object):
 		# The path to the TODO list:
 		todo_file = os.path.join(input_folder, 'todo.sqlite')
 		logger.debug("TODO file: %s", todo_file)
-		if not os.path.exists(todo_file):
-			raise ValueError("TODO file not found")
+		if not os.path.isfile(todo_file):
+			raise FileNotFoundError("TODO file not found")
 
 		# Open the SQLite file in read-only mode:
 		self.conn = sqlite3.connect('file:' + todo_file + '?mode=ro', uri=True)
@@ -210,7 +208,6 @@ class BaseCorrector(object):
 
 		except: # noqa: E722
 			status = STATUS.ERROR
-			error_msg.append(traceback.format_exc().strip())
 			logger.exception("Correction failed.")
 
 		# Check that the status has been changed:
@@ -268,6 +265,10 @@ class BaseCorrector(object):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
+		Returned rows are restricted to things not marked as ``STATUS.SKIPPED``, since these have
+		been deemed too bad to not require corrections, they are definitely also too bad to use in
+		any kind of correction.
+
 		Parameters:
 			search (list of strings or None): Conditions to apply to the selection of stars from the database
 			order_by (list, string or None): Column to order the database output by.
@@ -287,10 +288,7 @@ class BaseCorrector(object):
 		elif isinstance(select, (list, tuple)):
 			select = ",".join(select)
 
-		joins = [
-			'INNER JOIN diagnostics ON todolist.priority=diagnostics.priority',
-			'INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority'
-		]
+		joins = ['INNER JOIN diagnostics ON todolist.priority=diagnostics.priority']
 		if join is None:
 			pass
 		elif isinstance(join, (list, tuple)):
@@ -315,10 +313,11 @@ class BaseCorrector(object):
 
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT {distinct:s}{select:s} FROM todolist {join:s} WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {distinct:s}{select:s} FROM todolist {join:s} WHERE corr_status!={skipped:d} {search:s}{order_by:s}{limit:s};".format(
 			distinct='DISTINCT ' if distinct else '',
 			select=select,
 			join=joins,
+			skipped=STATUS.SKIPPED.value,
 			search=search,
 			order_by=order_by,
 			limit=limit
