@@ -78,7 +78,7 @@ if __name__ == '__main__':
 		# We do allow for ZIP64 extensions for large files - lets see if anyone complains
 		with zipfile.ZipFile(zippath, 'w', zipfile.ZIP_STORED, True) as myzip:
 
-			cursor.execute("SELECT todolist.priority,lightcurve FROM todolist INNER JOIN diagnostics ON diagnostics.priority=todolist.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status=1 AND datavalidation_raw.approved=1;")
+			cursor.execute("SELECT todolist.priority,lightcurve FROM todolist INNER JOIN diagnostics ON diagnostics.priority=todolist.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (1,3) AND datavalidation_raw.approved=1;")
 			for row in tqdm(cursor.fetchall()):
 
 				filepath = os.path.join(input_dir, row['lightcurve'])
