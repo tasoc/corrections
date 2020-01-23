@@ -152,7 +152,7 @@ class TaskManager(object):
 		if self.conn: self.conn.close()
 
 	#----------------------------------------------------------------------------------------------
-	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
+	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
 		"""
 		Get number of tasks due to be processed.
 
@@ -161,6 +161,8 @@ class TaskManager(object):
 		"""
 
 		constraints = []
+		if priority is not None:
+			constraints.append('todolist.priority=%d' % priority)
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
 		if camera is not None:
@@ -183,7 +185,7 @@ class TaskManager(object):
 		return num
 
 	#----------------------------------------------------------------------------------------------
-	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
+	def get_task(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
 		"""
 		Get next task to be processed.
 
@@ -192,6 +194,8 @@ class TaskManager(object):
 		"""
 
 		constraints = []
+		if priority is not None:
+			constraints.append('todolist.priority=%d' % priority)
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
 		if camera is not None:

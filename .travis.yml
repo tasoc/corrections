@@ -1,6 +1,6 @@
 language: python
 cache: pip
-sudo: required
+os: linux
 
 # We are specifying the build matix manually, since there is too little overlap
 # between the different builds:
