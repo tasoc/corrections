@@ -208,7 +208,7 @@ class CBVCreator(BaseCorrector):
 			search_cadence = "datasource!='ffi'"
 
 		# Find the median of the variabilities:
-		variability = np.array([float(row['variability']) for row in self.search_database(search=[search_cadence, 'cbv_area=%d' % self.cbv_area], select='variability')], dtype='float64')
+		variability = np.array([float(row['variability']) for row in self.search_database(search=['status=1', search_cadence, 'cbv_area=%d' % self.cbv_area], select='variability')], dtype='float64')
 		median_variability = nanmedian(variability)
 
 		# Plot the distribution of variability for all stars:
@@ -224,7 +224,7 @@ class CBVCreator(BaseCorrector):
 		# Get the list of star that we are going to load in the lightcurves for:
 		stars = self.search_database(
 			select=['lightcurve', 'mean_flux', 'variance'],
-			search=[search_cadence, 'cbv_area=%d' % self.cbv_area, 'variability < %f' % (self.threshold_variability*median_variability)]
+			search=['status=1', search_cadence, 'cbv_area=%d' % self.cbv_area, 'variability < %f' % (self.threshold_variability*median_variability)]
 		)
 
 		# Number of stars returned:
@@ -612,7 +612,7 @@ class CBVCreator(BaseCorrector):
 		# Load stars from database
 		stars = self.search_database(
 			select=['lightcurve', 'pos_column', 'pos_row', 'tmag'],
-			search=[search_cadence, 'cbv_area=%d' % self.cbv_area])
+			search=['status=1', search_cadence, 'cbv_area=%d' % self.cbv_area])
 
 		# Load the cbv from file:
 		cbv = CBV(self.data_folder, self.cbv_area, self.datasource)

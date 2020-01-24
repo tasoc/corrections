@@ -14,7 +14,6 @@ import shutil
 import enum
 import logging
 import sqlite3
-import traceback
 import numpy as np
 from timeit import default_timer
 from bottleneck import nanmedian, nanvar
@@ -22,7 +21,7 @@ from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
 from .quality import TESSQualityFlags, CorrectorQualityFlags
-from .utilities import rms_timescale
+from .utilities import rms_timescale, ListHandler
 from .manual_filters import manual_exclude
 from .version import get_version
 
@@ -30,6 +29,7 @@ __version__ = get_version(pep440=False)
 
 __docformat__ = 'restructuredtext'
 
+#--------------------------------------------------------------------------------------------------
 class STATUS(enum.Enum):
 	"""
 	Status indicator of the status of the correction.
@@ -43,6 +43,7 @@ class STATUS(enum.Enum):
 	ABORT = 4   #: The calculation was aborted.
 	SKIPPED = 5 #: The target was skipped because the algorithm found that to be the best solution.
 
+#--------------------------------------------------------------------------------------------------
 class BaseCorrector(object):
 	"""
 	The basic correction class for the TASOC Photometry pipeline.
@@ -66,13 +67,22 @@ class BaseCorrector(object):
 			plot (boolean, optional):
 
 		Raises:
-			IOError: If (target ID) could not be found (TODO: other values as well?)
-			ValueError: (TODO: on a lot of places)
+			FileNotFoundError: TODO-file not found in directory.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
+
+		# Add a ListHandler to the logging of the corrections module.
+		# This is needed to catch any errors and warnings made by the correctors
+		# for ultimately storing them in the TODO-file.
+		# https://stackoverflow.com/questions/36408496/python-logging-handler-to-append-to-list
+		self.message_queue = []
+		handler = ListHandler(message_queue=self.message_queue, level=logging.WARNING)
+		formatter = logging.Formatter('%(levelname)s: %(message)s')
+		handler.setFormatter(formatter)
+		logging.getLogger('corrections').addHandler(handler)
 
 		# Save inputs:
 		self.input_folder = input_folder
@@ -86,7 +96,7 @@ class BaseCorrector(object):
 			'KASOCFilterCorrector': 'kasoc_filter'
 		}.get(self.__class__.__name__)
 
-		# Find the auxillary data directory based on which corrector is running:
+		# Find the axillary data directory based on which corrector is running:
 		if self.CorrMethod == 'base':
 			self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
 		else:
@@ -102,8 +112,8 @@ class BaseCorrector(object):
 		# The path to the TODO list:
 		todo_file = os.path.join(input_folder, 'todo.sqlite')
 		logger.debug("TODO file: %s", todo_file)
-		if not os.path.exists(todo_file):
-			raise ValueError("TODO file not found")
+		if not os.path.isfile(todo_file):
+			raise FileNotFoundError("TODO file not found")
 
 		# Open the SQLite file in read-only mode:
 		self.conn = sqlite3.connect('file:' + todo_file + '?mode=ro', uri=True)
@@ -182,7 +192,7 @@ class BaseCorrector(object):
 
 		t1 = default_timer()
 
-		error_msg = None
+		error_msg = []
 		save_file = None
 		result = task.copy()
 		try:
@@ -198,7 +208,6 @@ class BaseCorrector(object):
 
 		except: # noqa: E722
 			status = STATUS.ERROR
-			error_msg = traceback.format_exc().strip()
 			logger.exception("Correction failed.")
 
 		# Check that the status has been changed:
@@ -207,6 +216,13 @@ class BaseCorrector(object):
 
 		# Calculate diagnostics:
 		details = {}
+
+		# Unpack any errors or warnings that were sent to the logger during the correction:
+		if self.message_queue:
+			error_msg += self.message_queue
+			self.message_queue.clear()
+		if not error_msg:
+			error_msg = None
 
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
@@ -249,6 +265,10 @@ class BaseCorrector(object):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
+		Returned rows are restricted to things not marked as ``STATUS.SKIPPED``, since these have
+		been deemed too bad to not require corrections, they are definitely also too bad to use in
+		any kind of correction.
+
 		Parameters:
 			search (list of strings or None): Conditions to apply to the selection of stars from the database
 			order_by (list, string or None): Column to order the database output by.
@@ -268,10 +288,7 @@ class BaseCorrector(object):
 		elif isinstance(select, (list, tuple)):
 			select = ",".join(select)
 
-		joins = [
-			'INNER JOIN diagnostics ON todolist.priority=diagnostics.priority',
-			'INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority'
-		]
+		joins = ['INNER JOIN diagnostics ON todolist.priority=diagnostics.priority']
 		if join is None:
 			pass
 		elif isinstance(join, (list, tuple)):
@@ -296,10 +313,11 @@ class BaseCorrector(object):
 
 		limit = '' if limit is None else " LIMIT %d" % limit
 
-		query = "SELECT {distinct:s}{select:s} FROM todolist {join:s} WHERE status=1 AND datavalidation_raw.approved=1 {search:s}{order_by:s}{limit:s};".format(
+		query = "SELECT {distinct:s}{select:s} FROM todolist {join:s} WHERE (corr_status IS NULL OR corr_status!={skipped:d}) {search:s}{order_by:s}{limit:s};".format(
 			distinct='DISTINCT ' if distinct else '',
 			select=select,
 			join=joins,
+			skipped=STATUS.SKIPPED.value,
 			search=search,
 			order_by=order_by,
 			limit=limit

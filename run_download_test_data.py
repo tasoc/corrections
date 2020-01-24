@@ -49,7 +49,7 @@ def download_file(url, destination):
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 
-	input_dir = os.path.join(os.path.dirname(__file__), 'input')
+	input_dir = os.path.join(os.path.dirname(__file__), 'tests', 'input')
 	zip_path = os.path.join(input_dir, 'corrections_tests_input.zip')
 
 	# Download the ZIP file if it doesn't already exists:

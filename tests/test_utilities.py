@@ -10,7 +10,8 @@ import sys
 import os
 import numpy as np
 import tempfile
-from lightkurve import LightCurve
+import warnings
+from lightkurve import LightCurve, LightkurveWarning
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from corrections.utilities import savePickle, loadPickle, sphere_distance, rms_timescale
 
@@ -72,7 +73,15 @@ def test_rms_timescale():
 
 	# Pure nan in the time-column should raise ValueError:
 	with np.testing.assert_raises(ValueError):
-		rms = rms_timescale(LightCurve(time=time*np.nan, flux=flux))
+		with warnings.catch_warnings():
+			warnings.filterwarnings('ignore', category=LightkurveWarning, message='LightCurve object contains NaN times')
+			rms = rms_timescale(LightCurve(time=time*np.nan, flux=flux))
+
+	# Time with invalid contents (e.g. Inf) should throw an ValueError:
+	time_invalid = time.copy()
+	time_invalid[2] = np.inf
+	with np.testing.assert_raises(ValueError):
+		rms = rms_timescale(LightCurve(time=time_invalid, flux=flux))
 
 	# Test with timescale longer than timespan should return zero:
 	flux = np.random.randn(1000)

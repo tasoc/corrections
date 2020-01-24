@@ -32,13 +32,14 @@ def main():
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
 	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default=None, help='Data source or cadence. Default is to run all.')
+	parser.add_argument('--priority', type=int, help='Priority of target.', nargs='?', default=None)
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Make sure at least one setting is given:
-	if not args.all and args.starid is None and not args.random:
-		parser.error("Please select either a specific STARID or RANDOM.")
+	if not args.all and args.starid is None and args.priority is None and not args.random:
+		parser.error("Please select either a specific STARID, PRIORITY or RANDOM.")
 
 	# Set logging level:
 	logging_level = logging.INFO
@@ -90,7 +91,13 @@ def main():
 				if args.random:
 					task = tm.get_random_task()
 				else:
-					task = tm.get_task(starid=args.starid, camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+					task = tm.get_task(
+						starid=args.starid,
+						camera=args.camera,
+						ccd=args.ccd,
+						datasource=args.datasource,
+						priority=args.priority
+					)
 
 				if task is None: break
 

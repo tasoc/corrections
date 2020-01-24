@@ -32,7 +32,7 @@ def test_import_nonexistent():
 	Tests that BaseCorrector handles being called with non-existing input directory.
 	"""
 
-	with pytest.raises(ValueError):
+	with pytest.raises(FileNotFoundError):
 		with BaseCorrector(INPUT_DIR + '/does/not/exist/'):
 			pass
 

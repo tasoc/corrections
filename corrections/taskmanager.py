@@ -91,9 +91,17 @@ class TaskManager(object):
 		self.conn.commit()
 
 		# Reset calculations with status STARTED or ABORT:
-		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' + str(STATUS.ERROR.value)
+		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' + str(STATUS.ERROR.value) + ',' + str(STATUS.SKIPPED.value)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
+		self.conn.commit()
+
+		# Set all targets that did not return good photometry or were not approved by the Data Validation to SKIPPED:
+		self.cursor.execute("UPDATE todolist SET corr_status=%d WHERE corr_status IS NULL AND (status NOT IN (%d,%d) OR todolist.priority IN (SELECT priority FROM datavalidation_raw WHERE approved=0));" % (
+			STATUS.SKIPPED.value,
+			STATUS.OK.value,
+			STATUS.WARNING.value
+		))
 		self.conn.commit()
 
 		# Analyze the tables for better query planning:
@@ -144,7 +152,7 @@ class TaskManager(object):
 		if self.conn: self.conn.close()
 
 	#----------------------------------------------------------------------------------------------
-	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None):
+	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
 		"""
 		Get number of tasks due to be processed.
 
@@ -153,6 +161,8 @@ class TaskManager(object):
 		"""
 
 		constraints = []
+		if priority is not None:
+			constraints.append('todolist.priority=%d' % priority)
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
 		if camera is not None:
@@ -167,17 +177,15 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s;" % (
-			STATUS.OK.value,
-			STATUS.WARNING.value,
-			constraints
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL %s;" % (
+			constraints,
 		))
 
 		num = int(self.cursor.fetchone()['num'])
 		return num
 
 	#----------------------------------------------------------------------------------------------
-	def get_task(self, starid=None, camera=None, ccd=None, datasource=None):
+	def get_task(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
 		"""
 		Get next task to be processed.
 
@@ -186,6 +194,8 @@ class TaskManager(object):
 		"""
 
 		constraints = []
+		if priority is not None:
+			constraints.append('todolist.priority=%d' % priority)
 		if starid is not None:
 			constraints.append('todolist.starid=%d' % starid)
 		if camera is not None:
@@ -200,10 +210,8 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority INNER JOIN datavalidation_raw ON todolist.priority=datavalidation_raw.priority WHERE status IN (%d,%d) AND corr_status IS NULL AND datavalidation_raw.approved=1 %s ORDER BY todolist.priority LIMIT 1;" % (
-			STATUS.OK.value,
-			STATUS.WARNING.value,
-			constraints
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL %s ORDER BY todolist.priority LIMIT 1;" % (
+			constraints,
 		))
 		task = self.cursor.fetchone()
 		if task: return dict(task)
@@ -232,6 +240,7 @@ class TaskManager(object):
 			# Save additional diagnostics:
 			error_msg = details.get('errors', None)
 			if error_msg:
+				error_msg = "\n".join(error_msg) if isinstance(error_msg, (list, tuple)) else error_msg.strip()
 				self.summary['last_error'] = error_msg
 
 			# Save additional diagnostics:
@@ -243,7 +252,7 @@ class TaskManager(object):
 				details.get('variance', None),
 				details.get('rms_hour', None),
 				details.get('ptp', None),
-				details.get('errors', None)
+				error_msg
 			))
 			self.conn.commit()
 		except: # noqa: E722
@@ -282,7 +291,7 @@ class TaskManager(object):
 		Returns:
 			dict or None: Dictionary of settings for task.
 		"""
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE status IN (1,3) AND corr_status IS NULL ORDER BY RANDOM() LIMIT 1;")
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL ORDER BY RANDOM() LIMIT 1;")
 		task = self.cursor.fetchone()
 		if task: return dict(task)
 		return None

@@ -65,7 +65,7 @@ class EnsembleCorrector(BaseCorrector):
 		if key not in self._nearest_neighbors:
 			# StarID, pixel positions are retrieved from the database:
 			select_params = ["todolist.priority", "pos_row", "pos_column"]
-			search_params = ["camera={:d}".format(camera), "ccd={:d}".format(ccd), "mean_flux>0"]
+			search_params = ['status=1', "camera={:d}".format(camera), "ccd={:d}".format(ccd), "mean_flux>0"]
 			if ds == 'ffi':
 				search_params.append("datasource = 'ffi'")
 			else:
