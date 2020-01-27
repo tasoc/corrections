@@ -26,7 +26,7 @@ from scipy.signal import savgol_filter, find_peaks
 from scipy.stats import gaussian_kde
 from tqdm import tqdm
 from ..plots import plt
-from .. import BaseCorrector
+from .. import BaseCorrector, STATUS
 from ..utilities import savePickle, mad_to_sigma
 from ..quality import CorrectorQualityFlags, TESSQualityFlags
 from ..version import get_version
@@ -207,8 +207,16 @@ class CBVCreator(BaseCorrector):
 		else:
 			search_cadence = "datasource!='ffi'"
 
+		search_params = [
+			'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
+			"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+			search_cadence,
+			"cbv_area={:d}".format(self.cbv_area),
+			#"sector={:d}".format(sector) # TODO: Add this constraint here
+		]
+
 		# Find the median of the variabilities:
-		variability = np.array([float(row['variability']) for row in self.search_database(search=['status=1', search_cadence, 'cbv_area=%d' % self.cbv_area], select='variability')], dtype='float64')
+		variability = np.array([float(row['variability']) for row in self.search_database(search=search_params, select='variability')], dtype='float64')
 		median_variability = nanmedian(variability)
 
 		# Plot the distribution of variability for all stars:
@@ -222,9 +230,10 @@ class CBVCreator(BaseCorrector):
 		plt.close(fig)
 
 		# Get the list of star that we are going to load in the lightcurves for:
+		search_params.append('variability < %f' % (self.threshold_variability*median_variability))
 		stars = self.search_database(
 			select=['lightcurve', 'mean_flux', 'variance'],
-			search=['status=1', search_cadence, 'cbv_area=%d' % self.cbv_area, 'variability < %f' % (self.threshold_variability*median_variability)]
+			search=search_params
 		)
 
 		# Number of stars returned:
@@ -609,10 +618,18 @@ class CBVCreator(BaseCorrector):
 		else:
 			search_cadence = "datasource!='ffi'"
 
+		search_params = [
+			'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
+			"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+			search_cadence,
+			"cbv_area={:d}".format(self.cbv_area),
+			#"sector={:d}".format(sector) # TODO: Add this constraint here
+		]
+
 		# Load stars from database
 		stars = self.search_database(
 			select=['lightcurve', 'pos_column', 'pos_row', 'tmag'],
-			search=['status=1', search_cadence, 'cbv_area=%d' % self.cbv_area])
+			search=search_params)
 
 		# Load the cbv from file:
 		cbv = CBV(self.data_folder, self.cbv_area, self.datasource)
@@ -759,7 +776,8 @@ class CBVCreator(BaseCorrector):
 			logger.warning("File already exists: %s", newfile)
 			return
 
-		# Get the list of star that we are going to load in the lightcurves for:
+		# Get single star to load timestamps etc from:
+		# TODO: Add sector constraint here
 		stars = self.search_database(
 			select=['lightcurve'],
 			search=["datasource!='ffi'", 'cbv_area=%d' % self.cbv_area],

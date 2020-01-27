@@ -36,7 +36,7 @@ class TaskManager(object):
 		if os.path.isdir(todo_file):
 			todo_file = os.path.join(todo_file, 'todo.sqlite')
 
-		if not os.path.exists(todo_file):
+		if not os.path.isfile(todo_file):
 			raise FileNotFoundError('Could not find TODO-file')
 
 		# Load the SQLite file:
@@ -148,6 +148,11 @@ class TaskManager(object):
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
+		if self.cursor and self.conn:
+			self.conn.rollback()
+			self.cursor.execute("PRAGMA journal_mode=DELETE;")
+			self.conn.commit()
+
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
 
