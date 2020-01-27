@@ -55,17 +55,25 @@ class EnsembleCorrector(BaseCorrector):
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
+		sector = lc.sector
 		camera = lc.camera
 		ccd = lc.ccd
 		ds = 'ffi' if lc.meta["task"]["datasource"] == 'ffi' else 'tpf'
-		key = (ds, camera, ccd)
+		key = (sector, ds, camera, ccd)
 
 		# Check if the NearestNeighbors object already exists for this camera and CCD.
 		# If not create it, and store it for later use.
 		if key not in self._nearest_neighbors:
 			# StarID, pixel positions are retrieved from the database:
 			select_params = ["todolist.priority", "pos_row", "pos_column"]
-			search_params = ['status=1', "camera={:d}".format(camera), "ccd={:d}".format(ccd), "mean_flux>0"]
+			search_params = [
+				'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
+				"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+				"camera={:d}".format(camera),
+				"ccd={:d}".format(ccd),
+				"sector={:d}".format(sector),
+				"mean_flux>0"
+			]
 			if ds == 'ffi':
 				search_params.append("datasource = 'ffi'")
 			else:
