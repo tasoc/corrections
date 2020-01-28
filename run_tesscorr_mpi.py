@@ -161,7 +161,7 @@ def main():
 							error_msg = traceback.format_exc().strip()
 							result.update({
 								'status_corr': corrections.STATUS.ERROR,
-								'details': {'errors': error_msg},
+								'details': {'errors': [error_msg]},
 							})
 
 						result.update({'worker_wait_time': toc-tic})
