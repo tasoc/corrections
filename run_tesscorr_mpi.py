@@ -59,7 +59,7 @@ def main():
 		input_folder = os.environ.get('TESSCORR_INPUT')
 	if not input_folder:
 		parser.error("Please specify an INPUT_FOLDER.")
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(os.path.dirname(input_folder), 'lightcurves'))
 
 	# Define MPI message tags
 	tags = enum.IntEnum('tags', ('READY', 'DONE', 'EXIT', 'START'))
