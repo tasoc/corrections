@@ -72,12 +72,23 @@ def main():
 
 	if rank == 0:
 		try:
-			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite, summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
+			# Constraints on which targets to process:
+			constraints = {
+				'camera': args.camera,
+				'ccd': args.ccd,
+				'datasource': args.datasource
+			}
+
+			# Start TaskManager, which keeps track of the task that needs to be performed:
+			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite,
+				cleanup_constraints=constraints,
+				summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
+
 				# Set level of TaskManager logger:
 				tm.logger.setLevel(logging_level)
 
 				# Get list of tasks:
-				numtasks = tm.get_number_tasks(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+				numtasks = tm.get_number_tasks(**constraints)
 				tm.logger.info("%d tasks to be run", numtasks)
 
 				# Start the master loop that will assign tasks
@@ -98,7 +109,7 @@ def main():
 
 					if tag in (tags.DONE, tags.READY):
 						# Worker is ready, so send it a task
-						task = tm.get_task(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+						task = tm.get_task(**constraints)
 						if task:
 							task_index = task['priority']
 							tm.start_task(task_index)

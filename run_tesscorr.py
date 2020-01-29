@@ -80,24 +80,27 @@ def main():
 	# Make sure the output directory exists:
 	os.makedirs(output_folder, exist_ok=True)
 
+	# Constraints on which targets to process:
+	constraints = {
+		'camera': args.camera,
+		'ccd': args.ccd,
+		'datasource': args.datasource,
+		'starid': args.starid,
+		'priority': args.priority
+	}
+
 	# Get the class for the selected method:
 	CorrClass = corrections.corrclass(args.method)
 
 	# Initialize the corrector class:
 	with CorrClass(input_folder, plot=args.plot) as corr:
 		# Start the TaskManager:
-		with corrections.TaskManager(input_folder, overwrite=args.overwrite) as tm:
+		with corrections.TaskManager(input_folder, overwrite=args.overwrite, cleanup_constraints=constraints) as tm:
 			while True:
 				if args.random:
 					task = tm.get_random_task()
 				else:
-					task = tm.get_task(
-						starid=args.starid,
-						camera=args.camera,
-						ccd=args.ccd,
-						datasource=args.datasource,
-						priority=args.priority
-					)
+					task = tm.get_task(**constraints)
 
 				if task is None: break
 
