@@ -83,5 +83,5 @@ deploy:
   on:
     branch:
       - master
-      - /^v\d+\.\d+.+$/
+      - /^v\d+\.\d+.*$/
     tags: true
