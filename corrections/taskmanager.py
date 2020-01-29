@@ -12,6 +12,7 @@ import os.path
 import sqlite3
 import logging
 import json
+from numpy import atleast_1d
 from . import STATUS
 
 class TaskManager(object):
@@ -19,7 +20,8 @@ class TaskManager(object):
 	A TaskManager which keeps track of which targets to process.
 	"""
 
-	def __init__(self, todo_file, cleanup=False, overwrite=False, summary=None, summary_interval=100):
+	def __init__(self, todo_file, cleanup=False, overwrite=False, cleanup_constraints=None,
+		summary=None, summary_interval=100):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
@@ -28,6 +30,12 @@ class TaskManager(object):
 			cleanup (boolean, optional): Perform cleanup/optimization of TODO-file before
 				during initialization. Default=False.
 			overwrite (boolean, optional): Overwrite any previously calculated results. Default=False.
+			cleanup_constraints (dict, optional): Dict of constraint for cleanup of the status of
+				previous correction runs. If not specified, all bad results are cleaned up.
+			summary (string, optional): Path to JSON file which will be periodically updated with
+				a status summary of the corrections.
+			summary_interval (integer, optional): Interval at which summary file is updated.
+				Default=100.
 
 		Raises:
 			FileNotFoundError: If TODO-file could not be found.
@@ -90,10 +98,21 @@ class TaskManager(object):
 		);""")
 		self.conn.commit()
 
-		# Reset calculations with status STARTED or ABORT:
+		# Reset calculations with status STARTED, ABORT or ERROR:
 		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' + str(STATUS.ERROR.value) + ',' + str(STATUS.SKIPPED.value)
-		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE corr_status IN (" + clear_status + "));")
-		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE corr_status IN (" + clear_status + ");")
+		constraints = ['corr_status IN (' + clear_status + ')']
+
+		# Add additional constraints from the user input and build SQL query:
+		if cleanup_constraints:
+			cc = cleanup_constraints.copy()
+			if cc.get('datasource'):
+				constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
+			for key, val in cc.items():
+				constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+
+		constraints = ' AND '.join(constraints)
+		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")
+		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE " + constraints + ";")
 		self.conn.commit()
 
 		# Set all targets that did not return good photometry or were not approved by the Data Validation to SKIPPED:
@@ -175,7 +194,7 @@ class TaskManager(object):
 		if ccd is not None:
 			constraints.append('todolist.ccd=%d' % ccd)
 		if datasource is not None:
-			constraints.append('todolist.datasource="%s"' % datasource)
+			constraints.append("todolist.datasource='ffi'" if datasource == 'ffi' else "todolist.datasource!='ffi'")
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)
@@ -208,7 +227,7 @@ class TaskManager(object):
 		if ccd is not None:
 			constraints.append('todolist.ccd=%d' % ccd)
 		if datasource is not None:
-			constraints.append('todolist.datasource="%s"' % datasource)
+			constraints.append("todolist.datasource='ffi'" if datasource == 'ffi' else "todolist.datasource!='ffi'")
 
 		if constraints:
 			constraints = ' AND ' + " AND ".join(constraints)

@@ -59,7 +59,7 @@ def main():
 		input_folder = os.environ.get('TESSCORR_INPUT')
 	if not input_folder:
 		parser.error("Please specify an INPUT_FOLDER.")
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(input_folder, 'lightcurves'))
+	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(os.path.dirname(input_folder), 'lightcurves'))
 
 	# Define MPI message tags
 	tags = enum.IntEnum('tags', ('READY', 'DONE', 'EXIT', 'START'))
@@ -72,12 +72,23 @@ def main():
 
 	if rank == 0:
 		try:
-			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite, summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
+			# Constraints on which targets to process:
+			constraints = {
+				'camera': args.camera,
+				'ccd': args.ccd,
+				'datasource': args.datasource
+			}
+
+			# Start TaskManager, which keeps track of the task that needs to be performed:
+			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite,
+				cleanup_constraints=constraints,
+				summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
+
 				# Set level of TaskManager logger:
 				tm.logger.setLevel(logging_level)
 
 				# Get list of tasks:
-				numtasks = tm.get_number_tasks(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+				numtasks = tm.get_number_tasks(**constraints)
 				tm.logger.info("%d tasks to be run", numtasks)
 
 				# Start the master loop that will assign tasks
@@ -98,7 +109,7 @@ def main():
 
 					if tag in (tags.DONE, tags.READY):
 						# Worker is ready, so send it a task
-						task = tm.get_task(camera=args.camera, ccd=args.ccd, datasource=args.datasource)
+						task = tm.get_task(**constraints)
 						if task:
 							task_index = task['priority']
 							tm.start_task(task_index)
@@ -161,7 +172,7 @@ def main():
 							error_msg = traceback.format_exc().strip()
 							result.update({
 								'status_corr': corrections.STATUS.ERROR,
-								'details': {'errors': error_msg},
+								'details': {'errors': [error_msg]},
 							})
 
 						result.update({'worker_wait_time': toc-tic})

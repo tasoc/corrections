@@ -76,13 +76,12 @@ before_deploy:
   - cat VERSION
 deploy:
   provider: releases
-  api_key: $GITHUB_TOKEN
-  skip_cleanup: true
+  token: $GITHUB_TOKEN
   draft: true
   name: "Version $TRAVIS_TAG"
-  body: "Version $TRAVIS_TAG"
+  release_notes: "Version $TRAVIS_TAG"
   on:
     branch:
       - master
-      - /^v\d+\.\d+.+$/
+      - /^v\d+\.\d+.*$/
     tags: true

@@ -85,8 +85,13 @@ class BaseCorrector(object):
 		logging.getLogger('corrections').addHandler(handler)
 
 		# Save inputs:
-		self.input_folder = input_folder
 		self.plot = plot
+		if os.path.isdir(input_folder):
+			self.input_folder = input_folder
+			todo_file = os.path.join(input_folder, 'todo.sqlite')
+		else:
+			self.input_folder = os.path.dirname(input_folder)
+			todo_file = input_folder
 
 		self.CorrMethod = {
 			'BaseCorrector': 'base',
@@ -110,7 +115,6 @@ class BaseCorrector(object):
 			os.makedirs(self.data_folder, exist_ok=True)
 
 		# The path to the TODO list:
-		todo_file = os.path.join(input_folder, 'todo.sqlite')
 		logger.debug("TODO file: %s", todo_file)
 		if not os.path.isfile(todo_file):
 			raise FileNotFoundError("TODO file not found")
@@ -204,11 +208,11 @@ class BaseCorrector(object):
 
 		except (KeyboardInterrupt, SystemExit):
 			status = STATUS.ABORT
-			logger.warning("Correction was aborted.")
+			logger.warning("Correction was aborted (priority=%d)", task['priority'])
 
 		except: # noqa: E722
 			status = STATUS.ERROR
-			logger.exception("Correction failed.")
+			logger.exception("Correction failed (priority=%d)", task['priority'])
 
 		# Check that the status has been changed:
 		if status == STATUS.UNKNOWN:
