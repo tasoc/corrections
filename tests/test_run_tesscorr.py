@@ -8,14 +8,17 @@ Tests that run run_tesscorr with several different inputs.
 
 import pytest
 import os.path
+import tempfile
 import subprocess
 import shlex
 
-test_data_available = os.path.exists(os.path.join(os.path.dirname(__file__), 'input', 'test_data_available.txt'))
+INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+test_data_available = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available.txt'))
 
 #--------------------------------------------------------------------------------------------------
 def capture(command):
 
+	print(command)
 	cmd = shlex.split(command)
 	proc = subprocess.Popen(cmd,
 		cwd=os.path.join(os.path.dirname(__file__), '..'),
@@ -58,8 +61,12 @@ def test_run_tesscorr_invalid_camera():
 
 #--------------------------------------------------------------------------------------------------
 def test_run_tesscorr_invalid_ccd():
-	command = "python run_tesscorr.py -t --starid=29281992 --ccd=14"
-	out, err, exitcode = capture(command)
+	with tempfile.TemporaryDirectory() as tmpdir:
+		command = 'python run_tesscorr.py --starid=29281992 --ccd=14 "%s" "%s"' % (
+			INPUT_DIR,
+			tmpdir
+		)
+		out, err, exitcode = capture(command)
 
 	assert exitcode == 2
 	assert 'error: argument --ccd: invalid choice: 14 (choose from 1, 2, 3, 4)' in err
@@ -67,26 +74,32 @@ def test_run_tesscorr_invalid_ccd():
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("datasource", ['ffi', 'tpf'])
 def test_run_tesscorr_cbv(datasource):
-	command = "python run_tesscorr.py -t -o -p --starid=29281992 -m cbv --datasource=%s" % (
-		datasource
-	)
-	out, err, exitcode = capture(command)
+	with tempfile.TemporaryDirectory() as tmpdir:
+		command = 'python run_tesscorr.py -o -p --starid=29281992 -m cbv --datasource=%s "%s" "%s"' % (
+			datasource,
+			INPUT_DIR,
+			tmpdir
+		)
+		out, err, exitcode = capture(command)
 
 	assert ' - ERROR - ' not in err
-	#assert exitcode == 1
+	assert exitcode == 0
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.skipif(not test_data_available,
 	reason="This requires a sector of data. Only run if available.")
 @pytest.mark.parametrize("datasource", ['ffi']) #  'tpf'
 def test_run_tesscorr_ensemble(datasource):
-	command = "python run_tesscorr.py -t -o -p --starid=29281992 -m ensemble --datasource=%s" % (
-		datasource
-	)
-	out, err, exitcode = capture(command)
+	with tempfile.TemporaryDirectory() as tmpdir:
+		command = 'python run_tesscorr.py -o -p --starid=29281992 -m ensemble --datasource=%s "%s" "%s"' % (
+			datasource,
+			INPUT_DIR,
+			tmpdir
+		)
+		out, err, exitcode = capture(command)
 
 	assert ' - ERROR - ' not in err
-	#assert exitcode == 1
+	assert exitcode == 0
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -99,4 +112,4 @@ if __name__ == '__main__':
 	test_run_tesscorr_cbv('tpf')
 
 	test_run_tesscorr_ensemble('ffi')
-	test_run_tesscorr_ensemble('tpf')
+	#test_run_tesscorr_ensemble('tpf')
