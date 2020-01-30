@@ -108,7 +108,8 @@ class TaskManager(object):
 			if cc.get('datasource'):
 				constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
 			for key, val in cc.items():
-				constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+				if val is not None:
+					constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
 
 		constraints = ' AND '.join(constraints)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")
