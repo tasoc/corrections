@@ -12,7 +12,7 @@ import os
 import logging
 from functools import partial
 import multiprocessing
-from corrections import CBVCreator, BaseCorrector
+from corrections import CBVCreator, BaseCorrector, TaskManager
 
 #--------------------------------------------------------------------------------------------------
 def prepare_cbv(cbv_area, datasource='ffi', input_folder=None, ncbv=None, threshold_correlation=None,
@@ -84,21 +84,23 @@ def main():
 		parser.error("Invalid input folder")
 	logger.info("Loading input data from '%s'", input_folder)
 
-	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
-	with BaseCorrector(input_folder) as bc:
-		# Build list of constraints:
-		constraints = []
-		if args.camera:
-			constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
-		if args.ccd:
-			constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
-		if args.area:
-			constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
-		if args.datasource:
-			constraints.append("datasource='ffi'" if args.datasource == 'ffi' else "datasource!='ffi'")
-		if not constraints:
-			constraints = None
+	# Build list of constraints:
+	constraints = []
+	if args.camera:
+		constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
+	if args.ccd:
+		constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
+	if args.area:
+		constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
+	if args.datasource:
+		constraints.append("datasource='ffi'" if args.datasource == 'ffi' else "datasource!='ffi'")
+	if not constraints:
+		constraints = None
 
+	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
+	# Also invoke the TaskManager to ensure that the input TODO-file has the correct columns
+	# and indicies, which is automatically created by the TaskManager init function.
+	with TaskManager(input_folder, cleanup=True, cleanup_constraints=constraints), BaseCorrector(input_folder) as bc:
 		# Search for valid areas:
 		cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
 		logger.debug("CBV areas: %s", cbv_areas)

@@ -94,6 +94,12 @@ def test_taskmanager_constraints():
 		print(task)
 		assert task['priority'] == 17, "Task2 should be #17"
 
+	constraints = ['priority=17']
+	with TaskManager(INPUT_DIR, cleanup_constraints=constraints) as tm:
+		task4 = tm.get_task(priority=17)
+		print(task4)
+		assert task4['priority'] == 17, "Task4 should be #17"
+
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_cleanup():
 

@@ -105,11 +105,16 @@ class TaskManager(object):
 		# Add additional constraints from the user input and build SQL query:
 		if cleanup_constraints:
 			cc = cleanup_constraints.copy()
-			if cc.get('datasource'):
-				constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
-			for key, val in cc.items():
-				if val is not None:
-					constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+			if isinstance(cc, dict):
+				if cc.get('datasource'):
+					constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
+				for key, val in cc.items():
+					if val is not None:
+						constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+			elif isinstance(cc, list):
+				constraints += cc
+			else:
+				raise ValueError("cleanup_constraints should be dict or list")
 
 		constraints = ' AND '.join(constraints)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")
