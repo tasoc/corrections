@@ -23,7 +23,7 @@ def corrclass(method=None):
 		return EnsembleCorrector
 
 	elif method == 'kasoc_filter':
-		return KASOCFilterCorrector
+		return #KASOCFilterCorrector
 
 	else:
 		raise ValueError("Invalid method: '{0}'".format(method))
