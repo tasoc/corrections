@@ -14,6 +14,7 @@ import shutil
 import enum
 import logging
 import sqlite3
+import tempfile
 import numpy as np
 from timeit import default_timer
 from bottleneck import nanmedian, nanvar
@@ -119,8 +120,15 @@ class BaseCorrector(object):
 		if not os.path.isfile(todo_file):
 			raise FileNotFoundError("TODO file not found")
 
+		# Create readonly copy of the TODO-file:
+		with tempfile.NamedTemporaryFile(dir=self.input_folder, suffix='.sqlite', delete=False) as tmpfile:
+			self.todo_file_readonly = tmpfile.name
+			with open(todo_file, 'rb') as fid:
+				shutil.copyfileobj(fid, tmpfile)
+			tmpfile.flush()
+
 		# Open the SQLite file in read-only mode:
-		self.conn = sqlite3.connect('file:' + todo_file + '?mode=ro', uri=True)
+		self.conn = sqlite3.connect('file:' + self.todo_file_readonly + '?mode=ro', uri=True)
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
 
@@ -136,6 +144,8 @@ class BaseCorrector(object):
 	def __del__(self):
 		if hasattr(self, 'cursor') and self.cursor: self.cursor.close()
 		if hasattr(self, 'conn') and self.conn: self.conn.close()
+		if hasattr(self, 'todo_file_readonly') and os.path.isfile(self.todo_file_readonly):
+			os.remove(self.todo_file_readonly)
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
