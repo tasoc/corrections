@@ -152,6 +152,7 @@ def fix_fits_table_headers(table, column_titles=None):
 			table.comments['TFORM%d' % k] = {
 				'D': 'column format: 64-bit floating point',
 				'E': 'column format: 32-bit floating point',
+				'K': 'column format: signed 64-bit integer',
 				'J': 'column format: signed 32-bit integer',
 				'L': 'column format: logical value'
 			}[table.get('TFORM%d' % k)]
@@ -159,7 +160,7 @@ def fix_fits_table_headers(table, column_titles=None):
 		if column_titles is not None:
 			key = table.get('TTYPE%d' % k)
 			if key and key in column_titles:
-				table.comments['TTYPE%d' % k] = column_titles[table.get('TTYPE%d' % k)]
+				table.comments['TTYPE%d' % k] = 'column title: ' + column_titles[key]
 
 #--------------------------------------------------------------------------------------------------
 class ListHandler(logging.Handler):

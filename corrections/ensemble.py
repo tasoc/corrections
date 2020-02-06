@@ -146,16 +146,16 @@ class EnsembleCorrector(BaseCorrector):
 		args = (clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median)
 
 		def func1(scaleK, *args):
-			#temp = (((args[0]+scaleK)/np.median(args[0]+scaleK))-1)-((args[1]/np.median(args[1]))-1)
 			temp = (args[1]/nanmedian(args[1])) - ((args[0]+scaleK)/nanmedian(args[0]+scaleK))
 			temp -= nanmedian(temp)
 			return ss(temp)
 
 		res = minimize(func1, 100, args=args, method='Powell')
+		bzeta = float(res.x)
 
-		ens_flux = ens_flux + res.x
+		ens_flux = ens_flux + bzeta
 
-		return ens_flux/nanmedian(ens_flux)
+		return ens_flux/nanmedian(ens_flux), bzeta
 
 	#----------------------------------------------------------------------------------------------
 	def apply_ensemble(self, lc, lc_ensemble, lc_corr):
@@ -273,8 +273,8 @@ class EnsembleCorrector(BaseCorrector):
 			if drange < drange_lim and drange < drange_relfactor*target_drange and frange < frange_lim:
 
 				# Add the star to the ensemble:
-				lc_add_ensemble = self.add_ensemble_member(lc, next_star_lc)
-				temp_list.append({'priority:': next_star_index, 'starid': next_star_lc.targetid})
+				lc_add_ensemble, bzeta = self.add_ensemble_member(lc, next_star_lc)
+				temp_list.append({'priority:': next_star_index, 'starid': next_star_lc.targetid, 'bzeta': bzeta})
 				lc_ensemble.append(lc_add_ensemble)
 
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
@@ -325,7 +325,8 @@ class EnsembleCorrector(BaseCorrector):
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
 		self.ensemble_starlist = {
-			'starids': [tl['starid'] for tl in temp_list]
+			'starids': [tl['starid'] for tl in temp_list],
+			'bzetas': [tl['bzeta'] for tl in temp_list]
 		}
 
 		# Set additional headers for FITS output:

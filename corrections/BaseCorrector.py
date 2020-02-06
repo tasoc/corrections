@@ -22,7 +22,7 @@ from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
 from .quality import TESSQualityFlags, CorrectorQualityFlags
-from .utilities import rms_timescale, ListHandler
+from .utilities import rms_timescale, ListHandler, fix_fits_table_headers
 from .manual_filters import manual_exclude
 from .version import get_version
 
@@ -243,6 +243,12 @@ class BaseCorrector(object):
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
 			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
+
+			# Diagnostics specific to the method:
+			if self.CorrMethod == 'cbv':
+				details['cbv_num'] = lc_corr.meta['additional_headers']['CBV_NUM']
+			elif self.CorrMethod == 'ensemble':
+				details['ens_num'] = lc_corr.meta['additional_headers']['ENS_NUM']
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
 			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
@@ -543,12 +549,15 @@ class BaseCorrector(object):
 				if self.CorrMethod == 'ensemble' and hasattr(self, 'ensemble_starlist'):
 					# Create binary table to hold the list of ensemble stars:
 					c1 = fits.Column(name='TIC', format='K', array=self.ensemble_starlist['starids'])
+					c2 = fits.Column(name='BZETA', format='E', array=self.ensemble_starlist['bzetas'])
 
-					wm = fits.BinTableHDU.from_columns([c1, ], name='ENSEMBLE')
-
-					wm.header['TTYPE1'] = ('TIC', 'column title: TIC identifier')
-					wm.header['TFORM1'] = ('K', 'column format: signed 64-bit integer')
-					wm.header['TDISP1'] = ('I10', 'column display format')
+					wm = fits.BinTableHDU.from_columns([c1, c2], name='ENSEMBLE')
+					wm.header['TDISP1'] = 'I10'
+					wm.header['TDISP2'] = 'E'
+					fix_fits_table_headers(wm, {
+						'TIC': 'TIC identifier',
+						'BZETA': 'background scale'
+					})
 
 					# Add the new table to the list of HDUs:
 					hdu.append(wm)
