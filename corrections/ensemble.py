@@ -266,9 +266,16 @@ class EnsembleCorrector(BaseCorrector):
 			# Get lightkurve for next star closest to target:
 			next_star_lc = self.load_lightcurve(next_star_index)
 
+<<<<<<< HEAD
 			# Remove bad points by setting them to NaN:
 			next_star_lc_quality_mask = ~TESSQualityFlags.filter(next_star_lc.quality, TESSQualityFlags.HARDEST_BITMASK)
 			next_star_lc.flux[next_star_lc_quality_mask] = np.NaN
+=======
+			next_star_lc_quality_mask = (next_star_lc.quality == 0)
+			next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
+			next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
+			next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
+>>>>>>> ab845ed97ea49820757a73980306f7e04d83bd29
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
 			frange = np.diff(np.nanpercentile(next_star_lc.flux, [5, 95])) / next_star_lc.meta['task']['mean_flux']
