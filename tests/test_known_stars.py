@@ -10,6 +10,8 @@ import numpy as np
 import sys
 import os.path
 from bottleneck import nanmedian, nanvar
+from astropy.io import fits
+import tempfile
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import corrections
 from corrections.utilities import rms_timescale
@@ -49,62 +51,95 @@ def test_known_star(corrector, starid, datasource, var_goal, rms_goal, ptp_goal)
 
 	#Initiate the class
 	CorrClass = corrections.corrclass(corrector)
-	with CorrClass(INPUT_DIR, plot=False) as corr:
-		inlc = corr.load_lightcurve(task)
+	with tempfile.TemporaryDirectory() as tmpdir:
+		with CorrClass(INPUT_DIR, plot=False) as corr:
+			inlc = corr.load_lightcurve(task)
 
-		# Plot input lightcurve:
-		#print( inlc.show_properties() )
-		#inlc.plot(normalize=False)
+			# Plot input lightcurve:
+			#print( inlc.show_properties() )
+			#inlc.plot(normalize=False)
 
-		outlc, status = corr.do_correction(inlc.copy())
+			# Run correction:
+			outlc, status = corr.do_correction(inlc.copy())
 
-	# Check status
-	print(status)
-	assert outlc is not None, "Correction fails"
-	assert status in (corrections.STATUS.OK, corrections.STATUS.WARNING), "STATUS was not set appropriately"
+			# Check status
+			print(status)
+			assert outlc is not None, "Correction fails"
+			assert status in (corrections.STATUS.OK, corrections.STATUS.WARNING), "STATUS was not set appropriately"
 
-	# Plot output lightcurves:
-	#print( outlc.show_properties() )
-	#outlc.plot(ylabel='Relative Flux [ppm]', normalize=False)
-	#plt.show(block=True)
+			# Save the lightcurve to FITS file to be tested later on:
+			save_file = corr.save_lightcurve(outlc, output_folder=tmpdir)
 
-	# Check contents
-	assert len(outlc) == len(inlc), "Input flux ix different length to output flux"
-	assert all(inlc.time == outlc.time), "Input time is nonidentical to output time"
-	assert all(outlc.flux != inlc.flux), "Input and output flux are identical."
-	assert np.sum(np.isnan(outlc.flux)) < 0.5*len(outlc), "More than half the lightcurve is NaN"
+		# Plot output lightcurves:
+		#print( outlc.show_properties() )
+		#outlc.plot(ylabel='Relative Flux [ppm]', normalize=False)
+		#plt.show(block=True)
 
-	assert len(outlc.flux) == len(outlc.time), "Check TIME and FLUX have same length"
-	assert len(outlc.flux_err) == len(outlc.time), "Check TIME and FLUX_ERR have same length"
-	assert len(outlc.quality) == len(outlc.time), "Check TIME and QUALITY have same length"
-	assert len(outlc.pixel_quality) == len(outlc.time), "Check TIME and QUALITY have same length"
-	assert len(outlc.cadenceno) == len(outlc.time), "Check TIME and CADENCENO have same length"
-	assert len(outlc.centroid_col) == len(outlc.time), "Check TIME and CENTROID_COL have same length"
-	assert len(outlc.centroid_row) == len(outlc.time), "Check TIME and CENTROID_ROW have same length"
-	assert len(outlc.timecorr) == len(outlc.time), "Check TIME and TIMECORR have same length"
+		# Check contents
+		assert len(outlc) == len(inlc), "Input flux ix different length to output flux"
+		assert all(inlc.time == outlc.time), "Input time is nonidentical to output time"
+		assert all(outlc.flux != inlc.flux), "Input and output flux are identical."
+		assert np.sum(np.isnan(outlc.flux)) < 0.5*len(outlc), "More than half the lightcurve is NaN"
 
-	# Check metadata
-	assert outlc.meta['task']['starid'] == inlc.meta['task']['starid'], "Metadata is incomplete"
-	assert outlc.meta['task'] == inlc.meta['task'], "Metadata is incomplete"
+		assert len(outlc.flux) == len(outlc.time), "Check TIME and FLUX have same length"
+		assert len(outlc.flux_err) == len(outlc.time), "Check TIME and FLUX_ERR have same length"
+		assert len(outlc.quality) == len(outlc.time), "Check TIME and QUALITY have same length"
+		assert len(outlc.pixel_quality) == len(outlc.time), "Check TIME and QUALITY have same length"
+		assert len(outlc.cadenceno) == len(outlc.time), "Check TIME and CADENCENO have same length"
+		assert len(outlc.centroid_col) == len(outlc.time), "Check TIME and CENTROID_COL have same length"
+		assert len(outlc.centroid_row) == len(outlc.time), "Check TIME and CENTROID_ROW have same length"
+		assert len(outlc.timecorr) == len(outlc.time), "Check TIME and TIMECORR have same length"
 
-	# Check performance metrics:
-	var_in = nanvar(inlc.flux)
-	var_out = nanvar(outlc.flux)
-	var_diff = np.abs(var_out - var_goal) / var_goal
-	print(var_in, var_out, var_diff)
-	assert var_diff < 0.05, "VARIANCE changed outside interval"
+		# Check metadata
+		assert outlc.meta['task']['starid'] == inlc.meta['task']['starid'], "Metadata is incomplete"
+		assert outlc.meta['task'] == inlc.meta['task'], "Metadata is incomplete"
 
-	rms_in = rms_timescale(inlc)
-	rms_out = rms_timescale(outlc)
-	rms_diff = np.abs(rms_out - rms_goal) / rms_goal
-	print(rms_in, rms_out, rms_diff)
-	assert rms_diff < 0.05, "RMS changed outside interval"
+		# Check performance metrics:
+		var_in = nanvar(inlc.flux)
+		var_out = nanvar(outlc.flux)
+		var_diff = np.abs(var_out - var_goal) / var_goal
+		print(var_in, var_out, var_diff)
+		assert var_diff < 0.05, "VARIANCE changed outside interval"
 
-	ptp_in = nanmedian(np.abs(np.diff(inlc.flux)))
-	ptp_out = nanmedian(np.abs(np.diff(outlc.flux)))
-	ptp_diff = np.abs(ptp_out - ptp_goal) / ptp_goal
-	print(ptp_in, ptp_out, ptp_diff)
-	assert ptp_diff < 0.05, "PTP changed outside interval"
+		rms_in = rms_timescale(inlc)
+		rms_out = rms_timescale(outlc)
+		rms_diff = np.abs(rms_out - rms_goal) / rms_goal
+		print(rms_in, rms_out, rms_diff)
+		assert rms_diff < 0.05, "RMS changed outside interval"
+
+		ptp_in = nanmedian(np.abs(np.diff(inlc.flux)))
+		ptp_out = nanmedian(np.abs(np.diff(outlc.flux)))
+		ptp_diff = np.abs(ptp_out - ptp_goal) / ptp_goal
+		print(ptp_in, ptp_out, ptp_diff)
+		assert ptp_diff < 0.05, "PTP changed outside interval"
+
+		# Check FITS file:
+		with fits.open(os.path.join(tmpdir, save_file), mode='readonly') as hdu:
+			# Lightcurve FITS table:
+			fitslc = hdu['LIGHTCURVE'].data
+			hdr = hdu['LIGHTCURVE'].header
+
+			# Basic checks of FITS table:
+			assert all(fitslc['TIME'] == inlc.time), "Input time is nonidentical to output time"
+			assert all(fitslc['FLUX_CORR'] != inlc.flux), "Input and output flux are identical."
+			assert np.sum(np.isnan(fitslc['FLUX_CORR'])) < 0.5*len(fitslc['TIME']), "More than half the lightcurve is NaN"
+
+			if corrector == 'ensemble':
+				# Check special headers:
+				assert hdr['ENS_NUM'] > 0
+				assert hdr['ENS_DLIM'] > 0
+				assert hdr['ENS_RLIM'] > 0
+				assert hdr['ENS_DREL'] > 0
+
+				# Special extension for ensemble:
+				tic = hdu['ENSEMBLE'].field('TIC')
+				bzeta = hdu['ENSEMBLE'].field('BZETA')
+				assert len(tic) == len(bzeta)
+				assert len(np.unique(tic)) == len(tic)
+
+			if corrector == 'cbv':
+				# Check special headers:
+				assert hdr['CBV_NUM'] > 0
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
