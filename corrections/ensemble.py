@@ -238,10 +238,10 @@ class EnsembleCorrector(BaseCorrector):
 		# frange is the light curve range from the 5th to the 95th percentile,
 		# drange is the relative standard deviation of the differenced light curve (to whiten the noise)
 		target_flux_median = lc.meta['task']['mean_flux']
-		target_frange = np.diff(np.nanpercentile(lc.flux, [5, 95])) / target_flux_median
-		target_drange = nanstd(np.diff(lc.flux)) / target_flux_median
+		lc.meta['frange'] = np.diff(np.nanpercentile(lc.flux, [5, 95])) / target_flux_median
+		lc.meta['drange'] = nanstd(np.diff(lc.flux)) / target_flux_median
 
-		logger.debug("Main target: drange=%f, frange=%f", drange, frange)
+		logger.debug("Main target: drange=%f, frange=%f", lc.meta['drange'], lc.meta['frange'])
 		logger.debug("lc size: %f", len(lc.flux))
 
 		# Query for a list of the nearest neigbors to test:
@@ -338,10 +338,10 @@ class EnsembleCorrector(BaseCorrector):
 
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
-		self.ensemble_starlist = {
-			'starids': [tl['starid'] for tl in temp_list],
-			'bzetas': [tl['bzeta'] for tl in temp_list]
-		}
+		# self.ensemble_starlist = {
+		# 	'starids': [tl['starid'] for tl in temp_list],
+		# 	'bzetas': [tl['bzeta'] for tl in temp_list]
+		# }
 
 		# Set additional headers for FITS output:
 		lc_corr.meta['additional_headers']['ENS_NUM'] = (len(temp_list), 'Number of targets in ensemble')
