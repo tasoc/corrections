@@ -258,7 +258,7 @@ class EnsembleCorrector(BaseCorrector):
 			next_star_lc = self.load_lightcurve(next_star_index)
 
 			# Remove bad points by setting them to NaN:
-			next_star_lc_quality_mask = TESSQualityFlags.filter(next_star_lc.quality, TESSQualityFlags.HARDEST_BITMASK)
+			next_star_lc_quality_mask = ~TESSQualityFlags.filter(next_star_lc.quality, TESSQualityFlags.HARDEST_BITMASK)
 			next_star_lc.flux[next_star_lc_quality_mask] = np.NaN
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
