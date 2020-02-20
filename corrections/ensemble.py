@@ -12,7 +12,7 @@ The ensemble photometry detrending class.
 
 import numpy as np
 import os.path
-from bottleneck import nanmedian
+from bottleneck import nanmedian, nanstd, nansum, ss
 #import scipy.interpolate
 #import scipy.optimize as sciopt
 from timeit import default_timer
@@ -22,9 +22,10 @@ from scipy.optimize import minimize
 from sklearn.neighbors import NearestNeighbors
 import copy
 from .plots import plt, save_figure
+from .quality import TESSQualityFlags
 from . import BaseCorrector, STATUS
 
-
+#--------------------------------------------------------------------------------------------------
 class EnsembleCorrector(BaseCorrector):
 	"""
 	DOCSTRING
@@ -38,7 +39,7 @@ class EnsembleCorrector(BaseCorrector):
 			*args: Arguments for the BaseCorrector class
 			**kwargs: Keyword Arguments for the BaseCorrector class
 		"""
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super().__init__(*args, **kwargs)
 
 		logger = logging.getLogger(__name__)
 		self.debug = logger.isEnabledFor(logging.DEBUG)
@@ -57,22 +58,30 @@ class EnsembleCorrector(BaseCorrector):
 
 		Returns:
 			list: List of `priority` identifiers of the `n_neighbors` nearest stars.
-				Thest values can be passed directly to :func:`load_lightcurve` to load the lightcurves of the targets.
+				These values can be passed directly to :func:`load_lightcurve` to load the lightcurves of the targets.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
+		sector = lc.sector
 		camera = lc.camera
 		ccd = lc.ccd
 		ds = 'ffi' if lc.meta["task"]["datasource"] == 'ffi' else 'tpf'
-		key = (ds, camera, ccd)
+		key = (sector, ds, camera, ccd)
 
 		# Check if the NearestNeighbors object already exists for this camera and CCD.
 		# If not create it, and store it for later use.
 		if key not in self._nearest_neighbors:
 			# StarID, pixel positions are retrieved from the database:
 			select_params = ["todolist.priority", "pos_row", "pos_column"]
-			search_params = ["camera={:d}".format(camera), "ccd={:d}".format(ccd), "mean_flux>0"]
+			search_params = [
+				'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
+				"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+				"camera={:d}".format(camera),
+				"ccd={:d}".format(ccd),
+				"sector={:d}".format(sector),
+				"mean_flux>0"
+			]
 			if ds == 'ffi':
 				search_params.append("datasource = 'ffi'")
 			else:
@@ -96,7 +105,7 @@ class EnsembleCorrector(BaseCorrector):
 		X = np.array([[lc.meta['task']['pos_row'], lc.meta['task']['pos_column']]])
 
 		# Use the NearestNeighbor object to find the targets closest to the main target:
-		distance_index = nn.kneighbors(X, n_neighbors=n_neighbors+1, return_distance=False)
+		distance_index = nn.kneighbors(X, n_neighbors=min(n_neighbors+1, len(priority)), return_distance=False)
 		nearby_stars = priority[distance_index.flatten()]
 
 		# Remove the main target from the list, if it is included:
@@ -104,13 +113,14 @@ class EnsembleCorrector(BaseCorrector):
 		nearby_stars = nearby_stars[indx]
 
 		# Return the list of nearby stars:
-		print(nearby_stars)
+		logger = logging.getLogger(__name__)
+		logger.debug(nearby_stars)
 		return nearby_stars
 
 	#----------------------------------------------------------------------------------------------
 	def add_ensemble_member(self, lc, next_star_lc, next_star_index, temp_list, lc_ensemble, bzetas):
 		"""
-		Add a given target to the ensemble list 
+		Add a given target to the ensemble list
 
 		Parameters:
 			next_star_lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
@@ -121,14 +131,14 @@ class EnsembleCorrector(BaseCorrector):
 		.. codeauthor:: Derek Buzasi
 		"""
 		# Median subtracted flux of target and ensemble candidate
-		target_flux_median = np.nanmedian(lc.flux)
+		target_flux_median = nanmedian(lc.flux)
 		mtarget_flux = lc.flux - target_flux_median
 		ens_flux = next_star_lc.flux
-		mens_flux = ens_flux - np.nanmedian(ens_flux)
+		mens_flux = ens_flux - nanmedian(ens_flux)
 
 		# 2 sigma
-		ens2sig = 2 * np.std(mens_flux)
-		targ2sig = 2 * np.std(mtarget_flux)
+		ens2sig = 2 * nanstd(mens_flux)
+		targ2sig = 2 * nanstd(mtarget_flux)
 
 		# absolute balue
 		abstarg = np.absolute(mtarget_flux)
@@ -160,12 +170,14 @@ class EnsembleCorrector(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def apply_ensemble(self, lc, lc_ensemble, lc_corr):
 		"""
-		Apply the ensemble correction method to the target light curve 
+		Apply the ensemble correction method to the target light curve
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			lc (`TESSLightCurve` object): Lightcurve object for target obtained 
+					from :func:`load_lightcurve`.
 			lc_ensemble (list): List of ensemble members flux as ndarrays
-			lc_corr (`TESSLightCurve` object): Lightcurve object which stores in `flux` the ensemble corrected flux values.
+			lc_corr (`TESSLightCurve` object): Lightcurve object which stores in `flux` the ensemble 
+					corrected flux values.
 
         Returns: 
             lc_corr (`TESSLightCurve` object): The updated object with corrected flux values;
@@ -178,8 +190,8 @@ class EnsembleCorrector(BaseCorrector):
 		lc_medians = nanmedian(np.asarray(lc_ensemble), axis=0)
 
 		def func2(scalef, *args):
-			num1 = np.sum(np.abs(np.diff(np.divide(args[0],args[1]+scalef))))
-			denom1 = np.median(np.divide(args[0],args[1]+scalef))
+			num1 = nansum(np.abs(np.diff(args[0] / (args[1]+scalef))))
+			denom1 = nanmedian(args[0] / (args[1] + scalef))
 			return num1/denom1
 
 		scale0 = 1.0
@@ -191,7 +203,6 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr /= nanmedian(lc_corr.flux)
 		lc_corr *= nanmedian(lc.flux)
 		return lc_corr
-	
 	
 	#----------------------------------------------------------------------------------------------
 	def do_correction(self, lc):
@@ -233,8 +244,8 @@ class EnsembleCorrector(BaseCorrector):
 		# frange is the light curve range from the 5th to the 95th percentile,
 		# drange is the relative standard deviation of the differenced light curve (to whiten the noise)
 		target_flux_median = lc.meta['task']['mean_flux']
-		frange = (np.percentile(lc.flux, 95) - np.percentile(lc.flux, 5)) / target_flux_median
-		drange = np.std(np.diff(lc.flux)) / target_flux_median
+		frange = np.diff(np.nanpercentile(lc.flux, [5, 95])) / target_flux_median
+		drange = nanstd(np.diff(lc.flux)) / target_flux_median
 		lc.meta.update({'frange': frange, 'drange': drange})
 
 		logger.debug("Main target: drange=%f, frange=%f", drange, frange)
@@ -271,8 +282,8 @@ class EnsembleCorrector(BaseCorrector):
 			next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
-			frange = (np.percentile(next_star_lc.flux, 95) - np.percentile(next_star_lc.flux, 5)) / next_star_lc.meta['task']['mean_flux']
-			drange = np.std(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
+			frange = np.diff(np.nanpercentile(next_star_lc.flux, [5, 95])) / next_star_lc.meta['task']['mean_flux']
+			drange = nanstd(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
 
 			next_star_lc.meta.update({'frange': frange, 'drange': drange})
 
@@ -321,9 +332,6 @@ class EnsembleCorrector(BaseCorrector):
 							temp_list = test_list
 							break
 
-					
-					#break
-
 		# Ensure that we reached the minimum number of stars in the ensemble:
 		if len(temp_list) < min_star_count:
 			logger.error("Not enough stars for ensemble")
@@ -333,7 +341,8 @@ class EnsembleCorrector(BaseCorrector):
 		logger.debug("len(lc) vs len(ens): %f vs %f", len(lc.flux), len(lc_ensemble[0]))
 
 		# Convert to parts-per-million:
-		lc_corr = 1e6*(lc_corr/nanmedian(lc_corr.flux) - 1)
+		corr_median = nanmedian(lc_corr.flux)
+		lc_corr = 1e6*(lc_corr/corr_median - 1)
 
 		# We probably want to return additional information, including the list of stars in the ensemble, and potentially other things as well.
 		logger.info(temp_list)
@@ -343,6 +352,7 @@ class EnsembleCorrector(BaseCorrector):
 		}
 
 		# Set additional headers for FITS output:
+		lc_corr.meta['additional_headers']['ENS_MED'] = (corr_median, 'Median of corrected light curve before ppm')
 		lc_corr.meta['additional_headers']['ENS_NUM'] = (len(temp_list), 'Number of targets in ensemble')
 		lc_corr.meta['additional_headers']['ENS_DLIM'] = (drange_lim, 'Limit on differenced range metric')
 		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
