@@ -28,7 +28,8 @@ class EnsembleCorrector(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def __init__(self, *args, **kwargs):
 		"""
-		Initialize the correction object
+		Initialize the correction object.
+
 		Parameters:
 			*args: Arguments for the BaseCorrector class
 			**kwargs: Keyword Arguments for the BaseCorrector class
@@ -118,7 +119,10 @@ class EnsembleCorrector(BaseCorrector):
 		Add a given target to the ensemble list
 
 		Parameters:
-			next_star_lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			lc (`TESSLightCurve` object): Lightcurve for target obtained
+				from :func:`load_lightcurve`.
+			next_star_lc (`TESSLightCurve` object): Lightcurve for star to add to ensemble
+				obtained from :func:`load_lightcurve`.
 			temp_list (list): List of TIC ID's for ensemble members as Strings
 			lc_ensemble (list): List of ensemble members flux as ndarrays
 
@@ -174,9 +178,9 @@ class EnsembleCorrector(BaseCorrector):
 			lc_corr (`TESSLightCurve` object): Lightcurve object which stores in `flux` the ensemble
 				corrected flux values.
 
-        Returns:
-            lc_corr (`TESSLightCurve` object): The updated object with corrected flux values;
-                the object must be returned explicitly because passed object values do not update in place
+		Returns:
+			lc_corr (`TESSLightCurve` object): The updated object with corrected flux values;
+				the object must be returned explicitly because passed object values do not update in place
 
 		.. codeauthor:: Lindsey Carboneau
 		.. codeauthor:: Derek Buzasi
@@ -253,6 +257,7 @@ class EnsembleCorrector(BaseCorrector):
 		# Define variables to use in the loop to build the ensemble of stars
 		# List of star indexes to be included in the ensemble
 		temp_list = []
+		lc_ensemble = []
 		bzetas = []
 		# Test values store current best correction for testing vs. additional ensemble members
 		# NOTE: this might be done more efficiently with further functionalization of the loop below and updated loop bounds/conditions!
@@ -263,8 +268,6 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Start loop to build ensemble
 		ensemble_start = default_timer()
-		lc_ensemble = []
-		mtarget_flux = lc.flux - target_flux_median
 
 		# Loop through the neighbors to build the ensemble:
 		for next_star_index in nearby_stars:
@@ -296,7 +299,7 @@ class EnsembleCorrector(BaseCorrector):
 					if fom is np.nan:
 						# the first time we hit the minimum ensemble size, try to correct the target
 						# storing all these as 'test' - we'll revert to these values if adding the next star doesn't 'surpass the test'
-                        # `deepcopy` because otherwise it uses pointers and overwrites the value we need
+						# `deepcopy` because otherwise it uses pointers and overwrites the value we need
 						test_corr = self.apply_ensemble(lc, lc_ensemble, lc_corr)
 						test_ens = copy.deepcopy(lc_ensemble)
 						test_list = copy.deepcopy(temp_list)
@@ -353,8 +356,7 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
 		lc_corr.meta['additional_headers']['ENS_RLIM'] = (frange_lim, 'Limit on flux range metric')
 
-
-        # Replace removed points with NaN's so the info can be saved to the FITS - without this, the BaseCorrector will raise an `IndexError`
+		# Replace removed points with NaN's so the info can be saved to the FITS - without this, the BaseCorrector will raise an `IndexError`
 		if len(lc_corr.flux) != len(og_time):
 			fix_flux = np.asarray(lc_corr.flux.copy())
 			fix_err = np.asarray(lc_corr.flux_err.copy())
