@@ -292,7 +292,9 @@ class EnsembleCorrector(BaseCorrector):
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
 			if drange < drange_lim and drange < drange_relfactor*lc.meta['drange'] and frange < frange_lim:
 
+				# Add the star to the ensemble:
 				self.add_ensemble_member(lc, next_star_lc, next_star_index, temp_list, lc_ensemble, bzetas)
+
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
 				if len(temp_list) >= star_count:
 
@@ -310,7 +312,6 @@ class EnsembleCorrector(BaseCorrector):
 						# NOTE: I think this can be more efficiently, but I'm scared to 'fix' what is currently working - LC
 						########
 						continue
-
 					else:
 						# see if one more member makes the ensemble 'surpass the test'
 						lc_corr = self.apply_ensemble(lc, lc_ensemble, lc_corr)

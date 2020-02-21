@@ -495,7 +495,7 @@ class BaseCorrector(object):
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
-		
+
 		logger = logging.getLogger(__name__)
 
 		# Find the name of the correction method based on the class name:
@@ -528,16 +528,14 @@ class BaseCorrector(object):
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
 
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
-			logger.debug("Saving lightcurve to {}".format(save_file))
+			logger.debug("Saving lightcurve to '%s'", save_file)
 
 			# Change permission of copied file to allow the addition of the corrected lightcurve
 			os.chmod(save_file, 0o640)
 
 			# Open the FITS file to overwrite the corrected flux columns:
 			with fits.open(save_file, mode='update') as hdu:
-				logger.debug("Updating file: {}".format(save_file))
 				# Overwrite the corrected flux columns:
-				logger.debug("Status of correction: {}".format((np.isnan(np.asarray(lc.flux))).tolist().count(False)))
 				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
 				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
 				hdu['LIGHTCURVE'].data['QUALITY'] = lc.quality
