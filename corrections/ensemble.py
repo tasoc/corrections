@@ -114,7 +114,7 @@ class EnsembleCorrector(BaseCorrector):
 		return nearby_stars
 
 	#----------------------------------------------------------------------------------------------
-	def add_ensemble_member(self, lc, next_star_lc, next_star_index, temp_list, lc_ensemble, bzetas):
+	def add_ensemble_member(self, lc, next_star_lc, temp_list, lc_ensemble, bzetas):
 		"""
 		Add a given target to the ensemble list
 
@@ -161,7 +161,7 @@ class EnsembleCorrector(BaseCorrector):
 
 		ens_flux = ens_flux + res.x
 
-		temp_list.append(next_star_index) # , next_star_lc.copy()
+		temp_list.append(next_star_lc.targetid) # , next_star_lc.copy()
 		bzetas.append(float(res.x))
 		lc_ensemble.append(ens_flux/nanmedian(ens_flux))
 		# temp_list and lc_ensemble are lists, and don't need to be returned because append() updates in place
@@ -292,13 +292,11 @@ class EnsembleCorrector(BaseCorrector):
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
 			if drange < drange_lim and drange < drange_relfactor*lc.meta['drange'] and frange < frange_lim:
 
-				# Add the star to the ensemble:
-				self.add_ensemble_member(lc, next_star_lc, next_star_index, temp_list, lc_ensemble, bzetas)
-
+				self.add_ensemble_member(lc, next_star_lc, temp_list, lc_ensemble, bzetas)
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
 				if len(temp_list) >= star_count:
 
-					if fom is np.nan:
+					if np.isnan(fom):
 						# the first time we hit the minimum ensemble size, try to correct the target
 						# storing all these as 'test' - we'll revert to these values if adding the next star doesn't 'surpass the test'
 						# `deepcopy` because otherwise it uses pointers and overwrites the value we need
