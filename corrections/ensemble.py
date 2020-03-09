@@ -292,7 +292,9 @@ class EnsembleCorrector(BaseCorrector):
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
 			if drange < drange_lim and drange < drange_relfactor*lc.meta['drange'] and frange < frange_lim:
 
+				# Add the star to the ensemble:
 				self.add_ensemble_member(lc, next_star_lc, temp_list, lc_ensemble, bzetas)
+
 				# Pause the loop if we have reached the desired number of stars, and check the correction:
 				if len(temp_list) >= star_count:
 
@@ -366,8 +368,8 @@ class EnsembleCorrector(BaseCorrector):
 				fix_flux = np.insert(fix_flux, ind, np.nan)
 				fix_err = np.insert(fix_err, ind, np.nan)
 
-			lc_corr.flux = fix_flux.tolist()
-			lc_corr.flux_err = fix_err.tolist()
+			lc_corr.flux = fix_flux
+			lc_corr.flux_err = fix_err
 			lc_corr.time = og_time
 
 		#------------------------------------------------------------------------------------------

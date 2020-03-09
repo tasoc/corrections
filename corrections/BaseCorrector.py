@@ -544,10 +544,6 @@ class BaseCorrector(object):
 				hdu['LIGHTCURVE'].header['CORRMET'] = (CorrMethod, 'Lightcurve correction method')
 				hdu['LIGHTCURVE'].header['CORRVER'] = (__version__, 'Version of correction pipeline')
 
-				# Set additional headers so that the saved light curve can be opened using `lightkurve`
-				hdu['PRIMARY'].header['MISSION'] = 'TESS'
-				hdu['PRIMARY'].header['CREATOR'] = 'LIGHTCURVE'
-
 				# Set additional headers provided by the individual methods:
 				if lc.meta['additional_headers']:
 					for key, value in lc.meta['additional_headers'].items():
