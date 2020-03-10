@@ -280,7 +280,7 @@ class EnsembleCorrector(BaseCorrector):
 			drange = nanstd(np.diff(next_star_lc.flux)) / next_star_lc.meta['task']['mean_flux']
 
 			logger.debug("drange=%f, frange=%f", drange, frange)
-			logger.debug("lc size: %f", len(next_star_lc.flux))
+			logger.debug("lc size: %f", len(next_star_lc))
 
 			# Stars are added to ensemble if they fulfill the requirements. These are (1) drange less than min_range, (2) drange less than 10 times the
 			# drange of the target (to ensure exclusion of relatively noisy stars), and frange less than 0.03 (to exclude highly variable stars)
@@ -331,7 +331,7 @@ class EnsembleCorrector(BaseCorrector):
 			return None, STATUS.ERROR
 
 		logger.info("Build ensemble, Time: %f", default_timer()-ensemble_start)
-		logger.debug("len(lc) vs len(ens): %f vs %f", len(lc.flux), len(lc_ensemble[0]))
+		logger.debug("len(lc) vs len(ens): %f vs %f", len(lc), len(lc_ensemble[0]))
 
 		# Convert to parts-per-million:
 		corr_median = nanmedian(lc_corr.flux)
