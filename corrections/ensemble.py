@@ -150,8 +150,8 @@ class EnsembleCorrector(BaseCorrector):
 
 		# sigma clip the flux used to fit, but don't use that flux again
 		with np.errstate(invalid='ignore'):
-			clip_target_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mtarget_flux, 1)
-			clip_ens_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mens_flux, 1)
+			clip_target_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mtarget_flux, np.NaN)
+			clip_ens_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mens_flux, np.NaN)
 
 		args = (clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median)
 
@@ -229,12 +229,8 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Clean up the lightcurve by removing nans and ignoring data points with bad quality flags
 		# these values need to be removed, or they will affect the ensemble later
-		og_time = lc.time.copy()
-		lc = lc.remove_nans()
-		lc_quality_mask = (lc.quality == 0)
-		lc.time = lc.time[lc_quality_mask]
-		lc.flux = lc.flux[lc_quality_mask]
-		lc.flux_err = lc.flux_err[lc_quality_mask]
+		lc_quality_mask = ~CorrectorQualityFlags.filter(lc.quality)
+		lc.flux[lc_quality_mask] = np.NaN
 		lc_corr = lc.copy()
 
 		# Set up basic statistical parameters for the light curves.
@@ -268,12 +264,11 @@ class EnsembleCorrector(BaseCorrector):
 		# Loop through the neighbors to build the ensemble:
 		for next_star_index in nearby_stars:
 			# Get lightkurve for next star closest to target:
-			next_star_lc = self.load_lightcurve(next_star_index).remove_nans()
+			next_star_lc = self.load_lightcurve(next_star_index)
 
-			next_star_lc_quality_mask = (next_star_lc.quality == 0)
-			next_star_lc.time = next_star_lc.time[next_star_lc_quality_mask]
-			next_star_lc.flux = next_star_lc.flux[next_star_lc_quality_mask]
-			next_star_lc.flux_err = next_star_lc.flux_err[next_star_lc_quality_mask]
+			# Remove bad points by setting them to NaN:
+			next_star_lc_quality_mask = ~CorrectorQualityFlags.filter(next_star_lc.quality)
+			next_star_lc.flux[next_star_lc_quality_mask] = np.NaN
 
 			# Compute the rest of the statistical parameters for the next star to be added to the ensemble.
 			frange = np.diff(np.nanpercentile(next_star_lc.flux, [5, 95])) / next_star_lc.meta['task']['mean_flux']
@@ -350,21 +345,6 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr.meta['additional_headers']['ENS_DLIM'] = (drange_lim, 'Limit on differenced range metric')
 		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
 		lc_corr.meta['additional_headers']['ENS_RLIM'] = (frange_lim, 'Limit on flux range metric')
-
-		# Replace removed points with NaN's so the info can be saved to the FITS - without this, the BaseCorrector will raise an `IndexError`
-		if len(lc_corr.flux) != len(og_time):
-			fix_flux = np.asarray(lc_corr.flux.copy())
-			fix_err = np.asarray(lc_corr.flux_err.copy())
-			indices = np.array(np.where(np.isin(og_time, lc_corr.time, assume_unique=True, invert=True)))[0]
-			indices.tolist()
-
-			for ind in indices:
-				fix_flux = np.insert(fix_flux, ind, np.nan)
-				fix_err = np.insert(fix_err, ind, np.nan)
-
-			lc_corr.flux = fix_flux
-			lc_corr.flux_err = fix_err
-			lc_corr.time = og_time
 
 		#------------------------------------------------------------------------------------------
 		if self.plot and self.debug:
