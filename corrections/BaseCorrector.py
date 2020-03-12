@@ -22,7 +22,7 @@ from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
 from .quality import TESSQualityFlags, CorrectorQualityFlags
-from .utilities import rms_timescale, ListHandler, fix_fits_table_headers
+from .utilities import rms_timescale, ptp, ListHandler, fix_fits_table_headers
 from .manual_filters import manual_exclude
 from .version import get_version
 
@@ -94,6 +94,11 @@ class BaseCorrector(object):
 			self.input_folder = os.path.dirname(input_folder)
 			todo_file = input_folder
 
+		# The path to the TODO list:
+		logger.debug("TODO file: %s", todo_file)
+		if not os.path.isfile(todo_file):
+			raise FileNotFoundError("TODO file not found")
+
 		self.CorrMethod = {
 			'BaseCorrector': 'base',
 			'EnsembleCorrector': 'ensemble',
@@ -114,11 +119,6 @@ class BaseCorrector(object):
 
 			# Make sure that the folder exists:
 			os.makedirs(self.data_folder, exist_ok=True)
-
-		# The path to the TODO list:
-		logger.debug("TODO file: %s", todo_file)
-		if not os.path.isfile(todo_file):
-			raise FileNotFoundError("TODO file not found")
 
 		# Create readonly copy of the TODO-file:
 		with tempfile.NamedTemporaryFile(dir=self.input_folder, suffix='.sqlite', delete=False) as tmpfile:
@@ -142,15 +142,20 @@ class BaseCorrector(object):
 
 	#----------------------------------------------------------------------------------------------
 	def __del__(self):
-		if hasattr(self, 'cursor') and self.cursor: self.cursor.close()
-		if hasattr(self, 'conn') and self.conn: self.conn.close()
-		if hasattr(self, 'todo_file_readonly') and os.path.isfile(self.todo_file_readonly):
-			os.remove(self.todo_file_readonly)
+		self.close()
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close correction object."""
-		pass
+		if hasattr(self, 'cursor') and self.cursor:
+			try:
+				self.cursor.close()
+			except sqlite3.ProgrammingError:
+				pass
+		if hasattr(self, 'conn') and self.conn:
+			self.conn.close()
+		if hasattr(self, 'todo_file_readonly') and os.path.isfile(self.todo_file_readonly):
+			os.remove(self.todo_file_readonly)
 
 	#----------------------------------------------------------------------------------------------
 	def plot_folder(self, lc):
@@ -242,7 +247,7 @@ class BaseCorrector(object):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
-			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
+			details['ptp'] = ptp(lc_corr)
 
 			# Diagnostics specific to the method:
 			if self.CorrMethod == 'cbv':

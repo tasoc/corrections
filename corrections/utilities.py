@@ -128,6 +128,25 @@ def rms_timescale(lc, timescale=3600/86400):
 	return mad_to_sigma * nanmedian(np.abs(flux_bin - nanmedian(flux_bin)))
 
 #--------------------------------------------------------------------------------------------------
+def ptp(lc):
+	"""
+	Compute robust Point-To-Point scatter.
+
+	Parameters:
+		lc (``lightkurve.TessLightCurve`` object): Lightcurve to calculate PTP for.
+
+	Returns:
+		float: Robust PTP.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	if len(lc.flux) == 0 or allnan(lc.flux):
+		return np.nan
+	if len(lc.time) == 0 or allnan(lc.time):
+		raise ValueError("Invalid time-vector specified. No valid timestamps.")
+	return nanmedian(np.abs(np.diff(lc.flux)))
+
+#--------------------------------------------------------------------------------------------------
 def fix_fits_table_headers(table, column_titles=None):
 	"""
 	Fix headers in FITS files, adding appropiate comments where they are missing.

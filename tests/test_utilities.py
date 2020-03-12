@@ -6,6 +6,7 @@ Tests of utility functions.
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
+import pytest
 import sys
 import os
 import numpy as np
@@ -13,7 +14,7 @@ import tempfile
 import warnings
 from lightkurve import LightCurve, LightkurveWarning
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from corrections.utilities import savePickle, loadPickle, sphere_distance, rms_timescale
+from corrections.utilities import savePickle, loadPickle, sphere_distance, rms_timescale, ptp
 
 #--------------------------------------------------------------------------------------------------
 def test_pickle():
@@ -83,6 +84,14 @@ def test_rms_timescale():
 	with np.testing.assert_raises(ValueError):
 		rms = rms_timescale(LightCurve(time=time_invalid, flux=flux))
 
+	time_someinvalid = time.copy()
+	time_someinvalid[2] = np.nan
+	with warnings.catch_warnings():
+		warnings.filterwarnings('ignore', category=LightkurveWarning, message='LightCurve object contains NaN times')
+		rms = rms_timescale(LightCurve(time=time_someinvalid, flux=flux))
+	print(rms)
+	np.testing.assert_allclose(rms, 0)
+
 	# Test with timescale longer than timespan should return zero:
 	flux = np.random.randn(1000)
 	time = np.linspace(0, 27, len(flux))
@@ -91,7 +100,36 @@ def test_rms_timescale():
 	np.testing.assert_allclose(rms, 0)
 
 #--------------------------------------------------------------------------------------------------
+def test_ptp():
+
+	time = np.linspace(0, 27, 1000)
+	flux = np.zeros(len(time))
+
+	p = ptp(LightCurve(time=time, flux=flux))
+	print(p)
+	np.testing.assert_allclose(p, 0)
+
+	p = ptp(LightCurve(time=time, flux=flux*np.nan))
+	print(p)
+	assert np.isnan(p), "Should return nan on pure nan input"
+
+	p = ptp(LightCurve(time=[], flux=[]))
+	print(p)
+	assert np.isnan(p), "Should return nan on empty input"
+
+	# Pure nan in the time-column should raise ValueError:
+	with np.testing.assert_raises(ValueError):
+		with warnings.catch_warnings():
+			warnings.filterwarnings('ignore', category=LightkurveWarning, message='LightCurve object contains NaN times')
+			p = ptp(LightCurve(time=time*np.nan, flux=flux))
+
+	# Test with constant lightcurve should return zero:
+	flux = np.full(100, np.pi)
+	time = np.linspace(0, 27, len(flux))
+	p = ptp(LightCurve(time=time, flux=flux))
+	print(p)
+	np.testing.assert_allclose(p, 0)
+
+#--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	test_pickle()
-	test_sphere_distance()
-	test_rms_timescale()
+	pytest.main([__file__])
