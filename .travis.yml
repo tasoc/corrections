@@ -1,6 +1,7 @@
 language: python
 cache: pip
 os: linux
+dist: xenial
 
 # We are specifying the build matix manually, since there is too little overlap
 # between the different builds:
@@ -14,7 +15,42 @@ jobs:
 
     - name: "Python 3.7 on Linux"
       python: "3.7"
-      dist: xenial
+
+    - name: "Python 3.8 on Linux"
+      python: "3.8"
+      dist: bionic
+
+    - name: "Python 3.6 on Mac"
+      os: osx
+      osx_image: xcode9.4 # Python 3.6.5
+      language: shell
+      before_install:
+        - brew install git-lfs
+        - python3 --version
+        - git lfs install
+        - git lfs pull
+      install:
+        - pip3 install --upgrade pip
+        - pip3 install -r requirements.txt
+        - pip3 install codecov pytest-cov
+      script: python3 -m pytest --cov=starclass/
+      after_success: python3 -m codecov
+
+    - name: "Python 3.7 on Mac"
+      os: osx
+      osx_image: xcode11.2 # Python 3.7.4 running on macOS 10.14.4
+      language: shell
+      before_install:
+        - brew install git-lfs
+        - python3 --version
+        - git lfs install
+        - git lfs pull
+      install:
+        - pip3 install --upgrade pip
+        - pip3 install -r requirements.txt
+        - pip3 install codecov pytest-cov
+      script: python3 -m pytest --cov=starclass/
+      after_success: python3 -m codecov
 
     - name: "Python 3.6 on Windows"
       os: windows
@@ -22,7 +58,6 @@ jobs:
       before_install:
         - choco install python --version 3.6.8
         - python --version
-        - python -m pip install --upgrade pip
         - git lfs pull
       env: PATH=/c/Python36:/c/Python36/Scripts:$PATH
 
@@ -32,7 +67,6 @@ jobs:
       before_install:
         - choco install python --version 3.7.4
         - python --version
-        - python -m pip install --upgrade pip
         - git lfs pull
       env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
 
@@ -52,10 +86,12 @@ jobs:
   allow_failures:
     - name: "Flake8"
     - os: windows
+    - os: osx
+    - python: "3.8"
 
 # command to install dependencies
 install:
-  - pip install --upgrade pip
+  - python -m pip install --upgrade pip
   - pip install -r requirements.txt
   - pip install codecov pytest-cov
 script:
@@ -80,7 +116,7 @@ deploy:
   draft: true
   skip_cleanup: true
   name: "${TRAVIS_TAG/v/Version }"
-  body: "${TRAVIS_TAG/v/Version }"
+  release_notes: "${TRAVIS_TAG/v/Version }"
   on:
     branch:
       - master
