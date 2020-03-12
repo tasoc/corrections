@@ -8,7 +8,6 @@ Tests that run run_tesscorr with several different inputs.
 
 import pytest
 import os.path
-import logging
 import tempfile
 import subprocess
 import shlex
@@ -18,9 +17,8 @@ from test_known_stars import STAR_LIST
 #--------------------------------------------------------------------------------------------------
 def capture_run_tesscorr(params):
 
-	logger = logging.getLogger(__name__)
 	command = '"%s" run_tesscorr.py %s' % (sys.executable, params.strip())
-	logger.warning(command)
+	print(command)
 
 	cmd = shlex.split(command)
 	proc = subprocess.Popen(cmd,
