@@ -4,7 +4,7 @@
 
 from .BaseCorrector import BaseCorrector, STATUS
 from .KASOCFilterCorrector import KASOCFilterCorrector
-from .cbv_corrector import CBVCorrector, CBVCreator, CBV
+from .cbv_corrector import create_cbv, CBVCorrector, CBVCreator, CBV
 from .ensemble import EnsembleCorrector
 from .tesscorr import corrclass
 from .taskmanager import TaskManager
