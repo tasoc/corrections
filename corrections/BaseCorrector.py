@@ -496,6 +496,8 @@ class BaseCorrector(object):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
+		logger = logging.getLogger(__name__)
+
 		# Find the name of the correction method based on the class name:
 		CorrMethod = {
 			'EnsembleCorrector': 'Ensemble',
@@ -511,6 +513,7 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
+			logger.debug("Saving as FITS file")
 
 			if self.CorrMethod == 'cbv':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
@@ -525,6 +528,7 @@ class BaseCorrector(object):
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
 
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
+			logger.debug("Saving lightcurve to '%s'", save_file)
 
 			# Change permission of copied file to allow the addition of the corrected lightcurve
 			os.chmod(save_file, 0o640)
