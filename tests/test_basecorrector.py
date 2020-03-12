@@ -16,28 +16,16 @@ from corrections import BaseCorrector
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
 #--------------------------------------------------------------------------------------------------
-def test_import():
-	"""
-	Tests if the module can even be imported.
-
-	Doesn't really do anything else..."""
-
-	with BaseCorrector(INPUT_DIR) as bc:
-		assert bc.__class__.__name__ == 'BaseCorrector', "Did not get the correct class name back"
-		assert bc.input_folder == INPUT_DIR, "Incorrect input folder"
-
-#--------------------------------------------------------------------------------------------------
 def test_import_nonexistent():
 	"""
 	Tests that BaseCorrector handles being called with non-existing input directory.
 	"""
-
 	with pytest.raises(FileNotFoundError):
 		with BaseCorrector(INPUT_DIR + '/does/not/exist/'):
 			pass
 
 #--------------------------------------------------------------------------------------------------
-def test_search_database():
+def test_search_database(PRIVATE_TODO_FILE):
 	"""
 	Tests the search_database method of BaseCorrector.
 
@@ -46,7 +34,7 @@ def test_search_database():
 
 	test_priority = 17
 
-	with BaseCorrector(INPUT_DIR) as bc:
+	with BaseCorrector(PRIVATE_TODO_FILE) as bc:
 
 		res1 = bc.search_database(search='todolist.priority=%d' % test_priority)
 		print(res1)
@@ -74,6 +62,4 @@ def test_search_database():
 
 #----------------------------------------------------------------------
 if __name__ == '__main__':
-	test_import()
-	test_import_nonexistent()
-	test_search_database()
+	pytest.main([__file__])

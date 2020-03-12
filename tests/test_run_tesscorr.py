@@ -11,9 +11,9 @@ import os.path
 import tempfile
 import subprocess
 import shlex
+from test_known_stars import STAR_LIST
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-test_data_available = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available.txt'))
 
 #--------------------------------------------------------------------------------------------------
 def capture(command):
@@ -72,29 +72,15 @@ def test_run_tesscorr_invalid_ccd():
 	assert 'error: argument --ccd: invalid choice: 14 (choose from 1, 2, 3, 4)' in err
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize("datasource", ['ffi', 'tpf'])
-def test_run_tesscorr_cbv(datasource):
+@pytest.mark.parametrize("method,starid,datasource,var_goal,rms_goal,ptp_goal", STAR_LIST)
+def test_run_tesscorr(SHARED_INPUT_DIR, method, starid, datasource, var_goal,rms_goal, ptp_goal):
 	with tempfile.TemporaryDirectory() as tmpdir:
-		command = 'python run_tesscorr.py -o -p --starid=29281992 -m cbv --datasource=%s "%s" "%s"' % (
-			datasource,
-			INPUT_DIR,
-			tmpdir
-		)
-		out, err, exitcode = capture(command)
-
-	assert ' - ERROR - ' not in err
-	assert exitcode == 0
-
-#--------------------------------------------------------------------------------------------------
-@pytest.mark.skipif(not test_data_available,
-	reason="This requires a sector of data. Only run if available.")
-@pytest.mark.parametrize("datasource", ['ffi']) #  'tpf'
-def test_run_tesscorr_ensemble(datasource):
-	with tempfile.TemporaryDirectory() as tmpdir:
-		command = 'python run_tesscorr.py -o -p --starid=29281992 -m ensemble --datasource=%s "%s" "%s"' % (
-			datasource,
-			INPUT_DIR,
-			tmpdir
+		command = 'python run_tesscorr.py -o -p --starid={starid:d} --method={method:s} --datasource={datasource:s} "{input_dir:s}" "{output:s}"'.format(
+			starid=starid,
+			method=method,
+			datasource=datasource,
+			input_dir=SHARED_INPUT_DIR,
+			output=tmpdir
 		)
 		out, err, exitcode = capture(command)
 
@@ -103,13 +89,4 @@ def test_run_tesscorr_ensemble(datasource):
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	test_run_tesscorr_invalid_method()
-	test_run_tesscorr_invalid_datasource()
-	test_run_tesscorr_invalid_camera()
-	test_run_tesscorr_invalid_ccd()
-
-	test_run_tesscorr_cbv('ffi')
-	test_run_tesscorr_cbv('tpf')
-
-	test_run_tesscorr_ensemble('ffi')
-	#test_run_tesscorr_ensemble('tpf')
+	pytest.main([__file__])

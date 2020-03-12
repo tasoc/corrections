@@ -54,7 +54,7 @@ if __name__ == '__main__':
 
 	# Download the ZIP file if it doesn't already exists:
 	if not os.path.exists(zip_path):
-		download_file('https://tasoc.dk/pipeline/corrections_tests_input.zip', zip_path)
+		download_file('https://tasoc.dk/pipeline/corrections_tests_input_v2.zip', zip_path)
 
 	# Extract files into the input directory:
 	print("Extracting files...")
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 			myzip.extract(member, path=input_dir)
 
 	# Create dummy file that will indicate that data is available
-	with open(os.path.join(input_dir, 'test_data_available.txt'), 'w') as fid:
+	with open(os.path.join(input_dir, 'test_data_available_v2.txt'), 'w') as fid:
 		fid.write("Test data has been downloaded")
 
 	# Delete the ZIP file again:

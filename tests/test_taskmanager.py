@@ -14,18 +14,18 @@ import json
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from corrections import TaskManager, STATUS
 
+INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+
 #--------------------------------------------------------------------------------------------------
-def test_taskmanager():
+def test_taskmanager(PRIVATE_TODO_FILE):
 	"""Test of TaskManager"""
-
-	INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-
-	# Find the shape of the original image:
-	with TaskManager(INPUT_DIR, overwrite=True, cleanup=True) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup=True) as tm:
 		# Get the number of tasks:
+		# Check this number with:
+		#  SELECT COUNT(*) FROM datavalidation_raw WHERE approved=1;
 		numtasks = tm.get_number_tasks()
 		print(numtasks)
-		assert(numtasks == 62700)
+		assert numtasks == 57799
 
 		# Get the first task in the TODO file:
 		task1 = tm.get_task()
@@ -33,13 +33,13 @@ def test_taskmanager():
 
 		# Check that it contains what we know it should:
 		# The first priority in the TODO file is the following:
-		assert(task1['priority'] == 17)
-		assert(task1['starid'] == 29281992)
-		assert(task1['camera'] == 1)
-		assert(task1['ccd'] == 4)
-		assert(task1['datasource'] == 'ffi')
-		assert(task1['sector'] == 1)
-		assert(task1['cbv_area'] == 143)
+		assert task1['priority'] == 17
+		assert task1['starid'] == 29281992
+		assert task1['camera'] == 1
+		assert task1['ccd'] == 4
+		assert task1['datasource'] == 'ffi'
+		assert task1['sector'] == 1
+		assert task1['cbv_area'] == 143
 
 		# Start task with priority=17:
 		tm.start_task(17)
@@ -48,72 +48,66 @@ def test_taskmanager():
 		task2 = tm.get_task()
 		print(task2)
 
-		assert(task2['priority'] == 18)
-		assert(task2['starid'] == 29281992)
-		assert(task2['camera'] == 1)
-		assert(task2['ccd'] == 4)
-		assert(task2['datasource'] == 'tpf')
-		assert(task2['sector'] == 1)
-		assert(task2['cbv_area'] == 143)
+		assert task2['priority'] == 18
+		assert task2['starid'] == 29281992
+		assert task2['camera'] == 1
+		assert task2['ccd'] == 4
+		assert task2['datasource'] == 'tpf'
+		assert task2['sector'] == 1
+		assert task2['cbv_area'] == 143
 
 		# Check that the status did actually change in the todolist:
 		tm.cursor.execute("SELECT corr_status FROM todolist WHERE priority=17;")
 		task1_status = tm.cursor.fetchone()['corr_status']
 		print(task1_status)
 
-		assert(task1_status == STATUS.STARTED.value)
+		assert task1_status == STATUS.STARTED.value
 
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_notexist():
-
-	INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input', 'does-not-exist')
 	with pytest.raises(FileNotFoundError):
-		with TaskManager(INPUT_DIR):
+		with TaskManager(os.path.join(INPUT_DIR, 'does-not-exist')):
 			pass
 
 #--------------------------------------------------------------------------------------------------
-def test_taskmanager_constraints():
-
-	INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 
 	constraints = {'datasource': 'tpf', 'priority': 17}
-	with TaskManager(INPUT_DIR, overwrite=True, cleanup_constraints=constraints) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
 		print(task)
 		assert task is None, "Task1 should be None"
 
 	constraints = {'datasource': 'tpf', 'priority': 17, 'camera': None}
-	with TaskManager(INPUT_DIR, overwrite=True, cleanup_constraints=constraints) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task2 = tm.get_task(**constraints)
 		print(task2)
 		assert task2 == task, "Tasks should be identical"
 
 	constraints = {'datasource': 'ffi', 'priority': 17}
-	with TaskManager(INPUT_DIR, overwrite=True, cleanup_constraints=constraints) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
 		print(task)
 		assert task['priority'] == 17, "Task2 should be #17"
 
 	constraints = ['priority=17']
-	with TaskManager(INPUT_DIR, cleanup_constraints=constraints) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints=constraints) as tm:
 		task4 = tm.get_task(priority=17)
 		print(task4)
 		assert task4['priority'] == 17, "Task4 should be #17"
 
 #--------------------------------------------------------------------------------------------------
-def test_taskmanager_cleanup():
-
-	INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+def test_taskmanager_cleanup(PRIVATE_TODO_FILE):
 
 	# Reset the TODO-file completely, and mark the first task as STARTED:
-	with TaskManager(INPUT_DIR, overwrite=True) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, overwrite=True) as tm:
 		task1 = tm.get_task()
 		print(task1)
 		pri = task1['priority']
 		tm.start_task(pri)
 
 	# Cleanup, but with a constraint not matching the one we changed:
-	with TaskManager(INPUT_DIR, cleanup_constraints={'priority': 18}) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints={'priority': 18}) as tm:
 		# Check that the status did actually change in the todolist:
 		tm.cursor.execute("SELECT corr_status FROM todolist WHERE priority=?;", [pri])
 		task1_status = tm.cursor.fetchone()['corr_status']
@@ -121,7 +115,7 @@ def test_taskmanager_cleanup():
 		assert task1_status == STATUS.STARTED.value
 
 	# Now clean with a constraint that matches:
-	with TaskManager(INPUT_DIR, cleanup_constraints={'priority': pri}) as tm:
+	with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints={'priority': pri}) as tm:
 		# Check that the status did actually change in the todolist:
 		tm.cursor.execute("SELECT corr_status FROM todolist WHERE priority=?;", [pri])
 		task1_status = tm.cursor.fetchone()['corr_status']
@@ -129,21 +123,18 @@ def test_taskmanager_cleanup():
 		assert task1_status is None
 
 #--------------------------------------------------------------------------------------------------
-def test_taskmanager_summary():
-
-	# Load the first image in the input directory:
-	INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-
+def test_taskmanager_summary(PRIVATE_TODO_FILE):
 	with tempfile.TemporaryDirectory() as tmpdir:
 		summary_file = os.path.join(tmpdir, 'summary.json')
-		with TaskManager(INPUT_DIR, overwrite=True, summary=summary_file) as tm:
+		with TaskManager(PRIVATE_TODO_FILE, overwrite=True, summary=summary_file) as tm:
 			# Load the summary file:
 			with open(summary_file, 'r') as fid:
 				j = json.load(fid)
 
 			# Everytning should be really empty:
+			# numtask checked with: SELECT COUNT(*) FROM todolist;
 			print(j)
-			assert j['numtasks'] == 89394
+			assert j['numtasks'] == 78736
 			assert j['UNKNOWN'] == 0
 			assert j['OK'] == 0
 			assert j['ERROR'] == 0
@@ -244,8 +235,4 @@ def test_taskmanager_summary():
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	test_taskmanager()
-	test_taskmanager_notexist()
-	test_taskmanager_constraints()
-	test_taskmanager_cleanup()
-	test_taskmanager_summary()
+	pytest.main([__file__])
