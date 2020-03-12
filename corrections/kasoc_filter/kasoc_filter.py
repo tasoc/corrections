@@ -1141,7 +1141,8 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		turnover = zeros(Ng)
 
 	# Flag with significant sharp and negative features (transits?):
-	flag_transit = (turnover > 0.5) & (xshort < xlong+xpos+xtransit)
+	with np.errstate(invalid='ignore'):
+		flag_transit = (turnover > 0.5) & (xshort < xlong+xpos+xtransit)
 
 	# Plot the final filter:
 	if _output_folder is not None:
@@ -1181,24 +1182,25 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	absx = np.abs(xg)
 	sigma = moving_nanmedian(tg, absx, timescale_long, dt=dt)
 	if sigma_clip is not None:
-		sigma_clip = mad_to_sigma * sigma_clip # less expensive to convert sigma_clip than sigma vector
-		# 9. Estimate the point-to-point error from final timeseries:
-		# We need to re-do it because bad data points might have biases
-		# the previously calculculated sigmas
-		flag_bad = (absx > sigma_clip*sigma)
-		#############################
-		while True:
-			flag_rem = (absx > sigma_clip*sigma)
-			if flag_rem.any():
-				# Remove bad data points from timeseries:
-				flag_bad[flag_rem] = True
-				absx[flag_rem] = NaN
-				sigma = moving_nanmedian(tg, absx, timescale_long, dt=dt)
-			else:
-				break
-		#############################
-		# Bad data points should also be NaN:
-		xg[flag_bad] = NaN
+		with np.errstate(invalid='ignore'):
+			sigma_clip = mad_to_sigma * sigma_clip # less expensive to convert sigma_clip than sigma vector
+			# 9. Estimate the point-to-point error from final timeseries:
+			# We need to re-do it because bad data points might have biases
+			# the previously calculculated sigmas
+			flag_bad = (absx > sigma_clip*sigma)
+			#############################
+			while True:
+				flag_rem = (absx > sigma_clip*sigma)
+				if flag_rem.any():
+					# Remove bad data points from timeseries:
+					flag_bad[flag_rem] = True
+					absx[flag_rem] = NaN
+					sigma = moving_nanmedian(tg, absx, timescale_long, dt=dt)
+				else:
+					break
+			#############################
+			# Bad data points should also be NaN:
+			xg[flag_bad] = NaN
 
 	# Convert to proper sigma indsted of MAD:
 	indx = ~isfinite(xg)
@@ -1239,7 +1241,8 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 			quality_flags[ibreak] += 64
 
 	# Check that the extracted errorbars make sense:
-	indx_invalid_sigma = (sigma < 1e-8)
+	with np.errstate(invalid='ignore'):
+		indx_invalid_sigma = (sigma < 1e-8)
 	#indx_invalid_sigma = (sigma < 0.01*nanmedian(sigma))
 	#nms = nanmedian(sigma)
 	#fig = plt.figure()

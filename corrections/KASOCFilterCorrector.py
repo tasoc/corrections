@@ -9,6 +9,7 @@ Lightcurve correction using the KASOC Filter (Handberg et al. 2015).
 import numpy as np
 import logging
 import requests
+from collections import defaultdict
 from . import kasoc_filter as kf
 from . import BaseCorrector, STATUS
 from .quality import CorrectorQualityFlags
@@ -24,16 +25,13 @@ class KASOCFilterCorrector(BaseCorrector):
 		logger = logging.getLogger(__name__)
 
 		# Store a list of known periods of TESS Objects of Interest (TOIs):
-		self.tois_periods = {}
+		self.tois_periods = defaultdict(list)
 
 		# Contact TASOC database for list of TOIs:
 		r = requests.get('https://tasoc.dk/pipeline/toilist.php')
 		r.raise_for_status()
 		for row in r.json():
-			if row['tic'] in self.tois_periods:
-				self.tois_periods[row['tic']].append(row['period'])
-			else:
-				self.tois_periods[row['tic']] = [row['period']]
+			self.tois_periods[row['tic']].append(row['period'])
 
 		logger.debug(self.tois_periods)
 
@@ -77,7 +75,8 @@ class KASOCFilterCorrector(BaseCorrector):
 			kf.set_output(None)
 
 		# Run the KASOC Filter:
-		time2, lc.flux, lc.flux_err, kasoc_quality, filt, turnover, xlong, xpos, xtransit, xshort = kf.filter(
+		lc_corr = lc.copy()
+		time2, lc_corr.flux, lc_corr.flux_err, kasoc_quality, filt, turnover, xlong, xpos, xtransit, xshort = kf.filter(
 			lc.time,
 			lc.flux,
 			quality=lc.pixel_quality,
@@ -93,26 +92,26 @@ class KASOCFilterCorrector(BaseCorrector):
 		)
 
 		# Translate the quality flags from the KASOC filter to the real ones:
-		lc.quality[kasoc_quality & 2 != 0] |= CorrectorQualityFlags.JumpAdditiveConstant # FIXME: Actually it could be multiplicative
-		lc.quality[kasoc_quality & 4 != 0] |= CorrectorQualityFlags.JumpAdditiveLinear # FIXME: Actually it could be multiplicative
-		lc.quality[kasoc_quality & 8+128 != 0] |= CorrectorQualityFlags.SigmaClip
+		lc_corr.quality[kasoc_quality & 2 != 0] |= CorrectorQualityFlags.JumpAdditiveConstant # FIXME: Actually it could be multiplicative
+		lc_corr.quality[kasoc_quality & 4 != 0] |= CorrectorQualityFlags.JumpAdditiveLinear # FIXME: Actually it could be multiplicative
+		lc_corr.quality[kasoc_quality & 8+128 != 0] |= CorrectorQualityFlags.SigmaClip
 
 		# Set headers that will be saved to the FITS file:
-		#lc.meta['additional_headers']['KF_MODE'] = (filter_operation_mode, 'KASOC filter: operation mode')
-		lc.meta['additional_headers']['KF_POSS'] = (filter_position_mode, 'KASOC filter: star positions used')
-		lc.meta['additional_headers']['KF_LONG'] = (filter_timescale_long, '[d] KASOC filter: long timescale')
-		lc.meta['additional_headers']['KF_SHORT'] = (filter_timescale_short, '[d] KASOC filter: short timescale')
-		lc.meta['additional_headers']['KF_SCLIP'] = (filter_sigma_clip, 'KASOC filter: sigma clipping')
-		lc.meta['additional_headers']['KF_TCLIP'] = (filter_turnover_clip, 'KASOC filter: turnover clip')
-		lc.meta['additional_headers']['KF_TWDTH'] = (filter_turnover_width, 'KASOC filter: turnover width')
-		lc.meta['additional_headers']['KF_PSMTH'] = (filter_phase_smooth_factor, 'KASOC filter: phase smooth factor')
+		#lc_corr.meta['additional_headers']['KF_MODE'] = (filter_operation_mode, 'KASOC filter: operation mode')
+		lc_corr.meta['additional_headers']['KF_POSS'] = (filter_position_mode, 'KASOC filter: star positions used')
+		lc_corr.meta['additional_headers']['KF_LONG'] = (filter_timescale_long, '[d] KASOC filter: long timescale')
+		lc_corr.meta['additional_headers']['KF_SHORT'] = (filter_timescale_short, '[d] KASOC filter: short timescale')
+		lc_corr.meta['additional_headers']['KF_SCLIP'] = (filter_sigma_clip, 'KASOC filter: sigma clipping')
+		lc_corr.meta['additional_headers']['KF_TCLIP'] = (filter_turnover_clip, 'KASOC filter: turnover clip')
+		lc_corr.meta['additional_headers']['KF_TWDTH'] = (filter_turnover_width, 'KASOC filter: turnover width')
+		lc_corr.meta['additional_headers']['KF_PSMTH'] = (filter_phase_smooth_factor, 'KASOC filter: phase smooth factor')
 
 		# Add information about removed periods to the header:
 		if periods is not None:
-			lc.meta['additional_headers']['NUM_PER'] = (len(periods), 'number of periods removed')
+			lc_corr.meta['additional_headers']['NUM_PER'] = (len(periods), 'KASOC filter: number of periods removed')
 			for k, p in enumerate(periods):
-				lc.meta['additional_headers']['PER_%d' % (k+1)] = (p, 'period removed (days)')
+				lc_corr.meta['additional_headers']['PER_%d' % (k+1)] = (p, '[d] KASOC filter: period removed')
 		else:
-			lc.meta['additional_headers']['NUM_PER'] = (0, 'number of periods removed')
+			lc_corr.meta['additional_headers']['NUM_PER'] = (0, 'KASOC filter: number of periods removed')
 
-		return lc, STATUS.OK
+		return lc_corr, STATUS.OK
