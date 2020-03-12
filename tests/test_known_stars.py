@@ -64,7 +64,7 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 	__dir__ = os.path.abspath(os.path.dirname(__file__))
 	logger = logging.getLogger(__name__)
 	logger.info("-------------------------------------------------------------")
-	logger.warning("CORRECTOR = %s, DATASOURCE = %s, STARID = %d" % (corrector, datasource, starid))
+	logger.info("CORRECTOR = %s, DATASOURCE = %s, STARID = %d" % (corrector, datasource, starid))
 
 	# All stars are from the same CCD, find the task for it:
 	with corrections.TaskManager(SHARED_INPUT_DIR) as tm:
