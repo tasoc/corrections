@@ -285,6 +285,7 @@ class BaseCorrector(object):
 		t2 = default_timer()
 		details['errors'] = error_msg
 		result.update({
+			'corrector': self.CorrMethod,
 			'status_corr': status,
 			'elaptime_corr': t2-t1,
 			'lightcurve_corr': save_file,

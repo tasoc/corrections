@@ -123,7 +123,7 @@ def test_taskmanager_cleanup(PRIVATE_TODO_FILE):
 		assert task1_status is None
 
 #--------------------------------------------------------------------------------------------------
-def test_taskmanager_summary(PRIVATE_TODO_FILE):
+def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 	with tempfile.TemporaryDirectory() as tmpdir:
 		summary_file = os.path.join(tmpdir, 'summary.json')
 		with TaskManager(PRIVATE_TODO_FILE, overwrite=True, summary=summary_file) as tm:
@@ -150,7 +150,13 @@ def test_taskmanager_summary(PRIVATE_TODO_FILE):
 			initial_numtasks = j['numtasks']
 			initial_skipped = j['SKIPPED']
 
-			# Start task with priority=1:
+			# Check the settings table:
+			assert tm.corrector is None
+			tm.cursor.execute("SELECT * FROM corr_settings;")
+			settings = tm.cursor.fetchone()
+			assert settings is None
+
+			# Start a random task:
 			task = tm.get_random_task()
 			print(task)
 			tm.start_task(task['priority'])
@@ -175,8 +181,10 @@ def test_taskmanager_summary(PRIVATE_TODO_FILE):
 
 			# Make a fake result we can save;
 			result = task.copy()
+			result['corrector'] = 'cbv'
 			result['status_corr'] = STATUS.OK
 			result['elaptime_corr'] = 3.14
+			result['details'] = {'cbv_num': 10}
 
 			# Save the result:
 			tm.save_results(result)
@@ -200,16 +208,26 @@ def test_taskmanager_summary(PRIVATE_TODO_FILE):
 			assert j['last_error'] is None
 			assert j['mean_elaptime'] == 3.14
 
+			# Check the setting again - it should now have changed:
+			assert tm.corrector == 'cbv'
+			tm.cursor.execute("SELECT * FROM corr_settings;")
+			settings = tm.cursor.fetchone()
+			assert settings['corrector'] == 'cbv'
+
+			# Also check that the additional diagnostic was saved correctly:
+			tm.cursor.execute("SELECT cbv_num FROM diagnostics_corr WHERE priority=?;", [result['priority']])
+			assert tm.cursor.fetchone()['cbv_num'] == 10
+
+			# Start another random task:
 			task = tm.get_random_task()
 			tm.start_task(task['priority'])
 
 			# Make a fake result we can save;
 			result = task.copy()
+			result['corrector'] = 'cbv'
 			result['status_corr'] = STATUS.ERROR
 			result['elaptime_corr'] = 6.14
-			result['details'] = {
-				'errors': ['dummy error 1', 'dummy error 2']
-			}
+			result['details'] = {'errors': ['dummy error 1', 'dummy error 2']}
 
 			# Save the result:
 			tm.save_results(result)
@@ -232,6 +250,18 @@ def test_taskmanager_summary(PRIVATE_TODO_FILE):
 			assert j['slurm_jobid'] is None
 			assert j['last_error'] == "dummy error 1\ndummy error 2"
 			assert j['mean_elaptime'] == 3.44
+
+			# Make a new fake result we can save;
+			# but this time try to change the corrector
+			result = task.copy()
+			result['corrector'] = 'kasoc_filter'
+			result['status_corr'] = STATUS.OK
+			result['elaptime_corr'] = 7.14
+
+			# This should fail when we try to save it:
+			with pytest.raises(ValueError) as e:
+				tm.save_results(result)
+			assert str(e.value) == "Attempting to mix results from multiple correctors"
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
