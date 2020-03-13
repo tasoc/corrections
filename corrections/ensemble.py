@@ -346,6 +346,9 @@ class EnsembleCorrector(BaseCorrector):
 		lc_corr.meta['additional_headers']['ENS_DREL'] = (drange_relfactor, 'Limit on relative diff. range')
 		lc_corr.meta['additional_headers']['ENS_RLIM'] = (frange_lim, 'Limit on flux range metric')
 
+		# Set some meta-data which is used in diagnostics only:
+		lc_corr.meta['FOM'] = test_fom
+
 		#------------------------------------------------------------------------------------------
 		if self.plot and self.debug:
 			fig = plt.figure()

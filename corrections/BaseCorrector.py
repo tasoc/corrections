@@ -232,12 +232,12 @@ class BaseCorrector(object):
 			status = STATUS.ABORT
 			logger.warning("Correction was aborted (priority=%d)", task['priority'])
 
-		except: # noqa: E722
+		except: # noqa: E722 pragma: no cover
 			status = STATUS.ERROR
 			logger.exception("Correction failed (priority=%d)", task['priority'])
 
 		# Check that the status has been changed:
-		if status == STATUS.UNKNOWN:
+		if status == STATUS.UNKNOWN: # pragma: no cover
 			raise Exception("STATUS was not set by do_correction")
 
 		# Calculate diagnostics:
@@ -261,6 +261,7 @@ class BaseCorrector(object):
 				details['cbv_num'] = lc_corr.meta['additional_headers']['CBV_NUM']
 			elif self.CorrMethod == 'ensemble':
 				details['ens_num'] = lc_corr.meta['additional_headers']['ENS_NUM']
+				details['ens_fom'] = lc_corr.meta['FOM']
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
 			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
