@@ -47,6 +47,33 @@ def test_invalid_input(SHARED_INPUT_DIR):
 	assert str(e.value) == "Invalid THRESHOLD_CORRELATION"
 
 #--------------------------------------------------------------------------------------------------
+def test_mismatch_existing_settings(SHARED_INPUT_DIR):
+	"""
+	Tests that CBVCreator handles being called with various inputs that differ from the one the
+	existing file was created with.
+	"""
+
+	with pytest.raises(ValueError) as e:
+		CBVCreator(SHARED_INPUT_DIR, cbv_area=143, datasource='ffi', ncomponents=42)
+	assert str(e.value) == "Mismatch between existing file and provided settings"
+
+	with pytest.raises(ValueError) as e:
+		CBVCreator(SHARED_INPUT_DIR, cbv_area=143, datasource='ffi', threshold_variability=2.5)
+	assert str(e.value) == "Mismatch between existing file and provided settings"
+
+	with pytest.raises(ValueError) as e:
+		CBVCreator(SHARED_INPUT_DIR, cbv_area=143, datasource='ffi', threshold_correlation=0.8)
+	assert str(e.value) == "Mismatch between existing file and provided settings"
+
+	with pytest.raises(ValueError) as e:
+		CBVCreator(SHARED_INPUT_DIR, cbv_area=143, datasource='ffi', threshold_snrtest=2.5)
+	assert str(e.value) == "Mismatch between existing file and provided settings"
+
+	with pytest.raises(ValueError) as e:
+		CBVCreator(SHARED_INPUT_DIR, cbv_area=143, datasource='ffi', threshold_entropy=-1.6)
+	assert str(e.value) == "Mismatch between existing file and provided settings"
+
+#--------------------------------------------------------------------------------------------------
 def test_load_existing(SHARED_INPUT_DIR):
 	"""
 	Tests that CBVCreator handles being called with various wrong input.

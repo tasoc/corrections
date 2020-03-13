@@ -157,11 +157,11 @@ class CBVCreator(BaseCorrector):
 				#if hdf.attrs.get('version') != __version__:
 				#	logger.error("Existing CBV created with another VERSION")
 				#	start_over = True
-				if hdf.attrs.get('method') != 'normal':
+				if hdf.attrs.get('method') != 'normal': # pragma: no cover
 					logger.error("Existing CBV created with another METHOD")
 					start_over = True
 				if hdf.attrs['Ncbvs'] != self.ncomponents:
-					logger.error("Existing CBV created with different Ncbvs")
+					logger.error("Existing CBV created with different NCOMPONENTS")
 					start_over = True
 				if hdf.attrs['threshold_variability'] != self.threshold_variability:
 					logger.error("Existing CBV created with different THRESHOLD_VARIABILITY")
@@ -177,10 +177,10 @@ class CBVCreator(BaseCorrector):
 					start_over = True
 
 			# If we need to start over, we simply delete the existing file:
-			if start_over and overwrite:
+			if start_over and overwrite: # pragma: no cover
 				os.remove(self.hdf_filepath)
 			elif start_over:
-				raise ValueError()
+				raise ValueError("Mismatch between existing file and provided settings")
 
 		# Store wheter the file already exists:
 		file_is_new = not os.path.exists(self.hdf_filepath)
@@ -208,7 +208,7 @@ class CBVCreator(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close the CBV Creator object."""
-		if self.hdf:
+		if hasattr(self, 'hdf') and self.hdf:
 			self.hdf.close()
 
 	#----------------------------------------------------------------------------------------------
@@ -236,7 +236,7 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 
 		logger.info('Running matrix clean')
-		if logger.isEnabledFor(logging.DEBUG) and 'matrix' in self.hdf:
+		if logger.isEnabledFor(logging.DEBUG) and 'matrix' in self.hdf: # pragma: no cover
 			logger.info("Loading existing file...")
 			return self.hdf['matrix'], self.hdf['nancol'], self.hdf.attrs['Ntimes']
 
@@ -324,7 +324,7 @@ class CBVCreator(BaseCorrector):
 			correlations = lightcurve_correlation_matrix(mat)
 
 			# If running in DEBUG mode, save the correlations matrix to file:
-			if logger.isEnabledFor(logging.DEBUG):
+			if logger.isEnabledFor(logging.DEBUG): # pragma: no cover
 				self.hdf.create_dataset('correlations', data=correlations)
 
 			# Find the median absolute correlation between each lightcurve and all other lightcurves:
@@ -365,7 +365,7 @@ class CBVCreator(BaseCorrector):
 		# Save something for debugging:
 		self.hdf.attrs['Ntimes'] = Ntimes
 		self.hdf.attrs['Nstars'] = Nstars
-		if logger.isEnabledFor(logging.DEBUG):
+		if logger.isEnabledFor(logging.DEBUG): # pragma: no cover
 			self.hdf.create_dataset('matrix', data=mat)
 			self.hdf.create_dataset('nancols', data=indx_nancol)
 

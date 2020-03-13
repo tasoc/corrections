@@ -139,14 +139,21 @@ class BaseCorrector(object):
 	#----------------------------------------------------------------------------------------------
 	def __exit__(self, *args):
 		self.close()
+		self._close_basecorrector()
 
 	#----------------------------------------------------------------------------------------------
 	def __del__(self):
 		self.close()
+		self._close_basecorrector()
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close correction object."""
+		pass
+
+	#----------------------------------------------------------------------------------------------
+	def _close_basecorrector(self):
+		"""Close BaseCorrection object."""
 		if hasattr(self, 'cursor') and self.cursor:
 			try:
 				self.cursor.close()
