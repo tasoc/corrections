@@ -228,7 +228,7 @@ class BaseCorrector(object):
 			# Run the correction on this lightcurve:
 			lc_corr, status = self.do_correction(lc)
 
-		except (KeyboardInterrupt, SystemExit):
+		except (KeyboardInterrupt, SystemExit): # pragma: no cover
 			status = STATUS.ABORT
 			logger.warning("Correction was aborted (priority=%d)", task['priority'])
 
@@ -397,7 +397,7 @@ class BaseCorrector(object):
 		logger.debug('Loading lightcurve: %s', fname)
 
 		# Load lightcurve file and create a TessLightCurve object:
-		if fname.endswith('.noisy') or fname.endswith('.sysnoise'):
+		if fname.endswith('.noisy') or fname.endswith('.sysnoise'): # pragma: no cover
 			data = np.loadtxt(fname)
 
 			# Quality flags from the pixels:
@@ -583,7 +583,7 @@ class BaseCorrector(object):
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
-		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'):
+		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'): # pragma: no cover
 			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(os.path.basename(fname))[0] + '.corr')
 
 			# Create new ASCII file:
