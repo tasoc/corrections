@@ -12,27 +12,7 @@ import os
 import logging
 from functools import partial
 import multiprocessing
-from corrections import CBVCreator, BaseCorrector
-
-#--------------------------------------------------------------------------------------------------
-def prepare_cbv(cbv_area, datasource='ffi', input_folder=None, ncbv=None, threshold_correlation=None,
-		threshold_snrtest=None, el=None, ip=False):
-
-	logger = logging.getLogger(__name__)
-	logger.info('running CBV for area %d', cbv_area)
-
-	with CBVCreator(input_folder, datasource=datasource, cbv_area=cbv_area,
-		threshold_correlation=threshold_correlation, threshold_snrtest=threshold_snrtest,
-		threshold_entropy=el, ncomponents=ncbv) as C:
-
-		C.compute_cbvs()
-		C.spike_sep()
-		#C.cotrend_ini(do_ini_plots=ip)
-		#C.compute_distance_map()
-		C.save_cbv_to_fits()
-
-		if datasource == 'ffi':
-			C.interpolate_to_higher_cadence()
+import corrections
 
 #--------------------------------------------------------------------------------------------------
 def main():
@@ -84,28 +64,31 @@ def main():
 		parser.error("Invalid input folder")
 	logger.info("Loading input data from '%s'", input_folder)
 
-	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
-	with BaseCorrector(input_folder) as bc:
-		# Build list of constraints:
-		constraints = []
-		if args.camera:
-			constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
-		if args.ccd:
-			constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
-		if args.area:
-			constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
-		if args.datasource:
-			constraints.append("datasource='ffi'" if args.datasource == 'ffi' else "datasource!='ffi'")
-		if not constraints:
-			constraints = None
+	# Build list of constraints:
+	constraints = []
+	if args.camera:
+		constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
+	if args.ccd:
+		constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
+	if args.area:
+		constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
+	if args.datasource:
+		constraints.append("datasource='ffi'" if args.datasource == 'ffi' else "datasource!='ffi'")
+	if not constraints:
+		constraints = None
 
-		# Search for valid areas:
-		cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
-		logger.debug("CBV areas: %s", cbv_areas)
+	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
+	# Also invoke the TaskManager to ensure that the input TODO-file has the correct columns
+	# and indicies, which is automatically created by the TaskManager init function.
+	with corrections.TaskManager(input_folder, cleanup=True, cleanup_constraints=constraints):
+		with corrections.BaseCorrector(input_folder) as bc:
+			# Search for valid areas:
+			cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
+			logger.debug("CBV areas: %s", cbv_areas)
 
 	# Stop if there are no CBV-Areas to process:
 	if not cbv_areas:
-		logger.info("No cbv-areas found to be processed.")
+		logger.info("No CBV-areas found to be processed.")
 		return
 
 	# Number of threads to run in parallel:
@@ -116,7 +99,7 @@ def main():
 	logger.info("Using %d processes.", threads)
 
 	# Create wrapper function which only takes a single cbv_area as input:
-	prepare_cbv_wrapper = partial(prepare_cbv,
+	create_cbv_wrapper = partial(corrections.create_cbv,
 		input_folder=input_folder,
 		threshold_correlation=args.corr,
 		threshold_snrtest=args.snr,
@@ -134,13 +117,13 @@ def main():
 		# There is more than one area to process, so let's start
 		# a process pool and process them in parallel:
 		with multiprocessing.Pool(threads) as pool:
-			pool.map(prepare_cbv_wrapper, cbv_areas)
+			pool.map(create_cbv_wrapper, cbv_areas)
 
 	else:
 		# Only a single area to process, so let's not bother with
 		# starting subprocesses, but simply run it directly:
 		for cbv_area in cbv_areas:
-			prepare_cbv_wrapper(cbv_area)
+			create_cbv_wrapper(cbv_area)
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':

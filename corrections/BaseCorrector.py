@@ -14,6 +14,7 @@ import shutil
 import enum
 import logging
 import sqlite3
+import tempfile
 import numpy as np
 from timeit import default_timer
 from bottleneck import nanmedian, nanvar
@@ -21,7 +22,7 @@ from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
 from .quality import TESSQualityFlags, CorrectorQualityFlags
-from .utilities import rms_timescale, ListHandler
+from .utilities import rms_timescale, ptp, ListHandler, fix_fits_table_headers
 from .manual_filters import manual_exclude
 from .version import get_version
 
@@ -93,6 +94,11 @@ class BaseCorrector(object):
 			self.input_folder = os.path.dirname(input_folder)
 			todo_file = input_folder
 
+		# The path to the TODO list:
+		logger.debug("TODO file: %s", todo_file)
+		if not os.path.isfile(todo_file):
+			raise FileNotFoundError("TODO file not found")
+
 		self.CorrMethod = {
 			'BaseCorrector': 'base',
 			'EnsembleCorrector': 'ensemble',
@@ -114,13 +120,15 @@ class BaseCorrector(object):
 			# Make sure that the folder exists:
 			os.makedirs(self.data_folder, exist_ok=True)
 
-		# The path to the TODO list:
-		logger.debug("TODO file: %s", todo_file)
-		if not os.path.isfile(todo_file):
-			raise FileNotFoundError("TODO file not found")
+		# Create readonly copy of the TODO-file:
+		with tempfile.NamedTemporaryFile(dir=self.input_folder, suffix='.sqlite', delete=False) as tmpfile:
+			self.todo_file_readonly = tmpfile.name
+			with open(todo_file, 'rb') as fid:
+				shutil.copyfileobj(fid, tmpfile)
+			tmpfile.flush()
 
 		# Open the SQLite file in read-only mode:
-		self.conn = sqlite3.connect('file:' + todo_file + '?mode=ro', uri=True)
+		self.conn = sqlite3.connect('file:' + self.todo_file_readonly + '?mode=ro', uri=True)
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
 
@@ -131,16 +139,30 @@ class BaseCorrector(object):
 	#----------------------------------------------------------------------------------------------
 	def __exit__(self, *args):
 		self.close()
+		self._close_basecorrector()
 
 	#----------------------------------------------------------------------------------------------
 	def __del__(self):
-		if hasattr(self, 'cursor') and self.cursor: self.cursor.close()
-		if hasattr(self, 'conn') and self.conn: self.conn.close()
+		self.close()
+		self._close_basecorrector()
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close correction object."""
 		pass
+
+	#----------------------------------------------------------------------------------------------
+	def _close_basecorrector(self):
+		"""Close BaseCorrection object."""
+		if hasattr(self, 'cursor') and self.cursor:
+			try:
+				self.cursor.close()
+			except sqlite3.ProgrammingError:
+				pass
+		if hasattr(self, 'conn') and self.conn:
+			self.conn.close()
+		if hasattr(self, 'todo_file_readonly') and os.path.isfile(self.todo_file_readonly):
+			os.remove(self.todo_file_readonly)
 
 	#----------------------------------------------------------------------------------------------
 	def plot_folder(self, lc):
@@ -206,16 +228,16 @@ class BaseCorrector(object):
 			# Run the correction on this lightcurve:
 			lc_corr, status = self.do_correction(lc)
 
-		except (KeyboardInterrupt, SystemExit):
+		except (KeyboardInterrupt, SystemExit): # pragma: no cover
 			status = STATUS.ABORT
 			logger.warning("Correction was aborted (priority=%d)", task['priority'])
 
-		except: # noqa: E722
+		except: # noqa: E722 pragma: no cover
 			status = STATUS.ERROR
 			logger.exception("Correction failed (priority=%d)", task['priority'])
 
 		# Check that the status has been changed:
-		if status == STATUS.UNKNOWN:
+		if status == STATUS.UNKNOWN: # pragma: no cover
 			raise Exception("STATUS was not set by do_correction")
 
 		# Calculate diagnostics:
@@ -232,7 +254,14 @@ class BaseCorrector(object):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
-			details['ptp'] = nanmedian(np.abs(np.diff(lc_corr.flux)))
+			details['ptp'] = ptp(lc_corr)
+
+			# Diagnostics specific to the method:
+			if self.CorrMethod == 'cbv':
+				details['cbv_num'] = lc_corr.meta['additional_headers']['CBV_NUM']
+			elif self.CorrMethod == 'ensemble':
+				details['ens_num'] = lc_corr.meta['additional_headers']['ENS_NUM']
+				details['ens_fom'] = lc_corr.meta['FOM']
 
 			# TODO: set outputs; self._details = self.lightcurve, etc.
 			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
@@ -256,6 +285,7 @@ class BaseCorrector(object):
 		t2 = default_timer()
 		details['errors'] = error_msg
 		result.update({
+			'corrector': self.CorrMethod,
 			'status_corr': status,
 			'elaptime_corr': t2-t1,
 			'lightcurve_corr': save_file,
@@ -369,7 +399,7 @@ class BaseCorrector(object):
 		logger.debug('Loading lightcurve: %s', fname)
 
 		# Load lightcurve file and create a TessLightCurve object:
-		if fname.endswith('.noisy') or fname.endswith('.sysnoise'):
+		if fname.endswith('.noisy') or fname.endswith('.sysnoise'): # pragma: no cover
 			data = np.loadtxt(fname)
 
 			# Quality flags from the pixels:
@@ -480,6 +510,8 @@ class BaseCorrector(object):
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
+		logger = logging.getLogger(__name__)
+
 		# Find the name of the correction method based on the class name:
 		CorrMethod = {
 			'EnsembleCorrector': 'Ensemble',
@@ -495,6 +527,7 @@ class BaseCorrector(object):
 		fname = lc.meta.get('task').get('lightcurve')
 
 		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
+			logger.debug("Saving as FITS file")
 
 			if self.CorrMethod == 'cbv':
 				filename = os.path.basename(fname).replace('-tasoc_lc', '-tasoc-cbv_lc')
@@ -509,6 +542,7 @@ class BaseCorrector(object):
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
 
 			shutil.copy(os.path.join(self.input_folder, fname), save_file)
+			logger.debug("Saving lightcurve to '%s'", save_file)
 
 			# Change permission of copied file to allow the addition of the corrected lightcurve
 			os.chmod(save_file, 0o640)
@@ -533,12 +567,15 @@ class BaseCorrector(object):
 				if self.CorrMethod == 'ensemble' and hasattr(self, 'ensemble_starlist'):
 					# Create binary table to hold the list of ensemble stars:
 					c1 = fits.Column(name='TIC', format='K', array=self.ensemble_starlist['starids'])
+					c2 = fits.Column(name='BZETA', format='E', array=self.ensemble_starlist['bzetas'])
 
-					wm = fits.BinTableHDU.from_columns([c1, ], name='ENSEMBLE')
-
-					wm.header['TTYPE1'] = ('TIC', 'column title: TIC identifier')
-					wm.header['TFORM1'] = ('K', 'column format: signed 64-bit integer')
-					wm.header['TDISP1'] = ('I10', 'column display format')
+					wm = fits.BinTableHDU.from_columns([c1, c2], name='ENSEMBLE')
+					wm.header['TDISP1'] = 'I10'
+					wm.header['TDISP2'] = 'E'
+					fix_fits_table_headers(wm, {
+						'TIC': 'TIC identifier',
+						'BZETA': 'background scale'
+					})
 
 					# Add the new table to the list of HDUs:
 					hdu.append(wm)
@@ -548,7 +585,7 @@ class BaseCorrector(object):
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
-		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'):
+		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'): # pragma: no cover
 			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(os.path.basename(fname))[0] + '.corr')
 
 			# Create new ASCII file:

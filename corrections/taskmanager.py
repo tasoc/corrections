@@ -57,6 +57,7 @@ class TaskManager(object):
 
 		self.summary_file = summary
 		self.summary_interval = summary_interval
+		self.corrector = None
 
 		# Setup logging:
 		formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -65,6 +66,18 @@ class TaskManager(object):
 		self.logger = logging.getLogger(__name__)
 		self.logger.addHandler(console)
 		self.logger.setLevel(logging.INFO)
+
+		# Create table for settings if it doesn't already exits:
+		self.cursor.execute("""CREATE TABLE IF NOT EXISTS corr_settings (
+			corrector TEXT NOT NULL
+		);""")
+		self.conn.commit()
+
+		# Load settings from setting tables:
+		self.cursor.execute("SELECT * FROM corr_settings LIMIT 1;")
+		row = self.cursor.fetchone()
+		if row is not None:
+			self.corrector = row['corrector']
 
 		# Add status indicator for corrections to todolist, if it doesn't already exists:
 		self.cursor.execute("PRAGMA table_info(todolist)")
@@ -82,7 +95,9 @@ class TaskManager(object):
 		if overwrite:
 			self.cursor.execute("UPDATE todolist SET corr_status=NULL;")
 			self.cursor.execute("DROP TABLE IF EXISTS diagnostics_corr;")
+			self.cursor.execute("DELETE FROM corr_settings;")
 			self.conn.commit()
+			self.corrector = None
 
 		# Create table for diagnostics:
 		self.cursor.execute("""CREATE TABLE IF NOT EXISTS diagnostics_corr (
@@ -98,6 +113,23 @@ class TaskManager(object):
 		);""")
 		self.conn.commit()
 
+		# The corrector is not stored, so try to infer it from the diagnostics information:
+		# This is needed on older TODO-files created before the corr_settings table
+		# as introduced.
+		if self.corrector is None:
+			self.cursor.execute("SELECT lightcurve FROM diagnostics_corr WHERE lightcurve IS NOT NULL LIMIT 1;")
+			row = self.cursor.fetchone()
+			if row is not None:
+				if '-tasoc-cbv_lc' in row['lightcurve']:
+					self.corrector = 'cbv'
+				elif '-tasoc-ens_lc' in row['lightcurve']:
+					self.corrector = 'ensemble'
+				elif '-tasoc-kf_lc' in row['lightcurve']:
+					self.corrector = 'kasoc_filter'
+
+				if self.corrector is not None:
+					self.save_settings()
+
 		# Reset calculations with status STARTED, ABORT or ERROR:
 		clear_status = str(STATUS.STARTED.value) + ',' + str(STATUS.ABORT.value) + ',' + str(STATUS.ERROR.value) + ',' + str(STATUS.SKIPPED.value)
 		constraints = ['corr_status IN (' + clear_status + ')']
@@ -105,11 +137,16 @@ class TaskManager(object):
 		# Add additional constraints from the user input and build SQL query:
 		if cleanup_constraints:
 			cc = cleanup_constraints.copy()
-			if cc.get('datasource'):
-				constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
-			for key, val in cc.items():
-				if val is not None:
-					constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+			if isinstance(cc, dict):
+				if cc.get('datasource'):
+					constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
+				for key, val in cc.items():
+					if val is not None:
+						constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+			elif isinstance(cc, list):
+				constraints += cc
+			else:
+				raise ValueError("cleanup_constraints should be dict or list")
 
 		constraints = ' AND '.join(constraints)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")
@@ -175,6 +212,31 @@ class TaskManager(object):
 
 		if self.cursor: self.cursor.close()
 		if self.conn: self.conn.close()
+
+	#----------------------------------------------------------------------------------------------
+	def save_settings(self):
+
+		try:
+			self.cursor.execute("DELETE FROM corr_settings;")
+			self.cursor.execute("INSERT INTO corr_settings (corrector) VALUES (?);", [self.corrector])
+
+			# Create additional diagnostics columns based on which corrector we are running:
+			self.cursor.execute("PRAGMA table_info(diagnostics_corr)")
+			diag_columns = [r['name'] for r in self.cursor.fetchall()]
+			if self.corrector == 'cbv':
+				if 'cbv_num' not in diag_columns:
+					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN cbv_num INTEGER DEFAULT NULL;")
+
+			elif self.corrector == 'ensemble':
+				if 'ens_num' not in diag_columns:
+					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN ens_num INTEGER DEFAULT NULL;")
+				if 'ens_fom' not in diag_columns:
+					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN ens_fom REAL DEFAULT NULL;")
+
+			self.conn.commit()
+		except:
+			self.conn.rollback()
+			raise
 
 	#----------------------------------------------------------------------------------------------
 	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
@@ -251,6 +313,15 @@ class TaskManager(object):
 		# The status of this target returned by the photometry:
 		my_status = result['status_corr']
 
+		# If the corrector has not already been set for this TODO-file,
+		# update the settings, and if it has check that we are not
+		# mixing results from different correctors in one TODO-file.
+		if self.corrector is None:
+			self.corrector = result['corrector']
+			self.save_settings()
+		elif result['corrector'] != self.corrector:
+			raise ValueError("Attempting to mix results from multiple correctors")
+
 		try:
 			# Update the status in the TODO list:
 			self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
@@ -268,8 +339,23 @@ class TaskManager(object):
 				error_msg = "\n".join(error_msg) if isinstance(error_msg, (list, tuple)) else error_msg.strip()
 				self.summary['last_error'] = error_msg
 
+			additional_diags_keys = ''
+			additional_diags = ()
+			if self.corrector == 'cbv':
+				additional_diags_keys = ',cbv_num'
+				additional_diags = (
+					details.get('cbv_num', None),
+				)
+			elif self.corrector == 'ensemble':
+				additional_diags_keys = ',ens_num,ens_fom'
+				additional_diags = (
+					details.get('ens_num', None),
+					details.get('ens_fom', None)
+				)
+
 			# Save additional diagnostics:
-			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority, lightcurve, elaptime, worker_wait_time, variance, rms_hour, ptp, errors) VALUES (?,?,?,?,?,?,?,?);", (
+			placeholders = ','.join(['?']*(8+len(additional_diags)))
+			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority,lightcurve,elaptime,worker_wait_time,variance,rms_hour,ptp,errors" + additional_diags_keys + ") VALUES (" + placeholders + ");", (
 				result['priority'],
 				result.get('lightcurve_corr', None),
 				result.get('elaptime_corr', None),
@@ -278,7 +364,7 @@ class TaskManager(object):
 				details.get('rms_hour', None),
 				details.get('ptp', None),
 				error_msg
-			))
+			) + additional_diags)
 			self.conn.commit()
 		except: # noqa: E722
 			self.conn.rollback()

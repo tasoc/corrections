@@ -121,11 +121,30 @@ def rms_timescale(lc, timescale=3600/86400):
 	bins = np.append(bins, time_max)
 
 	# Bin the timeseries to one hour:
-	indx = np.isfinite(lc.flux)
+	indx = np.isfinite(lc.time) & np.isfinite(lc.flux)
 	flux_bin, _, _ = binned_statistic(lc.time[indx], lc.flux[indx], nanmean, bins=bins)
 
 	# Compute robust RMS value (MAD scaled to RMS)
 	return mad_to_sigma * nanmedian(np.abs(flux_bin - nanmedian(flux_bin)))
+
+#--------------------------------------------------------------------------------------------------
+def ptp(lc):
+	"""
+	Compute robust Point-To-Point scatter.
+
+	Parameters:
+		lc (``lightkurve.TessLightCurve`` object): Lightcurve to calculate PTP for.
+
+	Returns:
+		float: Robust PTP.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	if len(lc.flux) == 0 or allnan(lc.flux):
+		return np.nan
+	if len(lc.time) == 0 or allnan(lc.time):
+		raise ValueError("Invalid time-vector specified. No valid timestamps.")
+	return nanmedian(np.abs(np.diff(lc.flux)))
 
 #--------------------------------------------------------------------------------------------------
 def fix_fits_table_headers(table, column_titles=None):
@@ -152,6 +171,7 @@ def fix_fits_table_headers(table, column_titles=None):
 			table.comments['TFORM%d' % k] = {
 				'D': 'column format: 64-bit floating point',
 				'E': 'column format: 32-bit floating point',
+				'K': 'column format: signed 64-bit integer',
 				'J': 'column format: signed 32-bit integer',
 				'L': 'column format: logical value'
 			}[table.get('TFORM%d' % k)]
@@ -159,7 +179,7 @@ def fix_fits_table_headers(table, column_titles=None):
 		if column_titles is not None:
 			key = table.get('TTYPE%d' % k)
 			if key and key in column_titles:
-				table.comments['TTYPE%d' % k] = column_titles[table.get('TTYPE%d' % k)]
+				table.comments['TTYPE%d' % k] = 'column title: ' + column_titles[key]
 
 #--------------------------------------------------------------------------------------------------
 class ListHandler(logging.Handler):

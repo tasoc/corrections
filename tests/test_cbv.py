@@ -14,11 +14,13 @@ import os.path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from corrections import CBV
 
+INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("datasource", ['ffi', 'tpf'])
 def test_cbv(datasource):
 	# Folder containing test CBV files:
-	data_folder = os.path.join(os.path.dirname(__file__), 'input', 'cbv-prepare')
+	data_folder = os.path.join(INPUT_DIR, 'cbv-prepare')
 
 	# Create CBV object:
 	cbv = CBV(data_folder, 143, datasource)
@@ -51,7 +53,7 @@ def test_cbv(datasource):
 #--------------------------------------------------------------------------------------------------
 def test_cbv_invalid():
 	# Folder containing test CBV files:
-	data_folder = os.path.join(os.path.dirname(__file__), 'input', 'cbv-prepare')
+	data_folder = os.path.join(INPUT_DIR, 'cbv-prepare')
 
 	with pytest.raises(ValueError):
 		CBV(data_folder, 143, 'invalid-datasource')
@@ -62,6 +64,4 @@ def test_cbv_invalid():
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	test_cbv('ffi')
-	test_cbv('tpf')
-	test_cbv_invalid()
+	pytest.main([__file__])

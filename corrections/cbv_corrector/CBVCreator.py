@@ -36,6 +36,48 @@ from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_ma
 __version__ = get_version(pep440=False)
 
 #--------------------------------------------------------------------------------------------------
+def create_cbv(cbv_area, input_folder=None, datasource='ffi', ncbv=16,
+	threshold_correlation=0.5, threshold_snrtest=5.0, threshold_entropy=-0.5, ip=False):
+	"""
+
+
+	It is required the ``corrections.TaskManager`` has been initialized on the
+	``input_dir`` at least ones before the function is called, since this will
+	ensure that the proper database columns and indicies have been created.
+
+	Parameters:
+		cbv_area (integer):
+		input_folder (string):
+		datasource (string, optional): Default='ffi'.
+		ncbv (integer, optional):
+		threshold_correlation (float, optional):
+		threshold_snrtest (float, optional):
+		threshold_entropy (float, optional):
+		ip (boolean, optional): Default=False.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+
+	logger = logging.getLogger(__name__)
+	logger.info('Running CBV for area %d', cbv_area)
+
+	with CBVCreator(input_folder, datasource=datasource, cbv_area=cbv_area,
+		threshold_correlation=threshold_correlation, threshold_snrtest=threshold_snrtest,
+		threshold_entropy=threshold_entropy, ncomponents=ncbv) as C:
+
+		C.compute_cbvs()
+		C.spike_sep()
+		#C.cotrend_ini(do_ini_plots=ip)
+		#C.compute_distance_map()
+		C.save_cbv_to_fits()
+
+		if datasource == 'ffi':
+			C.interpolate_to_higher_cadence()
+
+		# Return CBV object for the generated area:
+		return CBV(C.data_folder, C.cbv_area, C.datasource)
+
+#--------------------------------------------------------------------------------------------------
 class CBVCreator(BaseCorrector):
 	"""
 	Creation of Cotrending Basis Vectors.
@@ -55,7 +97,7 @@ class CBVCreator(BaseCorrector):
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, datasource=None, cbv_area=None, ncomponents=16,
+	def __init__(self, *args, datasource='ffi', cbv_area=None, ncomponents=16,
 		threshold_correlation=0.5, threshold_snrtest=5.0, threshold_variability=1.3,
 		threshold_entropy=-0.5, **kwargs):
 		"""
@@ -84,11 +126,11 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 
 		# Basic input checks:
-		if datasource is None:
+		if datasource not in ('ffi', 'tpf'):
 			raise ValueError("Invalid DATASOURCE")
-		if cbv_area is None:
+		if cbv_area is None or not isinstance(cbv_area, int):
 			raise ValueError("Invalid CBV_AREA")
-		if ncomponents <= 0:
+		if not isinstance(cbv_area, int) or ncomponents <= 0:
 			raise ValueError("Invalid NCOMPONENTS")
 		if threshold_correlation is None:
 			threshold_correlation = 1.0
@@ -105,21 +147,21 @@ class CBVCreator(BaseCorrector):
 		self.threshold_entropy = threshold_entropy
 
 		# Path to the HDF5 file which will contain all the information for a set of CBVs:
-		filepath = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, cbv_area))
+		self.hdf_filepath = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, cbv_area))
 
 		# If the file already extsts, determine if it was created using the same settings:
-		if os.path.exists(filepath):
-			with h5py.File(filepath, 'r') as hdf:
+		if os.path.exists(self.hdf_filepath):
+			with h5py.File(self.hdf_filepath, 'r') as hdf:
 				# If any of these are different, we should start from scratch:
 				start_over = False
 				#if hdf.attrs.get('version') != __version__:
 				#	logger.error("Existing CBV created with another VERSION")
 				#	start_over = True
-				if hdf.attrs.get('method') != 'normal':
+				if hdf.attrs.get('method') != 'normal': # pragma: no cover
 					logger.error("Existing CBV created with another METHOD")
 					start_over = True
 				if hdf.attrs['Ncbvs'] != self.ncomponents:
-					logger.error("Existing CBV created with different Ncbvs")
+					logger.error("Existing CBV created with different NCOMPONENTS")
 					start_over = True
 				if hdf.attrs['threshold_variability'] != self.threshold_variability:
 					logger.error("Existing CBV created with different THRESHOLD_VARIABILITY")
@@ -135,16 +177,16 @@ class CBVCreator(BaseCorrector):
 					start_over = True
 
 			# If we need to start over, we simply delete the existing file:
-			if start_over and overwrite:
-				os.remove(filepath)
+			if start_over and overwrite: # pragma: no cover
+				os.remove(self.hdf_filepath)
 			elif start_over:
-				raise ValueError()
+				raise ValueError("Mismatch between existing file and provided settings")
 
 		# Store wheter the file already exists:
-		file_is_new = not os.path.exists(filepath)
+		file_is_new = not os.path.exists(self.hdf_filepath)
 
 		# Open the HDF5 file for storing the resulting CBVs:
-		self.hdf = h5py.File(filepath, 'a', libver='latest')
+		self.hdf = h5py.File(self.hdf_filepath, 'a', libver='latest')
 
 		# Save all settings in the attributes of the root of the HDF5 file:
 		if file_is_new:
@@ -166,7 +208,7 @@ class CBVCreator(BaseCorrector):
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close the CBV Creator object."""
-		if self.hdf:
+		if hasattr(self, 'hdf') and self.hdf:
 			self.hdf.close()
 
 	#----------------------------------------------------------------------------------------------
@@ -194,7 +236,7 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 
 		logger.info('Running matrix clean')
-		if logger.isEnabledFor(logging.DEBUG) and 'matrix' in self.hdf:
+		if logger.isEnabledFor(logging.DEBUG) and 'matrix' in self.hdf: # pragma: no cover
 			logger.info("Loading existing file...")
 			return self.hdf['matrix'], self.hdf['nancol'], self.hdf.attrs['Ntimes']
 
@@ -217,6 +259,8 @@ class CBVCreator(BaseCorrector):
 
 		# Find the median of the variabilities:
 		variability = np.array([float(row['variability']) for row in self.search_database(search=search_params, select='variability')], dtype='float64')
+		if len(variability) == 0:
+			raise ValueError("No lightcurves found for this CBV_AREA that have VARIABILITY defined")
 		median_variability = nanmedian(variability)
 
 		# Plot the distribution of variability for all stars:
@@ -280,7 +324,7 @@ class CBVCreator(BaseCorrector):
 			correlations = lightcurve_correlation_matrix(mat)
 
 			# If running in DEBUG mode, save the correlations matrix to file:
-			if logger.isEnabledFor(logging.DEBUG):
+			if logger.isEnabledFor(logging.DEBUG): # pragma: no cover
 				self.hdf.create_dataset('correlations', data=correlations)
 
 			# Find the median absolute correlation between each lightcurve and all other lightcurves:
@@ -321,7 +365,7 @@ class CBVCreator(BaseCorrector):
 		# Save something for debugging:
 		self.hdf.attrs['Ntimes'] = Ntimes
 		self.hdf.attrs['Nstars'] = Nstars
-		if logger.isEnabledFor(logging.DEBUG):
+		if logger.isEnabledFor(logging.DEBUG): # pragma: no cover
 			self.hdf.create_dataset('matrix', data=mat)
 			self.hdf.create_dataset('nancols', data=indx_nancol)
 

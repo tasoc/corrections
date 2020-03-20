@@ -186,6 +186,9 @@ class CBVCorrector(BaseCorrector):
 		# Corrected light curve in ppm
 		lc_corr = 1e6*(lc.copy()/flux_filter - 1)
 
+		# Make sure all NaN fluxes have corresponding NaN errors:
+		lc_corr.flux_err[np.isnan(lc_corr.flux)] = np.NaN
+
 		# Defining FITS headers:
 		no_cbvs_fitted = int((len(res)-1)/2)
 		res = np.array([res,]).flatten()
