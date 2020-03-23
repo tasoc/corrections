@@ -67,7 +67,7 @@ def create_cbv(cbv_area, input_folder=None, datasource='ffi', ncbv=16,
 
 		C.compute_cbvs()
 		C.spike_sep()
-		#C.cotrend_ini(do_ini_plots=ip)
+		C.cotrend_ini(do_ini_plots=ip)
 		#C.compute_distance_map()
 		C.save_cbv_to_fits()
 
