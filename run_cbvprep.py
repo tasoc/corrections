@@ -104,7 +104,7 @@ def main():
 		threshold_correlation=args.corr,
 		threshold_snrtest=args.snr,
 		ncbv=args.ncbv,
-		el=args.el,
+		threshold_entropy=args.el,
 		ip=args.iniplot,
 		datasource=args.datasource)
 
