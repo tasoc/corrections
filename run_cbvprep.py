@@ -21,10 +21,10 @@ def main():
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots.', action='store_true')
-	parser.add_argument('--threads', type=int, help="Number of parallel threads to use. If not specified, all available CPUs will be used.", default=None)
+	parser.add_argument('--threads', type=int, default=None, help="Number of parallel threads to use. If not specified, all available CPUs will be used.")
 
 	group = parser.add_argument_group('Specifying CBVs to calculate')
-	group.add_argument('-a', '--area', type=int, help='Single CBV_area for which to prepare photometry. Default is to run all areas.', action='append', default=None)
+	group.add_argument('-a', '--area', type=int, action='append', default=None, help='Single CBV_area for which to prepare photometry. Default is to run all areas.')
 	group.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
 	group.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
 	group.add_argument('--datasource', type=str, choices=('ffi', 'tpf'), default='ffi', help='Data source for the creation of CBVs.')
@@ -35,7 +35,7 @@ def main():
 	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
 	group.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV.')
 
-	parser.add_argument('input_folder', type=str, help='Directory to create catalog files in.', nargs='?', default=None)
+	parser.add_argument('input_folder', type=str, nargs='?', default=None, help='Directory to create catalog files in.')
 	args = parser.parse_args()
 
 	# Set logging level:
@@ -50,17 +50,19 @@ def main():
 	console = logging.StreamHandler()
 	console.setFormatter(formatter)
 	logger = logging.getLogger(__name__)
-	logger.addHandler(console)
+	if not logger.hasHandlers():
+		logger.addHandler(console)
 	logger.setLevel(logging_level)
 	logger_parent = logging.getLogger('corrections')
-	logger_parent.addHandler(console)
+	if not logger_parent.hasHandlers():
+		logger_parent.addHandler(console)
 	logger_parent.setLevel(logging_level)
 
 	# Parse the input folder:
 	input_folder = args.input_folder
 	if input_folder is None:
 		input_folder = os.environ.get('TESSCORR_INPUT')
-	if input_folder is None or not os.path.isdir(input_folder):
+	if input_folder is None or not os.path.exists(input_folder):
 		parser.error("Invalid input folder")
 	logger.info("Loading input data from '%s'", input_folder)
 
@@ -77,14 +79,16 @@ def main():
 	if not constraints:
 		constraints = None
 
-	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
-	# Also invoke the TaskManager to ensure that the input TODO-file has the correct columns
+	# Invoke the TaskManager to ensure that the input TODO-file has the correct columns
 	# and indicies, which is automatically created by the TaskManager init function.
-	with corrections.TaskManager(input_folder, cleanup=True, cleanup_constraints=constraints):
-		with corrections.BaseCorrector(input_folder) as bc:
-			# Search for valid areas:
-			cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
-			logger.debug("CBV areas: %s", cbv_areas)
+	with corrections.TaskManager(input_folder, cleanup=False, cleanup_constraints=constraints):
+		pass
+
+	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
+	with corrections.BaseCorrector(input_folder) as bc:
+		# Search for valid areas:
+		cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
+		logger.debug("CBV areas: %s", cbv_areas)
 
 	# Stop if there are no CBV-Areas to process:
 	if not cbv_areas:

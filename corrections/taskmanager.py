@@ -162,6 +162,7 @@ class TaskManager(object):
 		self.conn.commit()
 
 		# Analyze the tables for better query planning:
+		self.logger.debug("Analyzing database...")
 		self.cursor.execute("ANALYZE;")
 
 		# Prepare summary object:
@@ -174,7 +175,8 @@ class TaskManager(object):
 			'mean_worker_waittime': None
 		}
 		# Make sure to add all the different status to summary:
-		for s in STATUS: self.summary[s.name] = 0
+		for s in STATUS:
+			self.summary[s.name] = 0
 		# If we are going to output summary, make sure to fill it up:
 		if self.summary_file:
 			# Extract information from database:

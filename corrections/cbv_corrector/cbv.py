@@ -491,14 +491,14 @@ class CBV(object):
 			WS = np.min([1, (VAR**beta1)*(GPR**beta2)])
 
 			if WS > WS_lim:
-				logger.info('Fitting using LLSQ')
+				logger.debug('Fitting using LLSQ')
 				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic) # use smaller number of CBVs
 				diagnostics['method'] = 'LS'
 				diagnostics['use_prior'] = False
 				diagnostics['use_bic'] = False
 
 			else:
-				logger.info('Fitting using Priors')
+				logger.debug('Fitting using Priors')
 
 				#dist, ind = self.priors.query(pos, k=N_neigh+1)
 				#W = 1/dist[0][1:]**2

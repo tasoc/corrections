@@ -102,7 +102,8 @@ def main():
 				else:
 					task = tm.get_task(**constraints)
 
-				if task is None: break
+				if task is None:
+					break
 
 				# Run the correction:
 				result = corr.correct(task, output_folder=output_folder)
