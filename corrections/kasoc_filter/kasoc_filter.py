@@ -3,7 +3,7 @@
 """
 KASOC Filter for Asteroseismic Data Preparation
 
-Corrects Kepler/K2 data for instrumental effects and planetary signals
+Corrects Kepler/K2/TESS data for instrumental effects and planetary signals
 to create new datasets optimized for asteroseismic analysis.
 
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -277,7 +277,7 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 #--------------------------------------------------------------------------------------------------
 def filter_flags(t, x, quality, quality_remove=TESSQualityFlags.DEFAULT_BITMASK, return_flags=False):
 	"""
-	Filter out flagged data from Kepler quality column.
+	Filter out flagged data from quality column.
 
 	Returns new flux vector with bad datapoints removed (set to NaN) and a vector
 	with flagged jump time postions. This vector can later be passed into :py:func:`filter_jumps`.
@@ -290,36 +290,10 @@ def filter_flags(t, x, quality, quality_remove=TESSQualityFlags.DEFAULT_BITMASK,
 		return_flags (boolean): Also return flags of removed points.
 
 	Returns:
-		ndarray: Flux vector filterd for bad data points.
-		list: jumps
-		ndarray: flag_removed
-
-	Quality flags
-
-	===  ======  ==============  ==========================================================================
-	Bit  Value   Default Action  Meaning
-	===  ======  ==============  ==========================================================================
-	  1       1  Correct+Remove  Attitude Tweak.
-	  2       2  Ignore          Spacecraft in Safe Mode.
-	  3       4  Ignore          Spacecraft in Coarse Point.
-	  4       8  Ignore          Spacecraft in Earth Point.
-	  5      16  Ignore          Reaction wheel zero crossing.
-	  6      32  Remove          Reaction wheel Desaturation Event.
-	  7      64  Ignore          Argabrightening detected across multiple channels.
-	  8     128  Ignore          Cosmic Ray in Optimal Aperture pixel.
-	  9     256  Remove          Manual Exclude. The cadence was excluded because of an anomaly.
-	 10     512  Ignore          Reserved.
-	 11    1024  Correct         Discontinuity corrected between this cadence and the following one.
-	 12    2048  Ignore          Impulsive outlier removed after cotrending.
-	 13    4096  Remove          Argabrightening event on specified CCD mod/out detected.
-	 14    8192  Ignore          Cosmic Ray detected on collateral pixel row or column in optimal aperture.
-	 15   16385  Ignore          Detector Anomaly.
-	 16   32768  Ignore          Spacecraft is not in Fine Point.
-	 17   65536  Remove          No Data Reported.
-	 18  131072  Ignore          Possible Thruster Firing.
-	 19  262144  Remove          Definite Thruster Firing.
-	===  ======  ==============  ==========================================================================
-
+		tuple:
+			- ndarray: Flux vector filterd for bad data points.
+			- list: jumps
+			- ndarray: flag_removed
 	"""
 
 	N = len(t)
@@ -350,7 +324,7 @@ def filter_flags(t, x, quality, quality_remove=TESSQualityFlags.DEFAULT_BITMASK,
 		jumps = append(jumps, [{'time': t[i], 'type': 'additive', 'force': False} for i in np.where(indx)[0]])
 
 	# Remove points flagged as bad data:
-	flag_removed = (quality & quality_remove != 0 | ~isfinite(x))
+	flag_removed = (quality & quality_remove != 0) | (~isfinite(x))
 	x[flag_removed] = NaN
 
 	# Return results:
@@ -876,7 +850,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	Parameters:
 		t (ndarray): Time vector (days).
 		x (ndarray): Flux vector.
-		quality (ndarray, None): Quality vector (bit-flags) from Kepler data; default=None.
+		quality (ndarray, None): Quality vector (bit-flags); default=None.
 		position (ndarray, None): Centroid positions of star on CCD as two column list; default=None.
 		P (ndarray): Known planetary period (days); default=None.
 		jumps (list): List of known jumps in the flux (timestamp in days); default=None.
