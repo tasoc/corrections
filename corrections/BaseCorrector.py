@@ -45,6 +45,31 @@ class STATUS(enum.Enum):
 	SKIPPED = 5 #: The target was skipped because the algorithm found that to be the best solution.
 
 #--------------------------------------------------------------------------------------------------
+def _filter_fits_hdu(hdu):
+	"""
+	Filter FITS file for invalid data (undefined timestamps).
+
+	Parameters:
+		hdu (:class:`astropy.io.fits.HDUList`): FITS HDUList that needs to be filtered.
+
+	Returns:
+		:class:`astropy.io.fits.HDUList`: Modified FITS HDUList with invalid data removed.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	# Remove non-finite timestamps
+	indx = np.isfinite(hdu['LIGHTCURVE'].data['TIME'])
+
+	# Remove where TIME, CADENCENO and FLUX_RAW are all exactly zero:
+	indx &= ~((hdu['LIGHTCURVE'].data['CADENCENO'] == 0)
+		& (hdu['LIGHTCURVE'].data['TIME'] == 0)
+		& (hdu['LIGHTCURVE'].data['FLUX_RAW'] == 0))
+
+	# Remove from in-memory FITS hdu:
+	hdu['LIGHTCURVE'].data = hdu['LIGHTCURVE'].data[indx]
+	return hdu
+
+#--------------------------------------------------------------------------------------------------
 class BaseCorrector(object):
 	"""
 	The basic correction class for the TASOC Photometry pipeline.
@@ -443,14 +468,7 @@ class BaseCorrector(object):
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
 			with fits.open(fname, mode='readonly', memmap=True) as hdu:
 				# Filter out invalid parts of the input lightcurve:
-				# Remove non-finite timestamps
-				indx = np.isfinite(hdu['LIGHTCURVE'].data['TIME'])
-				# Remove where TIME, CADENCENO and FLUX_RAW are all exactly zero:
-				indx &= ~((hdu['LIGHTCURVE'].data['CADENCENO'] == 0)
-					& (hdu['LIGHTCURVE'].data['TIME'] == 0)
-					& (hdu['LIGHTCURVE'].data['FLUX_RAW'] == 0))
-				# Remove from in-memory FITS hdu:
-				hdu['LIGHTCURVE'].data = hdu['LIGHTCURVE'].data[indx]
+				hdu = _filter_fits_hdu(hdu)
 
 				# Quality flags from the pixels:
 				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
@@ -559,6 +577,9 @@ class BaseCorrector(object):
 
 			# Open the FITS file to overwrite the corrected flux columns:
 			with fits.open(save_file, mode='update') as hdu:
+				# Filter out invalid parts of the input lightcurve:
+				hdu = _filter_fits_hdu(hdu)
+
 				# Overwrite the corrected flux columns:
 				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
 				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
