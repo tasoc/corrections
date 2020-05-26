@@ -446,7 +446,7 @@ class BaseCorrector(object):
 				# Remove non-finite timestamps
 				indx = np.isfinite(hdu['LIGHTCURVE'].data['TIME'])
 				# Remove where TIME, CADENCENO and FLUX_RAW are all exactly zero:
-				indx &=	~((hdu['LIGHTCURVE'].data['CADENCENO'] == 0)
+				indx &= ~((hdu['LIGHTCURVE'].data['CADENCENO'] == 0)
 					& (hdu['LIGHTCURVE'].data['TIME'] == 0)
 					& (hdu['LIGHTCURVE'].data['FLUX_RAW'] == 0))
 				# Remove from in-memory FITS hdu:
