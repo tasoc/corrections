@@ -42,7 +42,7 @@ def test_taskmanager(PRIVATE_TODO_FILE):
 		assert task1['cbv_area'] == 143
 
 		# Start task with priority=17:
-		tm.start_task(17)
+		tm.start_task(task1)
 
 		# Get the next task, which should be the one with priority=2:
 		task2 = tm.get_task()
@@ -104,7 +104,7 @@ def test_taskmanager_cleanup(PRIVATE_TODO_FILE):
 		task1 = tm.get_task()
 		print(task1)
 		pri = task1['priority']
-		tm.start_task(pri)
+		tm.start_task(task1)
 
 	# Cleanup, but with a constraint not matching the one we changed:
 	with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints={'priority': 18}) as tm:
@@ -121,6 +121,26 @@ def test_taskmanager_cleanup(PRIVATE_TODO_FILE):
 		task1_status = tm.cursor.fetchone()['corr_status']
 		print(task1_status)
 		assert task1_status is None
+
+#--------------------------------------------------------------------------------------------------
+def test_taskmanager_chunks(PRIVATE_TODO_FILE):
+
+	# Reset the TODO-file completely, and mark the first task as STARTED:
+	with TaskManager(PRIVATE_TODO_FILE) as tm:
+		task1 = tm.get_task()
+		assert isinstance(task1, dict)
+
+		task10 = tm.get_task(chunk=10)
+		assert isinstance(task10, list)
+		assert len(task10) == 10
+		for task in task10:
+			assert isinstance(task, dict)
+
+		task10r = tm.get_random_task(chunk=9)
+		assert isinstance(task10r, list)
+		assert len(task10r) == 9
+		for task in task10r:
+			assert isinstance(task, dict)
 
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
@@ -159,7 +179,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 			# Start a random task:
 			task = tm.get_random_task()
 			print(task)
-			tm.start_task(task['priority'])
+			tm.start_task(task)
 			tm.write_summary()
 
 			with open(summary_file, 'r') as fid:
@@ -220,7 +240,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 
 			# Start another random task:
 			task = tm.get_random_task()
-			tm.start_task(task['priority'])
+			tm.start_task(task)
 
 			# Make a fake result we can save;
 			result = task.copy()
