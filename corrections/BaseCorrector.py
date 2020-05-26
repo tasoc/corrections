@@ -442,6 +442,16 @@ class BaseCorrector(object):
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
 			with fits.open(fname, mode='readonly', memmap=True) as hdu:
+				# Filter out invalid parts of the input lightcurve:
+				# Remove non-finite timestamps
+				indx = np.isfinite(hdu['LIGHTCURVE'].data['TIME'])
+				# Remove where TIME, CADENCENO and FLUX_RAW are all exactly zero:
+				indx &=	~((hdu['LIGHTCURVE'].data['CADENCENO'] == 0)
+					& (hdu['LIGHTCURVE'].data['TIME'] == 0)
+					& (hdu['LIGHTCURVE'].data['FLUX_RAW'] == 0))
+				# Remove from in-memory FITS hdu:
+				hdu['LIGHTCURVE'].data = hdu['LIGHTCURVE'].data[indx]
+
 				# Quality flags from the pixels:
 				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
 
