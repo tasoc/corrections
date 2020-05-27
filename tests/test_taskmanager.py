@@ -75,26 +75,50 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 	constraints = {'datasource': 'tpf', 'priority': 17}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
+		numtasks = tm.get_number_tasks(**constraints)
 		print(task)
+		print(numtasks)
 		assert task is None, "Task1 should be None"
+		assert numtasks == 0, "Task1 search should give no results"
 
 	constraints = {'datasource': 'tpf', 'priority': 17, 'camera': None}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task2 = tm.get_task(**constraints)
+		numtasks2 = tm.get_number_tasks(**constraints)
 		print(task2)
+		print(numtasks2)
 		assert task2 == task, "Tasks should be identical"
+		assert numtasks2 == 0, "Task2 search should give no results"
 
 	constraints = {'datasource': 'ffi', 'priority': 17}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
+		numtasks = tm.get_number_tasks(**constraints)
 		print(task)
+		print(numtasks)
 		assert task['priority'] == 17, "Task2 should be #17"
+		assert task['datasource'] == 'ffi'
+		assert task['camera'] == 1
+		assert task['ccd'] == 4
+		assert numtasks == 1, "Priority search should give one results"
+
+	constraints = {'datasource': 'ffi', 'priority': 17, 'camera': 1, 'ccd': 4}
+	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
+		task3 = tm.get_task(**constraints)
+		numtasks3 = tm.get_number_tasks(**constraints)
+		print(task3)
+		print(numtasks3)
+		assert task3 == task, "Tasks should be identical"
+		assert numtasks3 == 1, "Task3 search should give one results"
 
 	constraints = ['priority=17']
 	with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints=constraints) as tm:
 		task4 = tm.get_task(priority=17)
+		numtasks4 = tm.get_number_tasks(priority=17)
 		print(task4)
+		print(numtasks4)
 		assert task4['priority'] == 17, "Task4 should be #17"
+		assert numtasks4 == 1, "Priority search should give one results"
 
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_constraints_invalid(PRIVATE_TODO_FILE):
