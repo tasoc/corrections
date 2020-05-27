@@ -12,7 +12,6 @@ import os.path
 import sqlite3
 import logging
 import json
-from copy import deepcopy
 from numpy import atleast_1d
 from . import STATUS
 
@@ -48,6 +47,9 @@ class TaskManager(object):
 
 		if not os.path.isfile(todo_file):
 			raise FileNotFoundError('Could not find TODO-file')
+
+		if cleanup_constraints is not None and not isinstance(cleanup_constraints, (dict, list)):
+			raise ValueError("cleanup_constraints should be dict or list")
 
 		# Load the SQLite file:
 		self.conn = sqlite3.connect(todo_file)
@@ -139,18 +141,15 @@ class TaskManager(object):
 
 		# Add additional constraints from the user input and build SQL query:
 		if cleanup_constraints:
-			cc = deepcopy(cleanup_constraints)
-			if isinstance(cc, dict):
+			if isinstance(cleanup_constraints, dict):
+				cc = cleanup_constraints.copy()
 				if cc.get('datasource'):
 					constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
 				for key, val in cc.items():
 					if val is not None:
 						constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
-			elif isinstance(cc, list):
-				constraints += cc
 			else:
-				self.conn.close() # Needed for proper cleanup
-				raise ValueError("cleanup_constraints should be dict or list")
+				constraints += cleanup_constraints
 
 		constraints = ' AND '.join(constraints)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")

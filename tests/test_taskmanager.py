@@ -173,6 +173,10 @@ def test_taskmanager_chunks(PRIVATE_TODO_FILE):
 		for task in task10r:
 			assert isinstance(task, dict)
 
+		tm.start_task(task10r)
+		tm.cursor.execute("SELECT COUNT(*) FROM todolist WHERE corr_status=?;", [STATUS.STARTED.value])
+		assert tm.cursor.fetchone()[0] == 9
+
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 	with tempfile.TemporaryDirectory() as tmpdir:
@@ -317,6 +321,18 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 			with pytest.raises(ValueError) as e:
 				tm.save_results(result)
 			assert str(e.value) == "Attempting to mix results from multiple correctors"
+
+#--------------------------------------------------------------------------------------------------
+def test_taskmanager_no_more_tasks(PRIVATE_TODO_FILE):
+	with TaskManager(PRIVATE_TODO_FILE) as tm:
+		# Set all the tasks as completed:
+		tm.cursor.execute("UPDATE todolist SET corr_status=1;")
+		tm.conn.commit()
+
+		# When we now ask for a new task, there shouldn't be any:
+		assert tm.get_task() is None
+		assert tm.get_random_task() is None
+		assert tm.get_number_tasks() == 0
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
