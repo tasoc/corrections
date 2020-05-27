@@ -12,6 +12,7 @@ import os.path
 import sqlite3
 import logging
 import json
+from copy import deepcopy
 from numpy import atleast_1d
 from . import STATUS
 
@@ -138,7 +139,7 @@ class TaskManager(object):
 
 		# Add additional constraints from the user input and build SQL query:
 		if cleanup_constraints:
-			cc = cleanup_constraints.copy()
+			cc = deepcopy(cleanup_constraints)
 			if isinstance(cc, dict):
 				if cc.get('datasource'):
 					constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
@@ -148,6 +149,7 @@ class TaskManager(object):
 			elif isinstance(cc, list):
 				constraints += cc
 			else:
+				self.conn.close() # Needed for proper cleanup
 				raise ValueError("cleanup_constraints should be dict or list")
 
 		constraints = ' AND '.join(constraints)
@@ -208,14 +210,23 @@ class TaskManager(object):
 		self.close()
 
 	#----------------------------------------------------------------------------------------------
-	def close(self):
-		if self.cursor and self.conn:
-			self.conn.rollback()
-			self.cursor.execute("PRAGMA journal_mode=DELETE;")
-			self.conn.commit()
+	def __del__(self):
+		self.close()
 
-		if self.cursor: self.cursor.close()
-		if self.conn: self.conn.close()
+	#----------------------------------------------------------------------------------------------
+	def close(self):
+		if hasattr(self, 'cursor') and hasattr(self, 'conn') and self.conn is not None:
+			try:
+				self.conn.rollback()
+				self.cursor.execute("PRAGMA journal_mode=DELETE;")
+				self.conn.commit()
+				self.cursor.close()
+			except sqlite3.ProgrammingError:
+				pass
+
+		if hasattr(self, 'conn') and self.conn is not None:
+			self.conn.close()
+			self.conn = None
 
 	#----------------------------------------------------------------------------------------------
 	def save_settings(self):

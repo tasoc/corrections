@@ -44,5 +44,5 @@ def PRIVATE_TODO_FILE():
 	TODO_FILE = os.path.join(os.path.dirname(__file__), 'input', 'todo.sqlite')
 	with tempfile.TemporaryDirectory(prefix='pytest-private-todo-') as my_tmpdir:
 		tmp = os.path.join(my_tmpdir, 'todo.sqlite')
-		shutil.copy2(TODO_FILE, tmp)
+		shutil.copy(TODO_FILE, tmp)
 		yield tmp

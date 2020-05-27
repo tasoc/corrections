@@ -97,6 +97,13 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task4['priority'] == 17, "Task4 should be #17"
 
 #--------------------------------------------------------------------------------------------------
+def test_taskmanager_constraints_invalid(PRIVATE_TODO_FILE):
+	with pytest.raises(ValueError) as e:
+		with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints='invalid') as tm:
+			pass
+	assert str(e.value) == 'cleanup_constraints should be dict or list'
+
+#--------------------------------------------------------------------------------------------------
 def test_taskmanager_cleanup(PRIVATE_TODO_FILE):
 
 	# Reset the TODO-file completely, and mark the first task as STARTED:
