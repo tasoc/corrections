@@ -181,10 +181,12 @@ def test_taskmanager_chunks(PRIVATE_TODO_FILE):
 def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 	with tempfile.TemporaryDirectory() as tmpdir:
 		summary_file = os.path.join(tmpdir, 'summary.json')
-		with TaskManager(PRIVATE_TODO_FILE, overwrite=True, summary=summary_file) as tm:
+		with TaskManager(PRIVATE_TODO_FILE, overwrite=True, summary=summary_file, summary_interval=2) as tm:
 			# Load the summary file:
 			with open(summary_file, 'r') as fid:
 				j = json.load(fid)
+
+			assert tm.summary_counter == 0  # Counter should start at zero
 
 			# Everytning should be really empty:
 			# numtask checked with: SELECT COUNT(*) FROM todolist;
@@ -244,6 +246,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 
 			# Save the result:
 			tm.save_results(result)
+			assert tm.summary_counter == 1 # We saved once, so counter should have gone up one
 			tm.write_summary()
 
 			# Load the summary file after "running the task":
@@ -289,6 +292,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 
 			# Save the result:
 			tm.save_results(result)
+			assert tm.summary_counter == 0 # We saved again, so summary_counter should be zero
 			tm.write_summary()
 
 			# Load the summary file after "running the task":
