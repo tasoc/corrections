@@ -204,6 +204,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 			result['corrector'] = 'cbv'
 			result['status_corr'] = STATUS.OK
 			result['elaptime_corr'] = 3.14
+			result['worker_wait_time'] = 1.0
 			result['details'] = {'cbv_num': 10}
 
 			# Save the result:
@@ -227,6 +228,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 			assert j['slurm_jobid'] is None
 			assert j['last_error'] is None
 			assert j['mean_elaptime'] == 3.14
+			assert j['mean_worker_waittime'] == 1.0
 
 			# Check the setting again - it should now have changed:
 			assert tm.corrector == 'cbv'
@@ -247,6 +249,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 			result['corrector'] = 'cbv'
 			result['status_corr'] = STATUS.ERROR
 			result['elaptime_corr'] = 6.14
+			result['worker_wait_time'] = 2.0
 			result['details'] = {'errors': ['dummy error 1', 'dummy error 2']}
 
 			# Save the result:
@@ -270,6 +273,7 @@ def test_taskmanager_summary_and_settings(PRIVATE_TODO_FILE):
 			assert j['slurm_jobid'] is None
 			assert j['last_error'] == "dummy error 1\ndummy error 2"
 			assert j['mean_elaptime'] == 3.44
+			assert j['mean_worker_waittime'] == 1.1
 
 			# Make a new fake result we can save;
 			# but this time try to change the corrector
