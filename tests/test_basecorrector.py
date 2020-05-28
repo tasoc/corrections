@@ -11,7 +11,7 @@ import sqlite3
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from corrections import BaseCorrector
+from corrections import BaseCorrector, TaskManager, STATUS
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
@@ -59,6 +59,35 @@ def test_search_database(PRIVATE_TODO_FILE):
 		with pytest.raises(sqlite3.OperationalError):
 			bc.cursor.execute("UPDATE todolist SET priority=-{0:d} WHERE priority={0:d};".format(test_priority))
 		bc.conn.rollback()
+
+#--------------------------------------------------------------------------------------------------
+def test_search_database_changes(PRIVATE_TODO_FILE):
+	"""
+	Test wheter changing corr_status will change what is returned by search_database
+	"""
+
+	with BaseCorrector(PRIVATE_TODO_FILE) as bc:
+		rows1 = bc.search_database(search=['todolist.starid=29281992'])
+		print(rows1)
+
+	with TaskManager(PRIVATE_TODO_FILE) as tm:
+		task = tm.get_task(priority=17)
+		tm.start_task(task)
+
+	with BaseCorrector(PRIVATE_TODO_FILE) as bc:
+		rows2 = bc.search_database(search=['todolist.starid=29281992'])
+		print(rows2)
+
+	# Only the corr_status column was allowed to change!
+	assert len(rows1) == len(rows2)
+	assert rows1[0]['corr_status'] is None
+	assert rows2[0]['corr_status'] == STATUS.STARTED.value
+	for k in range(len(rows1)):
+		r1 = rows1[k]
+		r1.pop('corr_status')
+		r2 = rows2[k]
+		r2.pop('corr_status')
+		assert r1 == r2
 
 #----------------------------------------------------------------------
 if __name__ == '__main__':
