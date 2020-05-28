@@ -78,8 +78,6 @@ jobs:
   fast_finish: true
   allow_failures:
     - name: "Flake8"
-    - python: "3.8"
-    - name: "Python 3.8 on Windows"
 
 # command to install dependencies
 install:
@@ -101,7 +99,7 @@ branches:
 # code whenever a new tag is added on the master branch
 before_deploy:
   - git stash --all
-  - $PYTHON -c "from photometry import version; version.update_release_version();"
+  - $PYTHON -c "from corrections import version; version.update_release_version()"
 deploy:
   provider: releases
   token: $GITHUB_TOKEN
