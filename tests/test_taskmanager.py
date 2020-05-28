@@ -77,7 +77,6 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		task = tm.get_task(**constraints)
 		numtasks = tm.get_number_tasks(**constraints)
 		print(task)
-		print(numtasks)
 		assert task is None, "Task1 should be None"
 		assert numtasks == 0, "Task1 search should give no results"
 
@@ -86,7 +85,6 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		task2 = tm.get_task(**constraints)
 		numtasks2 = tm.get_number_tasks(**constraints)
 		print(task2)
-		print(numtasks2)
 		assert task2 == task, "Tasks should be identical"
 		assert numtasks2 == 0, "Task2 search should give no results"
 
@@ -95,7 +93,6 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		task = tm.get_task(**constraints)
 		numtasks = tm.get_number_tasks(**constraints)
 		print(task)
-		print(numtasks)
 		assert task['priority'] == 17, "Task2 should be #17"
 		assert task['datasource'] == 'ffi'
 		assert task['camera'] == 1
@@ -107,7 +104,6 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		task3 = tm.get_task(**constraints)
 		numtasks3 = tm.get_number_tasks(**constraints)
 		print(task3)
-		print(numtasks3)
 		assert task3 == task, "Tasks should be identical"
 		assert numtasks3 == 1, "Task3 search should give one results"
 
@@ -116,14 +112,20 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		task4 = tm.get_task(priority=17)
 		numtasks4 = tm.get_number_tasks(priority=17)
 		print(task4)
-		print(numtasks4)
 		assert task4['priority'] == 17, "Task4 should be #17"
 		assert numtasks4 == 1, "Priority search should give one results"
+
+	constraints = {'starid': 29281992}
+	with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints=constraints) as tm:
+		numtasks5 = tm.get_number_tasks(**constraints)
+		assert numtasks5 == 2
+		task5 = tm.get_task(**constraints)
+		assert task5['priority'] == 17
 
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_constraints_invalid(PRIVATE_TODO_FILE):
 	with pytest.raises(ValueError) as e:
-		with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints='invalid') as tm:
+		with TaskManager(PRIVATE_TODO_FILE, cleanup_constraints='invalid'):
 			pass
 	assert str(e.value) == 'cleanup_constraints should be dict or list'
 
@@ -337,6 +339,24 @@ def test_taskmanager_no_more_tasks(PRIVATE_TODO_FILE):
 		assert tm.get_task() is None
 		assert tm.get_random_task() is None
 		assert tm.get_number_tasks() == 0
+
+#--------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize('corrector,fdesc', [('cbv','cbv'), ('ensemble','ens'), ('kasoc_filter','kf')])
+def test_taskmanager_corrector_detection(PRIVATE_TODO_FILE, corrector, fdesc):
+	# Start out with the blank TODO file, and
+	# manualky add a single lightcurve to the diagnostics_corr table,
+	# as if we had done a previous run with an older version:
+	with TaskManager(PRIVATE_TODO_FILE) as tm:
+		assert tm.corrector is None
+		tm.cursor.execute("INSERT INTO diagnostics_corr (priority,lightcurve) VALUES (17,'tess0012345678-tasoc-{0:s}_lc.fits.gz');".format(fdesc))
+		tm.conn.commit()
+
+	# When re-opening the TODO-file, it should now be detected
+	# as a corrected TODO file:
+	with TaskManager(PRIVATE_TODO_FILE) as tm:
+		assert tm.corrector == corrector
+		tm.cursor.execute("SELECT corrector FROM corr_settings;")
+		assert tm.cursor.fetchone()[0] == corrector
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':

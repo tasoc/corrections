@@ -304,10 +304,13 @@ class BaseCorrector(object):
 		any kind of correction.
 
 		Parameters:
+			select (list of strings or None): List of table columns to return.
 			search (list of strings or None): Conditions to apply to the selection of stars from the database
-			order_by (list, string or None): Column to order the database output by.
-			limit (int or None): Maximum number of rows to retrieve from the database. If limit is None, all the rows are retrieved.
-			distinct (boolean): Boolean indicating if the query should return unique elements only.
+			order_by (list, str or None): Column to order the database output by.
+			limit (int or None): Maximum number of rows to retrieve from the database.
+				If limit is None, all the rows are retrieved.
+			distinct (bool): Boolean indicating if the query should return unique elements only.
+			join (list): Table join commands to merge several database tables together.
 
 		Returns:
 			list of dicts: Returns all stars retrieved by the call to the database as dicts/tasks that can be consumed directly by load_lightcurve
