@@ -11,11 +11,9 @@ Tests of plots
 """
 
 import pytest
-import sys
-import os.path
 import numpy as np
 import scipy
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 from corrections.plots import plt, plot_image, plot_image_fit_residuals
 
 kwargs = {'baseline_dir': 'baseline_images'}
@@ -133,11 +131,6 @@ def test_plot_image_data_change():
 #-------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 	plt.switch_backend('TkAgg')
-	#matplotlib.use('TkAgg')
 	plt.close('all')
-	test_plot_image()
-	test_plot_image_invalid()
-	test_plot_image_grid()
-	test_plot_image_grid_offset()
-	test_plot_image_data_change()
+	pytest.main([__file__])
 	plt.show()

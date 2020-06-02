@@ -236,7 +236,7 @@ class TaskManager(object):
 					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN ens_fom REAL DEFAULT NULL;")
 
 			self.conn.commit()
-		except:
+		except: # noqa: E722, pragma: nocover
 			self.conn.rollback()
 			raise
 
@@ -368,7 +368,7 @@ class TaskManager(object):
 				error_msg
 			) + additional_diags)
 			self.conn.commit()
-		except: # noqa: E722
+		except: # noqa: E722, pragma: nocover
 			self.conn.rollback()
 			raise
 
@@ -416,5 +416,5 @@ class TaskManager(object):
 			try:
 				with open(self.summary_file, 'w') as fid:
 					json.dump(self.summary, fid)
-			except: # noqa: E722
+			except: # noqa: E722, pragma: nocover
 				self.logger.exception("Could not write summary file")

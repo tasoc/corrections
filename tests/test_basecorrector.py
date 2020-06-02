@@ -8,15 +8,11 @@ Tests of BaseCorrection.
 
 import pytest
 import sqlite3
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 from corrections import BaseCorrector
 
-INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-
 #--------------------------------------------------------------------------------------------------
-def test_import_nonexistent():
+def test_import_nonexistent(INPUT_DIR):
 	"""
 	Tests that BaseCorrector handles being called with non-existing input directory.
 	"""
@@ -60,6 +56,6 @@ def test_search_database(PRIVATE_TODO_FILE):
 			bc.cursor.execute("UPDATE todolist SET priority=-{0:d} WHERE priority={0:d};".format(test_priority))
 		bc.conn.rollback()
 
-#----------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 	pytest.main([__file__])

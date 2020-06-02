@@ -9,16 +9,13 @@ Tests Cotrending Basis Vector objects.
 import pytest
 import tempfile
 from astropy.io import fits
-import sys
 import os.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 from corrections import CBV
-
-INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("datasource", ['ffi', 'tpf'])
-def test_cbv(datasource):
+def test_cbv(INPUT_DIR, datasource):
 	# Folder containing test CBV files:
 	data_folder = os.path.join(INPUT_DIR, 'cbv-prepare')
 
@@ -51,7 +48,7 @@ def test_cbv(datasource):
 			assert hdu[0].header['DATA_REL'] == 5
 
 #--------------------------------------------------------------------------------------------------
-def test_cbv_invalid():
+def test_cbv_invalid(INPUT_DIR):
 	# Folder containing test CBV files:
 	data_folder = os.path.join(INPUT_DIR, 'cbv-prepare')
 

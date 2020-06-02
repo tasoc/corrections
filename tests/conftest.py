@@ -7,9 +7,20 @@ Pytest fixture to create temp copy of input data, shared across all tests.
 """
 
 import pytest
+import sys
 import os.path
 import tempfile
 import shutil
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+#--------------------------------------------------------------------------------------------------
+@pytest.fixture(scope='session')
+def INPUT_DIR():
+	"""
+	Pytest fixture to create temp copy of input data, shared across all tests.
+	"""
+	return os.path.join(os.path.dirname(__file__), 'input')
 
 #--------------------------------------------------------------------------------------------------
 @pytest.fixture(scope='session')

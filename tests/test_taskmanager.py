@@ -7,14 +7,11 @@ Tests of corrections.TaskManager.
 """
 
 import pytest
-import sys
 import os.path
 import tempfile
 import json
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 from corrections import TaskManager, STATUS
-
-INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager(PRIVATE_TODO_FILE):
@@ -64,7 +61,7 @@ def test_taskmanager(PRIVATE_TODO_FILE):
 		assert task1_status == STATUS.STARTED.value
 
 #--------------------------------------------------------------------------------------------------
-def test_taskmanager_notexist():
+def test_taskmanager_notexist(INPUT_DIR):
 	with pytest.raises(FileNotFoundError):
 		with TaskManager(os.path.join(INPUT_DIR, 'does-not-exist')):
 			pass
