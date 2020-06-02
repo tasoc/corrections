@@ -254,7 +254,6 @@ class TaskManager(object):
 
 			self.conn.commit()
 		except: # noqa: E722, pragma: nocover
-		except: # pragma: no cover, noqa: E722
 			self.conn.rollback()
 			raise
 
