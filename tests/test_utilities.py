@@ -7,13 +7,12 @@ Tests of utility functions.
 """
 
 import pytest
-import sys
-import os
+import os.path
 import numpy as np
 import tempfile
 import warnings
 from lightkurve import LightCurve, LightkurveWarning
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 from corrections.utilities import savePickle, loadPickle, sphere_distance, rms_timescale, ptp
 
 #--------------------------------------------------------------------------------------------------

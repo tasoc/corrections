@@ -34,7 +34,6 @@ __docformat__ = 'restructuredtext'
 class STATUS(enum.Enum):
 	"""
 	Status indicator of the status of the correction.
-
 	"""
 	UNKNOWN = 0 #: The status is unknown. The actual calculation has not started yet.
 	STARTED = 6 #: The calculation has started, but not yet finished.
@@ -45,14 +44,39 @@ class STATUS(enum.Enum):
 	SKIPPED = 5 #: The target was skipped because the algorithm found that to be the best solution.
 
 #--------------------------------------------------------------------------------------------------
+def _filter_fits_hdu(hdu):
+	"""
+	Filter FITS file for invalid data (undefined timestamps).
+
+	Parameters:
+		hdu (:class:`astropy.io.fits.HDUList`): FITS HDUList that needs to be filtered.
+
+	Returns:
+		:class:`astropy.io.fits.HDUList`: Modified FITS HDUList with invalid data removed.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	# Remove non-finite timestamps
+	indx = np.isfinite(hdu['LIGHTCURVE'].data['TIME'])
+
+	# Remove where TIME, CADENCENO and FLUX_RAW are all exactly zero:
+	indx &= ~((hdu['LIGHTCURVE'].data['CADENCENO'] == 0)
+		& (hdu['LIGHTCURVE'].data['TIME'] == 0)
+		& (hdu['LIGHTCURVE'].data['FLUX_RAW'] == 0))
+
+	# Remove from in-memory FITS hdu:
+	hdu['LIGHTCURVE'].data = hdu['LIGHTCURVE'].data[indx]
+	return hdu
+
+#--------------------------------------------------------------------------------------------------
 class BaseCorrector(object):
 	"""
 	The basic correction class for the TASOC Photometry pipeline.
 	All other specific correction classes will inherit from BaseCorrector.
 
 	Attributes:
-		plot (boolean): Boolean indicating if plotting is enabled.
-		data_folder (string): Path to directory where auxillary data for the corrector
+		plot (bool): Boolean indicating if plotting is enabled.
+		data_folder (str): Path to directory where axillary data for the corrector
 			should be stored.
 
 	.. codeauthor:: Lindsey Carboneau
@@ -64,8 +88,8 @@ class BaseCorrector(object):
 		Initialize the corrector.
 
 		Parameters:
-			input_folder (string):
-			plot (boolean, optional):
+			input_folder (str): Directory with input files.
+			plot (bool, optional): Enable plotting.
 
 		Raises:
 			FileNotFoundError: TODO-file not found in directory.
@@ -170,7 +194,7 @@ class BaseCorrector(object):
 		Return folder path where plots for a given lightcurve should be saved.
 
 		Parameters:
-			lc (``lightkurve.TessLightCurve``): Lightcurve to return plot path for.
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve to return plot path for.
 
 		Returns:
 			string: Path to directory where plots should be saved.
@@ -189,10 +213,13 @@ class BaseCorrector(object):
 		Apply corrections to target lightcurve.
 
 		Parameters:
-			lightcurve (``lightkurve.TessLightCurve`` object): Lightcurve of the target star to be corrected.
+			lightcurve (:class:`lightkurve.TessLightCurve`): Lightcurve of the target star
+				to be corrected.
 
 		Returns:
-			The status of the corrections and the corrected lightcurve object.
+			tuple:
+			- :class:`STATUS`: The status of the corrections.
+			- :class:`lightkurve.TessLightCurve`: corrected lightcurve object.
 
 		Raises:
 			NotImplementedError
@@ -206,7 +233,7 @@ class BaseCorrector(object):
 
 		Parameters:
 			task (dict): Dictionary defining a task/lightcurve to process.
-			output_folder (string, optional): Path to directory where lightcurve should be saved.
+			output_folder (str, optional): Path to directory where lightcurve should be saved.
 
 		Returns:
 			dict: Result dictionary containing information about the processing.
@@ -219,6 +246,7 @@ class BaseCorrector(object):
 		t1 = default_timer()
 
 		error_msg = []
+		details = {}
 		save_file = None
 		result = task.copy()
 		try:
@@ -240,16 +268,7 @@ class BaseCorrector(object):
 		if status == STATUS.UNKNOWN: # pragma: no cover
 			raise Exception("STATUS was not set by do_correction")
 
-		# Calculate diagnostics:
-		details = {}
-
-		# Unpack any errors or warnings that were sent to the logger during the correction:
-		if self.message_queue:
-			error_msg += self.message_queue
-			self.message_queue.clear()
-		if not error_msg:
-			error_msg = None
-
+		# Do sanity checks and calculate diagnostics:
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
@@ -263,7 +282,7 @@ class BaseCorrector(object):
 				details['ens_num'] = lc_corr.meta['additional_headers']['ENS_NUM']
 				details['ens_fom'] = lc_corr.meta['FOM']
 
-			# TODO: set outputs; self._details = self.lightcurve, etc.
+			# Save the lightcurve to file:
 			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
 
 			# Plot the final lightcurve:
@@ -281,6 +300,13 @@ class BaseCorrector(object):
 			# Construct result dictionary from the original task
 			result = lc_corr.meta['task'].copy()
 
+		# Unpack any errors or warnings that were sent to the logger during the correction:
+		if self.message_queue:
+			error_msg += self.message_queue
+			self.message_queue.clear()
+		if not error_msg:
+			error_msg = None
+
 		# Update results:
 		t2 = default_timer()
 		details['errors'] = error_msg
@@ -295,7 +321,8 @@ class BaseCorrector(object):
 		return result
 
 	#----------------------------------------------------------------------------------------------
-	def search_database(self, select=None, join=None, search=None, order_by=None, limit=None, distinct=False):
+	def search_database(self, select=None, join=None, search=None, order_by=None, limit=None,
+		distinct=False):
 		"""
 		Search list of lightcurves and return a list of tasks/stars matching the given criteria.
 
@@ -313,7 +340,8 @@ class BaseCorrector(object):
 			join (list): Table join commands to merge several database tables together.
 
 		Returns:
-			list of dicts: Returns all stars retrieved by the call to the database as dicts/tasks that can be consumed directly by load_lightcurve
+			list: All stars retrieved by the call to the database as dicts/tasks
+			that can be consumed directly by load_lightcurve
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
@@ -374,7 +402,7 @@ class BaseCorrector(object):
 			task (integer or dict):
 
 		Returns:
-			``lightkurve.TessLightCurve``: Lightcurve for the star in question.
+			:class:`lightkurve.TessLightCurve`: Lightcurve for the star in question.
 
 		Raises:
 			ValueError: On invalid file format.
@@ -445,6 +473,9 @@ class BaseCorrector(object):
 
 		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
 			with fits.open(fname, mode='readonly', memmap=True) as hdu:
+				# Filter out invalid parts of the input lightcurve:
+				hdu = _filter_fits_hdu(hdu)
+
 				# Quality flags from the pixels:
 				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
 
@@ -504,10 +535,11 @@ class BaseCorrector(object):
 		Save generated lightcurve to file.
 
 		Parameters:
-			output_folder (string, optional): Path to directory where to save lightcurve. If ``None`` the directory specified in the attribute ``output_folder`` is used.
+			output_folder (str, optional): Path to directory where to save lightcurve.
+				If ``None`` the directory specified in the attribute ``output_folder`` is used.
 
 		Returns:
-			string: Path to the generated file.
+			str: Path to the generated file.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -552,6 +584,9 @@ class BaseCorrector(object):
 
 			# Open the FITS file to overwrite the corrected flux columns:
 			with fits.open(save_file, mode='update') as hdu:
+				# Filter out invalid parts of the input lightcurve:
+				hdu = _filter_fits_hdu(hdu)
+
 				# Overwrite the corrected flux columns:
 				hdu['LIGHTCURVE'].data['FLUX_CORR'] = lc.flux
 				hdu['LIGHTCURVE'].data['FLUX_CORR_ERR'] = lc.flux_err
@@ -582,9 +617,6 @@ class BaseCorrector(object):
 
 					# Add the new table to the list of HDUs:
 					hdu.append(wm)
-
-				# Save the updated FITS file:
-#				hdu.flush()
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":

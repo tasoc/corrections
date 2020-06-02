@@ -7,16 +7,15 @@ Tests of CBVCreator.
 """
 
 import pytest
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import os.path
+import conftest # noqa: F401
 from corrections import CBV, CBVCreator, create_cbv
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available_v2.txt'))
 
 #--------------------------------------------------------------------------------------------------
-def test_import_nonexistent():
+def test_import_nonexistent(INPUT_DIR):
 	"""
 	Tests that CBVCreator handles being called with non-existing input directory.
 	"""

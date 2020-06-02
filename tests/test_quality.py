@@ -6,10 +6,9 @@ Tests of corrections.quality.
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
+import pytest
 import numpy as np
-import sys
-import os.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 from corrections.quality import CorrectorQualityFlags, TESSQualityFlags
 
 #--------------------------------------------------------------------------------------------------
@@ -111,5 +110,4 @@ def test_TESSQuality():
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	test_CorrectorQuality()
-	test_TESSQuality()
+	pytest.main([__file__])
