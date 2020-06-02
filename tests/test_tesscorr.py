@@ -15,16 +15,20 @@ def test_corrclass_type():
 	"""Check that tesscorr.py returns the correct class"""
 
 	CorrClass = corrections.corrclass()
-	assert CorrClass is corrections.ensemble.EnsembleCorrector
+	print(CorrClass)
+	assert CorrClass is corrections.EnsembleCorrector
 
 	CorrClass = corrections.corrclass('ensemble')
-	assert CorrClass is corrections.ensemble.EnsembleCorrector
+	print(CorrClass)
+	assert CorrClass is corrections.EnsembleCorrector
 
 	CorrClass = corrections.corrclass('cbv')
-	assert CorrClass is corrections.cbv_corrector.CBVCorrector.CBVCorrector
+	print(CorrClass)
+	assert CorrClass is corrections.CBVCorrector
 
 	CorrClass = corrections.corrclass('kasoc_filter')
-	assert CorrClass is corrections.KASOCFilterCorrector.KASOCFilterCorrector
+	print(CorrClass)
+	assert CorrClass is corrections.KASOCFilterCorrector
 
 	method = 'not-a-method'
 	with pytest.raises(ValueError) as err:
