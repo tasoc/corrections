@@ -466,7 +466,7 @@ class TaskManager(object):
 					error_msg
 				) + additional_diags)
 				self.conn.commit()
-			except: # pragma: no cover, noqa: E722
+			except: # noqa: E722, pragma: no cover
 				self.conn.rollback()
 				raise
 
@@ -494,5 +494,5 @@ class TaskManager(object):
 			try:
 				with open(self.summary_file, 'w') as fid:
 					json.dump(self.summary, fid)
-			except: # pragma: no cover, noqa: E722
+			except: # noqa: E722, pragma: no cover
 				self.logger.exception("Could not write summary file")
