@@ -9,7 +9,7 @@ Tests of BaseCorrection.
 import pytest
 import sqlite3
 import conftest # noqa: F401
-from corrections import BaseCorrector
+from corrections import BaseCorrector, TaskManager, STATUS
 
 #--------------------------------------------------------------------------------------------------
 def test_import_nonexistent(INPUT_DIR):
