@@ -426,17 +426,17 @@ class CBV(object):
 		and the fitting coefficients.
 
 		Parameters:
-			lc (`LightCurve`): Lightcurve to be cotrended.
-			use_bic (boolean, optional): Use the Bayesian Information Criterion to find the
+			lc (:class:`LightCurve`): Lightcurve to be cotrended.
+			use_bic (bool, optional): Use the Bayesian Information Criterion to find the
 				optimal number of CBVs to fit. Default=True.
-			use_prior (boolean, optional):
-			cbvs (integer, optional): Number of CBVs to fit to lightcurve. If `use_bic=True`, this
+			use_prior (bool, optional):
+			cbvs (int, optional): Number of CBVs to fit to lightcurve. If `use_bic=True`, this
 				indicated the maximum number of CBVs to fit.
 
 		Returns:
-			`numpy.array`: Fitted lightcurve with the same length as `lc`.
-			list: Coefficients for each CBV.
-			dict: Diagnostics information about the fitting.
+			- `numpy.array`: Fitted lightcurve with the same length as `lc`.
+			- list: Coefficients for each CBV.
+			- dict: Diagnostics information about the fitting.
 
 		"""
 
@@ -460,7 +460,6 @@ class CBV(object):
 			Do fits including prior information from the initial fits -
 			allow switching to a simple LSSQ fit depending on
 			variability measures (not fully implemented yet!)
-
 			"""
 
 			# Position of target in multidimentional prior space:
@@ -520,9 +519,8 @@ class CBV(object):
 			"""
 			Do "simple" LSSQ fits using BIC to decide on number of CBVs
 			to include
-
 			"""
-			logger.info('Fitting using LLSQ')
+			logger.debug('Fitting TIC %d using LLSQ', lc.targetid)
 			flux_filter, res = self._fit(lc.flux, Numcbvs=cbvs, use_bic=use_bic)
 			diagnostics['method'] = 'LS'
 
@@ -534,11 +532,11 @@ class CBV(object):
 		Save CBVs to FITS file.
 
 		Parameters:
-			output_folder (string): Path to directory where FITS file should be saved.
-			datarel (integer): Data release number to add to file header.
+			output_folder (str): Path to directory where FITS file should be saved.
+			datarel (int): Data release number to add to file header.
 
 		Returns:
-			string: Path to the generated FITS file.
+			str: Path to the generated FITS file.
 
 		Raises:
 			FileNotFoundError: If `output_folder` is invalid.
