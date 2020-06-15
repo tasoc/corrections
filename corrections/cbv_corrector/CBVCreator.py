@@ -83,15 +83,15 @@ class CBVCreator(BaseCorrector):
 	Creation of Cotrending Basis Vectors.
 
 	Attributes:
-		datasource (string):
-		cbv_area (integer):
-		ncomponents (integer):
+		datasource (str):
+		cbv_area (int):
+		ncomponents (int):
 		threshold_variability (float):
 		threshold_correlation (float):
 		threshold_snrtest (float):
 		threshold_entropy (float):
-		hdf (`h5py.File`):
-		cbv_plot_folder (string):
+		hdf (:class:`h5py.File`):
+		cbv_plot_folder (str):
 
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -104,9 +104,9 @@ class CBVCreator(BaseCorrector):
 		Initialise the CBV Creator.
 
 		Parameters:
-			datasource (string):
-			cbv_area (integer):
-			ncomponents (integer):
+			datasource (str):
+			cbv_area (int):
+			ncomponents (int):
 			threshold_variability (float):
 			threshold_correlation (float):
 			threshold_snrtest (float):
@@ -251,7 +251,7 @@ class CBVCreator(BaseCorrector):
 
 		search_params = [
 			'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
-			"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+			"method_used='aperture'", # Only including aperature photometry targets
 			search_cadence,
 			"cbv_area={:d}".format(self.cbv_area),
 			#"sector={:d}".format(sector) # TODO: Add this constraint here
@@ -427,14 +427,14 @@ class CBVCreator(BaseCorrector):
 
 		The steps taken in the function are:
 
-			1. run :py:func:`CBVCorrector.lightcurve_matrix` to obtain matrix with gap-filled, nan-removed light curves
-			for the most correlated stars in a given cbv-area
-			2. Compute principal components and remove significant single-star contributers based on entropy
-			3. reun SNR test on CBVs, and only retain CBVs that pass the test
-			4. Save CBVs and make diagnostics plots
+		1. run :py:func:`CBVCorrector.lightcurve_matrix` to obtain matrix with gap-filled,
+		nan-removed light curves for the most correlated stars in a given cbv-area.
+		2. Compute principal components and remove significant single-star contributers based on entropy.
+		3. reun SNR test on CBVs, and only retain CBVs that pass the test.
+		4. Save CBVs and make diagnostics plots.
 
 		Parameters:
-			targ_limit (integer):
+			targ_limit (int, optional):
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -636,24 +636,19 @@ class CBVCreator(BaseCorrector):
 		into the HDF5 CBV file.
 
 		Parameters:
-			do_ini_plots (boolean): Plot the LS fit for each light curve? Default=False.
+			do_ini_plots (bool): Plot the LS fit for each light curve? Default=False.
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
-
-		#------------------------------------------------------------------
-		# CORRECTING STARS
-		#------------------------------------------------------------------
-
 		logger.info("--------------------------------------------------------------")
 		if 'inifit' in self.hdf:
-			logger.info("Initial co-trending for light curves in %s CBV area%d already done" % (self.datasource, self.cbv_area))
+			logger.info("Initial co-trending for light curves in %s CBV area%d already done", self.datasource, self.cbv_area)
 			return
 
-		logger.info("Initial co-trending for light curves in %s CBV area%d" % (self.datasource, self.cbv_area))
+		logger.info("Initial co-trending for light curves in %s CBV area%d", self.datasource, self.cbv_area)
 
 		# Convert datasource into query-string for the database:
 		# This will change once more different cadences (i.e. 20s) is defined
@@ -664,7 +659,7 @@ class CBVCreator(BaseCorrector):
 
 		search_params = [
 			'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
-			"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+			"method_used='aperture'", # Only including aperature photometry targets
 			search_cadence,
 			"cbv_area={:d}".format(self.cbv_area),
 			#"sector={:d}".format(sector) # TODO: Add this constraint here
@@ -682,7 +677,8 @@ class CBVCreator(BaseCorrector):
 		Ncbvs = cbv.cbv.shape[1]
 		logger.info('Fitting using number of components: %d', Ncbvs)
 
-		# initialize results array including CBV coefficients, Spike-CBV coefficients and an residual offset
+		# Initialize results array including CBV coefficients,
+		# Spike-CBV coefficients and an residual offset
 		Nres = 2*Ncbvs+1
 		coeffs = np.full((len(stars), Nres), np.NaN, dtype='float64')
 		pos = np.full((len(stars), 3), np.NaN, dtype='float64')

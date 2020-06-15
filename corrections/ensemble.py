@@ -72,7 +72,7 @@ class EnsembleCorrector(BaseCorrector):
 			select_params = ["todolist.priority", "pos_row", "pos_column"]
 			search_params = [
 				'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
-				"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+				"method_used='aperture'", # Only including aperature photometry targets
 				"camera={:d}".format(camera),
 				"ccd={:d}".format(ccd),
 				"sector={:d}".format(sector),
