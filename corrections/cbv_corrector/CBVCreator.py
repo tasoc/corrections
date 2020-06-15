@@ -694,7 +694,11 @@ class CBVCreator(BaseCorrector):
 
 			logger.debug("Correcting star %d", lc.targetid)
 
-			flux_filter, res, _ = cbv.fit(lc, cbvs=Ncbvs, use_bic=False, use_prior=False)
+			try:
+				flux_filter, res, _ = cbv.fit(lc, cbvs=Ncbvs, use_bic=False, use_prior=False)
+			except ValueError:
+				logger.error("%d: Ini-fit failed with ValueError", lc.targetid)
+				continue
 
 			# TODO: compute diagnostics requiring the light curve
 			# SAVE TO DIAGNOSTICS FILE::
@@ -724,6 +728,11 @@ class CBVCreator(BaseCorrector):
 				filename = 'lc_corr_ini_TIC%d.png' % lc.targetid
 				fig.savefig(os.path.join(self.plot_folder(lc), filename))
 				plt.close(fig)
+
+		# Filter away any targets that could not be fitted:
+		indx = ~np.isnan(pos[:, 0])
+		pos = pos[indx, :]
+		coeffs = coeffs[indx, :]
 
 		# Save weights for priors if it is an initial run
 		self.hdf.create_dataset('inifit', data=coeffs)
