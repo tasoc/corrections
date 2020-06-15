@@ -123,7 +123,7 @@ class CBV(object):
 			C = (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
 		except (np.linalg.LinAlgError, ValueError):
 			# Another (but slover) implementation
-			C = np.linalg.lstsq(X, F)[0]
+			C = np.linalg.lstsq(X, F, rcond=None)[0]
 
 		return C
 

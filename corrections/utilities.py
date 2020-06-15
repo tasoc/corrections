@@ -202,3 +202,32 @@ class ListHandler(logging.Handler):
 	def emit(self, record):
 		"""Add the formatted log message (sans newlines) to the queue."""
 		self.message_queue.append(self.format(record).rstrip('\n'))
+
+#--------------------------------------------------------------------------------------------------
+class LoggerWriter(object):
+	"""
+	File-like object which passes input into a logger.
+
+	Can be used together with :py:func:`contextlib.redirect_stdout`
+	or :py:func:`contextlib.redirect_stderr` to redirect streams to the given logger.
+	Can be useful for wrapping codes which uses normal :py:func:`print` functions for logging.
+
+	.. code-block:: python
+		:linenos:
+
+		logger = logging.getLogger(__name__)
+		with contextlib.redirect_stdout(LoggerWriter(logger, logging.INFO)):
+			print("This goes into the logger instead of STDOUT")
+
+	.. warning::
+		This object is not thread-safe. Do not use it in threaded environments.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	def __init__(self, logger, level=logging.INFO):
+		self.logger = logger
+		self.level = level
+
+	def write(self, message):
+		if message.strip() != '':
+			self.logger.log(self.level, message)
