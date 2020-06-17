@@ -397,6 +397,9 @@ class CBV(object):
 				else:
 					break
 
+			else:
+				logger.warning("Reached maximum number of iterations in CBV fit")
+
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
 				filt = self.mdl(res) * median_flux
