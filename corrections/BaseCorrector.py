@@ -521,6 +521,11 @@ class BaseCorrector(object):
 		lc.pixel_quality = pixel_quality
 		lc.timecorr = timecorr
 
+		# Modify the "extra_columns" tuple of the lightkurve object:
+		# This is used internally in lightkurve to keep track of the columns in the
+		# object, and make sure they are propergated.
+		lc.extra_columns = tuple(list(lc.extra_columns) + ['timecorr', 'pixel_quality'])
+
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
 		lc.meta['additional_headers'] = fits.Header()
