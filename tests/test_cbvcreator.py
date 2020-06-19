@@ -9,7 +9,7 @@ Tests of CBVCreator.
 import pytest
 import os.path
 import conftest # noqa: F401
-from corrections import CBV, CBVCreator, create_cbv
+from corrections import CBV, CBVCreator, create_cbv, TaskManager
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available_v2.txt'))
@@ -86,13 +86,18 @@ def test_load_existing(SHARED_INPUT_DIR):
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a full sector of data.")
-def test_create_cbv(SHARED_INPUT_DIR):
+def test_create_cbv(PRIVATE_INPUT_DIR):
 	"""
 	Test create_cbv.
 	"""
 
+	# Invoke the TaskManager to ensure that the input TODO-file has the correct columns
+	# and indicies, which is automatically created by the TaskManager init function.
+	with TaskManager(PRIVATE_INPUT_DIR):
+		pass
+
 	# Run the creation of a single CBV on an area the doesnøt already exist:
-	cbv = create_cbv(114, SHARED_INPUT_DIR)
+	cbv = create_cbv(114, PRIVATE_INPUT_DIR)
 
 	assert isinstance(cbv, CBV), "Not a CBV object"
 	assert cbv.cbv_area == 114
