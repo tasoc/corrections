@@ -92,6 +92,19 @@ class TaskManager(object):
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
 			self.conn.commit()
 
+		# Add method_used to the diagnostics table if it doesn't exist:
+		self.cursor.execute("PRAGMA table_info(diagnostics)")
+		if 'method_used' not in [r['name'] for r in self.cursor.fetchall()]:
+			# Since this one is NOT NULL, we have to do some magic to fill out the
+			# new column after creation, by finding ketwords in other columns.
+			# This can be a pretty slow process, but it only has to be done once.
+			self.logger.debug("Adding method_used column to diagnostics")
+			self.cursor.execute("ALTER TABLE diagnostics ADD COLUMN method_used TEXT NOT NULL DEFAULT 'aperture';")
+			for m in ('aperture', 'halo', 'psf', 'linpsf'):
+				self.cursor.execute("UPDATE diagnostics SET method_used=? WHERE priority IN (SELECT priority FROM todolist WHERE method=?);", [m, m])
+			self.cursor.execute("UPDATE diagnostics SET method_used='halo' WHERE method_used='aperture' AND errors LIKE '%Automatically switched to Halo photometry%';")
+			self.conn.commit()
+
 		# Create indicies
 		self.cursor.execute("CREATE INDEX IF NOT EXISTS datavalidation_raw_approved_idx ON datavalidation_raw (approved);")
 		self.conn.commit()

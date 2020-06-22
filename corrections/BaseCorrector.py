@@ -15,6 +15,7 @@ import enum
 import logging
 import sqlite3
 import tempfile
+import contextlib
 import numpy as np
 from timeit import default_timer
 from bottleneck import nanmedian, nanvar, allnan
@@ -22,7 +23,7 @@ from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
 from .quality import TESSQualityFlags, CorrectorQualityFlags
-from .utilities import rms_timescale, ptp, ListHandler, fix_fits_table_headers
+from .utilities import rms_timescale, ptp, ListHandler, LoggerWriter, fix_fits_table_headers
 from .manual_filters import manual_exclude
 from .version import get_version
 
@@ -526,12 +527,18 @@ class BaseCorrector(object):
 		lc.pixel_quality = pixel_quality
 		lc.timecorr = timecorr
 
+		# Modify the "extra_columns" tuple of the lightkurve object:
+		# This is used internally in lightkurve to keep track of the columns in the
+		# object, and make sure they are propergated.
+		lc.extra_columns = tuple(list(lc.extra_columns) + ['timecorr', 'pixel_quality'])
+
 		# Keep the original task in the metadata:
 		lc.meta['task'] = task
 		lc.meta['additional_headers'] = fits.Header()
 
 		if logger.isEnabledFor(logging.DEBUG):
-			lc.show_properties()
+			with contextlib.redirect_stdout(LoggerWriter(logger, logging.DEBUG)):
+				lc.show_properties()
 
 		return lc
 

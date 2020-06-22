@@ -74,8 +74,14 @@ def test_search_database_changes(PRIVATE_TODO_FILE):
 		rows2 = bc.search_database(search=['todolist.starid=29281992'])
 		print(rows2)
 
-	# Only the corr_status column was allowed to change!
 	assert len(rows1) == len(rows2)
+
+	# For the test-data the "method_used" column should appear after
+	# the TaskManager has been run:
+	assert 'method_used' not in rows1[0]
+	assert rows2[0]['method_used'] == 'aperture'
+
+	# Only the corr_status column was allowed to change!
 	assert rows1[0]['corr_status'] is None
 	assert rows2[0]['corr_status'] == STATUS.STARTED.value
 	for k in range(len(rows1)):
@@ -83,6 +89,7 @@ def test_search_database_changes(PRIVATE_TODO_FILE):
 		r1.pop('corr_status')
 		r2 = rows2[k]
 		r2.pop('corr_status')
+		r2.pop('method_used')
 		assert r1 == r2
 
 #--------------------------------------------------------------------------------------------------
