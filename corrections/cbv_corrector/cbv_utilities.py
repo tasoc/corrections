@@ -11,14 +11,11 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.model_selection import cross_val_score
 from bottleneck import nansum, move_median, nanmedian, allnan
-from scipy.stats import pearsonr
-from statsmodels.nonparametric.kde import KDEUnivariate as KDE
-from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import stats
+from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.special import xlogy
-import warnings
-warnings.filterwarnings('ignore', category=FutureWarning, module="scipy.stats") # they are simply annoying!
 from scipy.spatial import distance
+from statsmodels.nonparametric.kde import KDEUnivariate as KDE
 from ..utilities import mad_to_sigma
 
 #--------------------------------------------------------------------------------------------------
@@ -58,7 +55,7 @@ def move_median_central(x, width_points, axis=0):
 #------------------------------------------------------------------------------
 def pearson(x, y):
 	indx = np.isfinite(x) & np.isfinite(y)
-	r, _ = pearsonr(x[indx], y[indx]) # Second output (p-value) is not used
+	r, _ = stats.pearsonr(x[indx], y[indx]) # Second output (p-value) is not used
 	return r
 
 #------------------------------------------------------------------------------

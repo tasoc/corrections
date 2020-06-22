@@ -15,13 +15,14 @@ import json
 from numpy import atleast_1d
 from . import STATUS
 
+#--------------------------------------------------------------------------------------------------
 class TaskManager(object):
 	"""
 	A TaskManager which keeps track of which targets to process.
 	"""
 
 	def __init__(self, todo_file, cleanup=False, overwrite=False, cleanup_constraints=None,
-		summary=None, summary_interval=100):
+		summary=None, summary_interval=200):
 		"""
 		Initialize the TaskManager which keeps track of which targets to process.
 
@@ -47,16 +48,20 @@ class TaskManager(object):
 		if not os.path.isfile(todo_file):
 			raise FileNotFoundError('Could not find TODO-file')
 
+		if cleanup_constraints is not None and not isinstance(cleanup_constraints, (dict, list)):
+			raise ValueError("cleanup_constraints should be dict or list")
+
 		# Load the SQLite file:
 		self.conn = sqlite3.connect(todo_file)
 		self.conn.row_factory = sqlite3.Row
 		self.cursor = self.conn.cursor()
 		self.cursor.execute("PRAGMA foreign_keys=ON;")
-		self.cursor.execute("PRAGMA locking_mode=NORMAL;") # Needs to be NORMAL, since we need to have multiple processes read at the same time
+		self.cursor.execute("PRAGMA locking_mode=EXCLUSIVE;")
 		self.cursor.execute("PRAGMA journal_mode=TRUNCATE;")
 
 		self.summary_file = summary
 		self.summary_interval = summary_interval
+		self.summary_counter = 0
 		self.corrector = None
 
 		# Setup logging:
@@ -85,6 +90,19 @@ class TaskManager(object):
 			self.logger.debug("Adding corr_status column to todolist")
 			self.cursor.execute("ALTER TABLE todolist ADD COLUMN corr_status INTEGER DEFAULT NULL")
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
+			self.conn.commit()
+
+		# Add method_used to the diagnostics table if it doesn't exist:
+		self.cursor.execute("PRAGMA table_info(diagnostics)")
+		if 'method_used' not in [r['name'] for r in self.cursor.fetchall()]:
+			# Since this one is NOT NULL, we have to do some magic to fill out the
+			# new column after creation, by finding ketwords in other columns.
+			# This can be a pretty slow process, but it only has to be done once.
+			self.logger.debug("Adding method_used column to diagnostics")
+			self.cursor.execute("ALTER TABLE diagnostics ADD COLUMN method_used TEXT NOT NULL DEFAULT 'aperture';")
+			for m in ('aperture', 'halo', 'psf', 'linpsf'):
+				self.cursor.execute("UPDATE diagnostics SET method_used=? WHERE priority IN (SELECT priority FROM todolist WHERE method=?);", [m, m])
+			self.cursor.execute("UPDATE diagnostics SET method_used='halo' WHERE method_used='aperture' AND errors LIKE '%Automatically switched to Halo photometry%';")
 			self.conn.commit()
 
 		# Create indicies
@@ -136,17 +154,15 @@ class TaskManager(object):
 
 		# Add additional constraints from the user input and build SQL query:
 		if cleanup_constraints:
-			cc = cleanup_constraints.copy()
-			if isinstance(cc, dict):
+			if isinstance(cleanup_constraints, dict):
+				cc = cleanup_constraints.copy()
 				if cc.get('datasource'):
 					constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
 				for key, val in cc.items():
 					if val is not None:
 						constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
-			elif isinstance(cc, list):
-				constraints += cc
 			else:
-				raise ValueError("cleanup_constraints should be dict or list")
+				constraints += cleanup_constraints
 
 		constraints = ' AND '.join(constraints)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")
@@ -162,6 +178,7 @@ class TaskManager(object):
 		self.conn.commit()
 
 		# Analyze the tables for better query planning:
+		self.logger.debug("Analyzing database...")
 		self.cursor.execute("ANALYZE;")
 
 		# Prepare summary object:
@@ -174,7 +191,8 @@ class TaskManager(object):
 			'mean_worker_waittime': None
 		}
 		# Make sure to add all the different status to summary:
-		for s in STATUS: self.summary[s.name] = 0
+		for s in STATUS:
+			self.summary[s.name] = 0
 		# If we are going to output summary, make sure to fill it up:
 		if self.summary_file:
 			# Extract information from database:
@@ -204,17 +222,31 @@ class TaskManager(object):
 		self.close()
 
 	#----------------------------------------------------------------------------------------------
-	def close(self):
-		if self.cursor and self.conn:
-			self.conn.rollback()
-			self.cursor.execute("PRAGMA journal_mode=DELETE;")
-			self.conn.commit()
+	def __del__(self):
+		self.close()
 
-		if self.cursor: self.cursor.close()
-		if self.conn: self.conn.close()
+	#----------------------------------------------------------------------------------------------
+	def close(self):
+		if hasattr(self, 'cursor') and hasattr(self, 'conn') and self.conn:
+			try:
+				self.conn.rollback()
+				self.cursor.execute("PRAGMA journal_mode=DELETE;")
+				self.conn.commit()
+				self.cursor.close()
+			except sqlite3.ProgrammingError: # pragma: no cover
+				pass
+
+		if hasattr(self, 'conn') and self.conn:
+			self.conn.close()
+			self.conn = None
 
 	#----------------------------------------------------------------------------------------------
 	def save_settings(self):
+		"""
+		Save settings to TODO-file and create method-specific columns in ``diagnostics_corr`` table.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
 
 		try:
 			self.cursor.execute("DELETE FROM corr_settings;")
@@ -234,7 +266,7 @@ class TaskManager(object):
 					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN ens_fom REAL DEFAULT NULL;")
 
 			self.conn.commit()
-		except:
+		except: # noqa: E722, pragma: nocover
 			self.conn.rollback()
 			raise
 
@@ -245,6 +277,8 @@ class TaskManager(object):
 
 		Returns:
 			int: Number of tasks due to be processed.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		constraints = []
@@ -272,12 +306,23 @@ class TaskManager(object):
 		return num
 
 	#----------------------------------------------------------------------------------------------
-	def get_task(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
+	def get_task(self, starid=None, camera=None, ccd=None, datasource=None, priority=None, chunk=1):
 		"""
 		Get next task to be processed.
 
+		Parameters:
+			priority (int, optional): Only return task matching this priority.
+			starid (int, optional): Only return tasks matching this starid.
+			camera (int, optional): Only return tasks matching this camera.
+			ccd (int, optional): Only return tasks matching this CCD.
+			datasource (str, optional): Only return tasks matching this datasource.
+			chunk (int, optional): Chunk of tasks to return. Default is to not chunk (=1).
+
 		Returns:
-			dict or None: Dictionary of settings for task.
+			dict, list or None: Dictionary of settings for task.
+				If ``chunk`` is larger than one, a list of dicts is retuned instead.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		constraints = []
@@ -297,41 +342,106 @@ class TaskManager(object):
 		else:
 			constraints = ''
 
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL %s ORDER BY todolist.priority LIMIT 1;" % (
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL %s ORDER BY todolist.priority LIMIT %d;" % (
 			constraints,
+			chunk
 		))
-		task = self.cursor.fetchone()
-		if task: return dict(task)
+		tasks = self.cursor.fetchall()
+		if tasks and chunk == 1:
+			return dict(tasks[0])
+		elif tasks:
+			return [dict(task) for task in tasks]
 		return None
 
 	#----------------------------------------------------------------------------------------------
-	def save_results(self, result):
+	def get_random_task(self, chunk=1):
+		"""
+		Get random task to be processed.
 
-		# Extract details dictionary:
-		details = result.get('details', {})
+		Parameters:
+			chunk (int, optional): Chunk of tasks to return. Default is to not chunk (=1).
 
-		# The status of this target returned by the photometry:
-		my_status = result['status_corr']
+		Returns:
+			dict, list or None: Dictionary of settings for task.
+				If ``chunk`` is larger than one, a list of dicts is retuned instead.
 
-		# If the corrector has not already been set for this TODO-file,
-		# update the settings, and if it has check that we are not
-		# mixing results from different correctors in one TODO-file.
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
+		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL ORDER BY RANDOM() LIMIT %d;" % chunk)
+		tasks = self.cursor.fetchall()
+		if tasks and chunk == 1:
+			return dict(tasks[0])
+		elif tasks:
+			return [dict(task) for task in tasks]
+		return None
+
+	#----------------------------------------------------------------------------------------------
+	def start_task(self, tasks):
+		"""
+		Mark tasks as STARTED in the TODO-list.
+
+		Parameters:
+			tasks (list or dict): Task or list of tasks coming from ``get_tasks``
+				or ``get_random_task``.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
+		if isinstance(tasks, dict):
+			priorities = [(int(tasks['priority']),)]
+		else:
+			priorities = [(int(task['priority']),) for task in tasks]
+
+		self.cursor.executemany("UPDATE todolist SET corr_status=%d WHERE priority=?;" % STATUS.STARTED.value, priorities)
+		self.summary['STARTED'] += self.cursor.rowcount
+		self.conn.commit()
+
+	#----------------------------------------------------------------------------------------------
+	def save_results(self, results):
+		"""
+		Save result, or list of results, to TaskManager.
+
+		Parameters:
+			results (list or dict):
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+		"""
+
+		if isinstance(results, dict):
+			results = [results]
+
 		if self.corrector is None:
-			self.corrector = result['corrector']
+			self.corrector = results[0]['corrector']
 			self.save_settings()
-		elif result['corrector'] != self.corrector:
-			raise ValueError("Attempting to mix results from multiple correctors")
 
-		try:
-			# Update the status in the TODO list:
-			self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
-				result['status_corr'].value,
-				result['priority']
-			))
+		additional_diags_keys = ''
+		Nadditional = 0
+		if self.corrector == 'cbv':
+			additional_diags_keys = ',cbv_num'
+			Nadditional = 1
+		elif self.corrector == 'ensemble':
+			additional_diags_keys = ',ens_num,ens_fom'
+			Nadditional = 2
+		placeholders = ','.join(['?']*(8 + Nadditional))
 
-			self.summary['tasks_run'] += 1
-			self.summary[my_status.name] += 1
-			self.summary['STARTED'] -= 1
+		for result in results:
+			# Extract details dictionary:
+			details = result.get('details', {})
+
+			# The status of this target returned by the photometry:
+			my_status = result['status_corr']
+
+			# If the corrector has not already been set for this TODO-file,
+			# update the settings, and if it has check that we are not
+			# mixing results from different correctors in one TODO-file.
+			if result['corrector'] != self.corrector:
+				raise ValueError("Attempting to mix results from multiple correctors")
+
+			# Calculate mean elapsed time using "streaming weighted mean" with (alpha=0.1):
+			# https://dev.to/nestedsoftware/exponential-moving-average-on-streaming-data-4hhl
+			if self.summary['mean_elaptime'] is None and result.get('elaptime_corr') is not None:
+				self.summary['mean_elaptime'] = result['elaptime_corr']
+			elif result.get('elaptime_corr') is not None:
+				self.summary['mean_elaptime'] += 0.1 * (result['elaptime_corr'] - self.summary['mean_elaptime'])
 
 			# Save additional diagnostics:
 			error_msg = details.get('errors', None)
@@ -339,73 +449,56 @@ class TaskManager(object):
 				error_msg = "\n".join(error_msg) if isinstance(error_msg, (list, tuple)) else error_msg.strip()
 				self.summary['last_error'] = error_msg
 
-			additional_diags_keys = ''
 			additional_diags = ()
 			if self.corrector == 'cbv':
-				additional_diags_keys = ',cbv_num'
 				additional_diags = (
 					details.get('cbv_num', None),
 				)
 			elif self.corrector == 'ensemble':
-				additional_diags_keys = ',ens_num,ens_fom'
 				additional_diags = (
 					details.get('ens_num', None),
 					details.get('ens_fom', None)
 				)
 
-			# Save additional diagnostics:
-			placeholders = ','.join(['?']*(8+len(additional_diags)))
-			self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority,lightcurve,elaptime,worker_wait_time,variance,rms_hour,ptp,errors" + additional_diags_keys + ") VALUES (" + placeholders + ");", (
-				result['priority'],
-				result.get('lightcurve_corr', None),
-				result.get('elaptime_corr', None),
-				result.get('worker_wait_time', None),
-				details.get('variance', None),
-				details.get('rms_hour', None),
-				details.get('ptp', None),
-				error_msg
-			) + additional_diags)
-			self.conn.commit()
-		except: # noqa: E722
-			self.conn.rollback()
-			raise
+			try:
+				# Update the status in the TODO list:
+				self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (
+					result['status_corr'].value,
+					result['priority']
+				))
 
-		# Calculate mean elapsed time using "streaming weighted mean" with (alpha=0.1):
-		# https://dev.to/nestedsoftware/exponential-moving-average-on-streaming-data-4hhl
-		if self.summary['mean_elaptime'] is None and result.get('elaptime_corr') is not None:
-			self.summary['mean_elaptime'] = result['elaptime_corr']
-		elif result.get('elaptime_corr') is not None:
-			self.summary['mean_elaptime'] += 0.1 * (result['elaptime_corr'] - self.summary['mean_elaptime'])
+				# Save additional diagnostics:
+				self.cursor.execute("INSERT OR REPLACE INTO diagnostics_corr (priority,lightcurve,elaptime,worker_wait_time,variance,rms_hour,ptp,errors" + additional_diags_keys + ") VALUES (" + placeholders + ");", (
+					result['priority'],
+					result.get('lightcurve_corr', None),
+					result.get('elaptime_corr', None),
+					result.get('worker_wait_time', None),
+					details.get('variance', None),
+					details.get('rms_hour', None),
+					details.get('ptp', None),
+					error_msg
+				) + additional_diags)
+				self.conn.commit()
+			except: # noqa: E722, pragma: no cover
+				self.conn.rollback()
+				raise
 
+			self.summary['tasks_run'] += 1
+			self.summary[my_status.name] += 1
+			self.summary['STARTED'] -= 1
+
+		# All the results should have the same worker_waittime.
+		# So only update this once, using just that last result in the list:
 		if self.summary['mean_worker_waittime'] is None and result.get('worker_wait_time') is not None:
 			self.summary['mean_worker_waittime'] = result['worker_wait_time']
 		elif result.get('worker_wait_time') is not None:
 			self.summary['mean_worker_waittime'] += 0.1 * (result['worker_wait_time'] - self.summary['mean_worker_waittime'])
 
 		# Write summary file:
-		if self.summary_file and self.summary['tasks_run'] % self.summary_interval == 0:
+		self.summary_counter += len(results)
+		if self.summary_file and self.summary_counter >= self.summary_interval:
+			self.summary_counter = 0
 			self.write_summary()
-
-	#----------------------------------------------------------------------------------------------
-	def start_task(self, taskid):
-		"""
-		Mark a task as STARTED in the TODO-list.
-		"""
-		self.cursor.execute("UPDATE todolist SET corr_status=? WHERE priority=?;", (STATUS.STARTED.value, taskid))
-		self.conn.commit()
-		self.summary['STARTED'] += 1
-
-	#----------------------------------------------------------------------------------------------
-	def get_random_task(self):
-		"""
-		Get random task to be processed.
-		Returns:
-			dict or None: Dictionary of settings for task.
-		"""
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL ORDER BY RANDOM() LIMIT 1;")
-		task = self.cursor.fetchone()
-		if task: return dict(task)
-		return None
 
 	#----------------------------------------------------------------------------------------------
 	def write_summary(self):
@@ -414,5 +507,5 @@ class TaskManager(object):
 			try:
 				with open(self.summary_file, 'w') as fid:
 					json.dump(self.summary, fid)
-			except: # noqa: E722
+			except: # noqa: E722, pragma: no cover
 				self.logger.exception("Could not write summary file")

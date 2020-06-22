@@ -14,14 +14,13 @@ import logging
 import numpy as np
 from numpy.testing import assert_array_equal, assert_array_less
 from lightkurve import TessLightCurve
-import sys
 import os.path
 from bottleneck import nanvar, allnan
 from astropy.io import fits
 from astropy.table import Table
 #import gzip
 import tempfile
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import conftest # noqa: F401
 import corrections
 from corrections.utilities import rms_timescale, ptp
 from corrections.plots import plt

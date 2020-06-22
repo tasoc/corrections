@@ -8,15 +8,11 @@ Tests of BaseCorrection.
 
 import pytest
 import sqlite3
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from corrections import BaseCorrector
-
-INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+import conftest # noqa: F401
+from corrections import BaseCorrector, TaskManager, STATUS
 
 #--------------------------------------------------------------------------------------------------
-def test_import_nonexistent():
+def test_import_nonexistent(INPUT_DIR):
 	"""
 	Tests that BaseCorrector handles being called with non-existing input directory.
 	"""
@@ -60,6 +56,42 @@ def test_search_database(PRIVATE_TODO_FILE):
 			bc.cursor.execute("UPDATE todolist SET priority=-{0:d} WHERE priority={0:d};".format(test_priority))
 		bc.conn.rollback()
 
-#----------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+def test_search_database_changes(PRIVATE_TODO_FILE):
+	"""
+	Test wheter changing corr_status will change what is returned by search_database
+	"""
+
+	with BaseCorrector(PRIVATE_TODO_FILE) as bc:
+		rows1 = bc.search_database(search=['todolist.starid=29281992'])
+		print(rows1)
+
+	with TaskManager(PRIVATE_TODO_FILE) as tm:
+		task = tm.get_task(priority=17)
+		tm.start_task(task)
+
+	with BaseCorrector(PRIVATE_TODO_FILE) as bc:
+		rows2 = bc.search_database(search=['todolist.starid=29281992'])
+		print(rows2)
+
+	assert len(rows1) == len(rows2)
+
+	# For the test-data the "method_used" column should appear after
+	# the TaskManager has been run:
+	assert 'method_used' not in rows1[0]
+	assert rows2[0]['method_used'] == 'aperture'
+
+	# Only the corr_status column was allowed to change!
+	assert rows1[0]['corr_status'] is None
+	assert rows2[0]['corr_status'] == STATUS.STARTED.value
+	for k in range(len(rows1)):
+		r1 = rows1[k]
+		r1.pop('corr_status')
+		r2 = rows2[k]
+		r2.pop('corr_status')
+		r2.pop('method_used')
+		assert r1 == r2
+
+#--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 	pytest.main([__file__])

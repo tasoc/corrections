@@ -7,9 +7,21 @@ Pytest fixture to create temp copy of input data, shared across all tests.
 """
 
 import pytest
+import sys
 import os.path
 import tempfile
 import shutil
+
+if sys.path[0] != os.path.abspath(os.path.join(os.path.dirname(__file__), '..')):
+	sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+#--------------------------------------------------------------------------------------------------
+@pytest.fixture(scope='session')
+def INPUT_DIR():
+	"""
+	Pytest fixture to create temp copy of input data, shared across all tests.
+	"""
+	return os.path.join(os.path.dirname(__file__), 'input')
 
 #--------------------------------------------------------------------------------------------------
 @pytest.fixture(scope='session')
@@ -44,5 +56,5 @@ def PRIVATE_TODO_FILE():
 	TODO_FILE = os.path.join(os.path.dirname(__file__), 'input', 'todo.sqlite')
 	with tempfile.TemporaryDirectory(prefix='pytest-private-todo-') as my_tmpdir:
 		tmp = os.path.join(my_tmpdir, 'todo.sqlite')
-		shutil.copy2(TODO_FILE, tmp)
+		shutil.copy(TODO_FILE, tmp)
 		yield tmp

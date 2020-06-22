@@ -82,7 +82,7 @@ def main():
 			# Start TaskManager, which keeps track of the task that needs to be performed:
 			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite,
 				cleanup_constraints=constraints,
-				summary=os.path.join(output_folder, 'summary_corr.json')) as tm:
+				summary=os.path.join(output_folder, 'summary_corr_{0}.json'.format(args.method))) as tm:
 
 				# Set level of TaskManager logger:
 				tm.logger.setLevel(logging_level)
@@ -109,12 +109,11 @@ def main():
 
 					if tag in (tags.DONE, tags.READY):
 						# Worker is ready, so send it a task
-						task = tm.get_task(**constraints)
-						if task:
-							task_index = task['priority']
-							tm.start_task(task_index)
-							comm.send(task, dest=source, tag=tags.START)
-							tm.logger.debug("Sending task %d to worker %d", task_index, source)
+						tasks = tm.get_task(**constraints, chunk=10)
+						if tasks:
+							tm.start_task(tasks)
+							tm.logger.debug("Sending %d tasks to worker %d", len(tasks), source)
+							comm.send(tasks, dest=source, tag=tags.START)
 						else:
 							comm.send(None, dest=source, tag=tags.EXIT)
 
@@ -130,7 +129,7 @@ def main():
 
 				tm.logger.info("Master finishing")
 
-		except: # noqa: E731
+		except: # noqa: E722, pragma: no cover
 			# If something fails in the master
 			print(traceback.format_exc().strip())
 			comm.Abort(1)
@@ -157,31 +156,37 @@ def main():
 				while True:
 					# Receive a task from the master:
 					tic = default_timer()
-					task = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
+					tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
 					tag = status.Get_tag()
 					toc = default_timer()
 
 					if tag == tags.START:
-						result = task.copy()
+						# Make sure we can loop through tasks,
+						# even in the case we have only gotten one:
+						results = []
+						if not isinstance(tasks, (list, tuple)):
+							tasks = list(tasks)
 
-						# Run the correction:
-						try:
-							result = corr.correct(task)
-						except: # noqa: E722
-							# Something went wrong
-							error_msg = traceback.format_exc().strip()
-							result.update({
-								'status_corr': corrections.STATUS.ERROR,
-								'details': {'errors': [error_msg]},
-							})
+						# Loop throught the tasks given to us:
+						for task in tasks:
+							result = task.copy()
 
-						result.update({'worker_wait_time': toc-tic})
+							# Run the correction:
+							try:
+								result = corr.correct(task)
+							except: # noqa: E722
+								# Something went wrong
+								error_msg = traceback.format_exc().strip()
+								result.update({
+									'status_corr': corrections.STATUS.ERROR,
+									'details': {'errors': [error_msg]},
+								})
+
+							result.update({'worker_wait_time': toc-tic})
+							results.append(result)
+
 						# Send the result back to the master:
-						comm.send(result, dest=0, tag=tags.DONE)
-
-						# Attempt some cleanup:
-						# TODO: Is this even needed?
-						del task, result
+						comm.send(results, dest=0, tag=tags.DONE)
 
 					elif tag == tags.EXIT:
 						# We were told to EXIT, so lets do that
@@ -192,7 +197,7 @@ def main():
 						# make sure we don't run into an infinite loop:
 						raise Exception("Worker received an unknown tag: '{0}'".format(tag))
 
-		except: # noqa: E731
+		except: # noqa: E722, pragma: no cover
 			logger.exception("Something failed in worker")
 
 		finally:

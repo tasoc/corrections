@@ -72,7 +72,7 @@ class EnsembleCorrector(BaseCorrector):
 			select_params = ["todolist.priority", "pos_row", "pos_column"]
 			search_params = [
 				'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
-				"(method IS NULL OR method='aperture')", # Only including aperature photometry targets
+				"method_used='aperture'", # Only including aperature photometry targets
 				"camera={:d}".format(camera),
 				"ccd={:d}".format(ccd),
 				"sector={:d}".format(sector),
@@ -194,7 +194,11 @@ class EnsembleCorrector(BaseCorrector):
 			return num1/denom1
 
 		res = minimize(func2, 1.0, args=(lc.flux, lc_medians))
-		k_corr = res.x
+		k_corr = float(res.x)
+
+		# Sanity checks:
+		if np.any(k_corr + lc_medians <= 0):
+			raise Exception('Sanity check: Optimization becomes negative')
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians
