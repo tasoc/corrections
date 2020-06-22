@@ -18,7 +18,7 @@ import tempfile
 import contextlib
 import numpy as np
 from timeit import default_timer
-from bottleneck import nanmedian, nanvar
+from bottleneck import nanmedian, nanvar, allnan
 from astropy.io import fits
 from lightkurve import TessLightCurve
 from .plots import plt, save_figure
@@ -271,6 +271,12 @@ class BaseCorrector(object):
 
 		# Do sanity checks and calculate diagnostics:
 		if status in (STATUS.OK, STATUS.WARNING):
+			# Simple check that entire lightcurve is not NaN:
+			if allnan(lc_corr.flux):
+				raise ValueError("Final lightcurve is all NaNs")
+			if allnan(lc_corr.flux_err):
+				raise ValueError("Final lightcurve errors is all NaNs")
+
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
