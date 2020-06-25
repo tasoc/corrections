@@ -167,7 +167,7 @@ def main():
 						if not isinstance(tasks, (list, tuple)):
 							tasks = list(tasks)
 
-						# Loop throught the tasks given to us:
+						# Loop through the tasks given to us:
 						for task in tasks:
 							result = task.copy()
 

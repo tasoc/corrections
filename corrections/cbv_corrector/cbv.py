@@ -111,21 +111,52 @@ class CBV(object):
 	def lsfit(self, flux, Ncbvs):
 		"""
 		Computes the least-squares solution to a linear matrix equation.
+
+		Parameters:
+			flux (ndarray): Flux array to fit.
+			Ncbvs (int): Number of CBVs to include in fit.
+
+		Returns:
+			ndarray: Coefficients for CBV plus constant offset.
 		"""
+
+		# Make sure to remove points where CBV or FLUX is not defined:
 		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(flux)
 		A0 = np.column_stack((self.cbv[idx,:Ncbvs], self.cbv_s[idx,:Ncbvs]))
 
+		# Build matrix to solve:
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
 		F = flux[idx]
 
-#		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
+		#C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
 		try:
-			C = (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
+			return (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
 		except np.linalg.LinAlgError:
-			# Another (but slover) implementation
-			C = np.linalg.lstsq(X, F, rcond=None)[0]
+			pass
+		except ValueError:
+			logger = logging.getLogger(__name__)
+			logger.exception("Error calculating pseudo-inverse solution.")
 
-		return C
+		# If the above method fails, try
+		# another (but slower) implementation:
+		try:
+			return np.linalg.lstsq(X, F, rcond=None)[0]
+		except np.linalg.LinAlgError:
+			pass
+		except ValueError:
+			logger = logging.getLogger(__name__)
+			logger.exception("Error calculating least-squares solution.")
+
+		# If everything else fails, try doing a full (slow) non-linear optimization:
+		# 2*N+1 because we need coefficients for both CBVs, Spike-CBVs and constant offset:
+		logger = logging.getLogger(__name__)
+		logger.warning("Linear optimization failed. Trying non-linear optimize as last resort.")
+		coeff0 = np.zeros(2*Ncbvs+1, dtype='float64')
+		coeff0[-1] = nanmedian(flux)
+		res = minimize(self._lhood, coeff0, args=(flux,))
+		if res.success:
+			return res.x
+		raise Exception("Minimization was not successful: " + res.message)
 
 	#----------------------------------------------------------------------------------------------
 	def lsfit_spike(self, flux, Ncbvs):
@@ -138,18 +169,28 @@ class CBV(object):
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
 		F = flux[idx]
 
-		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
-
-		return C
+		return (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
 
 	#----------------------------------------------------------------------------------------------
 	def mdl(self, coeffs):
-		coeffs = np.atleast_1d(coeffs)
-		m = np.ones(self.cbv.shape[0], dtype='float64')
-		Ncbvs = int((len(coeffs)-1)/2)
+		"""
+		Model lightcurve given CBV coefficients.
 
+		Parameters:
+			coeffs (ndarray): CBV coefficients and constant offset.
+				Should be of length 2*N+1, where the first N coefficients are for the CBVs,
+				the next N are for the Spike-CBVs, and the last element is a constant offset.
+
+		Returns:
+			ndarray: Model lightcurve, given the CBV coefficients provided.
+		"""
+		coeffs = np.atleast_1d(coeffs)
+		Ncbvs = int((len(coeffs)-1)/2)
+		m = np.zeros(self.cbv.shape[0], dtype='float64')
+		
 		for k in range(Ncbvs):
-			m += (coeffs[k] * self.cbv[:, k]) + (coeffs[k+Ncbvs] * self.cbv_s[:, k])
+			m += coeffs[k] * self.cbv[:, k] # CBV
+			m += coeffs[k+Ncbvs] * self.cbv_s[:, k] # Spike-CBV
 
 		return m + coeffs[-1]
 
@@ -182,6 +223,10 @@ class CBV(object):
 	#----------------------------------------------------------------------------------------------
 #	def _lhood(self, coeffs, flux, err):
 #		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
+
+	#----------------------------------------------------------------------------------------------
+	def _lhood(self, coeffs, flux):
+		return 0.5*nansum((flux - self.mdl(coeffs))**2)
 
 	#----------------------------------------------------------------------------------------------
 	def _lhood_off(self, coeffs, flux, fitted, Ncbvs):

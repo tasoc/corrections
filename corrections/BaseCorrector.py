@@ -304,9 +304,6 @@ class BaseCorrector(object):
 				save_figure(os.path.join(self.plot_folder(lc), self.CorrMethod + '_final'), fig=fig)
 				plt.close(fig)
 
-			# Construct result dictionary from the original task
-			result = lc_corr.meta['task'].copy()
-
 		# Unpack any errors or warnings that were sent to the logger during the correction:
 		if self.message_queue:
 			error_msg += self.message_queue
