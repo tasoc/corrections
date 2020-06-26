@@ -294,7 +294,11 @@ class BaseCorrector(object):
 				details['ens_fom'] = lc_corr.meta['FOM']
 
 			# Save the lightcurve to file:
-			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
+			try:
+				save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
+			except: # noqa: E722 pragma: no cover
+				status = STATUS.ERROR
+				logger.exception("Could not save lightcurve file (priority=%d)", task['priority'])
 
 			# Plot the final lightcurve:
 			if self.plot:
