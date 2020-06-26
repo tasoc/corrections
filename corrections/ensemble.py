@@ -48,7 +48,8 @@ class EnsembleCorrector(BaseCorrector):
 		Find the nearest neighbors to the given target in pixel-space.
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve object for target
+				obtained from :func:`load_lightcurve`.
 			n_neighbors (integer): Number of targets to return.
 
 		Returns:
@@ -121,10 +122,10 @@ class EnsembleCorrector(BaseCorrector):
 		Add a given target to the ensemble list
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve for target obtained
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve for target obtained
 				from :func:`load_lightcurve`.
-			next_star_lc (`TESSLightCurve` object): Lightcurve for star to add to ensemble
-				obtained from :func:`load_lightcurve`.
+			next_star_lc (:class:`lightkurve.TessLightCurve`): Lightcurve for star to add to
+				ensemble obtained from :func:`load_lightcurve`.
 
 		Returns:
 			tuple:
@@ -173,14 +174,14 @@ class EnsembleCorrector(BaseCorrector):
 		Apply the ensemble correction method to the target light curve
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve object for target obtained
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve object for target obtained
 				from :func:`load_lightcurve`.
 			lc_ensemble (list): List of ensemble members flux as ndarrays
 			lc_corr (`TESSLightCurve` object): Lightcurve object which stores the ensemble
 				corrected flux values.
 
 		Returns:
-			lc_corr (`TESSLightCurve` object): The updated object with corrected flux values.
+			:class:`lightkurve.TessLightCurve`: The updated object with corrected flux values.
 
 		.. codeauthor:: Lindsey Carboneau
 		.. codeauthor:: Derek Buzasi
@@ -215,11 +216,11 @@ class EnsembleCorrector(BaseCorrector):
 		index for the star in the star_array and star_names list.
 
 		Parameters:
-			lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
+			lc (:class:`lightkurve.TessLightCurve`): Raw lightcurve stored in a TessLightCurve object.
 
 		Returns:
-			``lightkurve.TessLightCurve``: Corrected lightcurve stored in a TessLightCurve object.
-			``corrections.STATUS``: The status of the correction.
+			:class:`lightkurve.TessLightCurve`: Corrected lightcurve stored in a TessLightCurve object.
+			:class:`STATUS`: The status of the correction.
 		"""
 
 		logger = logging.getLogger(__name__)
