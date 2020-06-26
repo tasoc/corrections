@@ -269,14 +269,18 @@ class BaseCorrector(object):
 		if status == STATUS.UNKNOWN: # pragma: no cover
 			raise Exception("STATUS was not set by do_correction")
 
-		# Do sanity checks and calculate diagnostics:
+		# Do sanity checks:
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Simple check that entire lightcurve is not NaN:
 			if allnan(lc_corr.flux):
-				raise ValueError("Final lightcurve is all NaNs")
+				logger.error("Final lightcurve is all NaNs")
+				status = STATUS.ERROR
 			if allnan(lc_corr.flux_err):
-				raise ValueError("Final lightcurve errors is all NaNs")
+				logger.error("Final lightcurve errors is all NaNs")
+				status = STATUS.ERROR
 
+		# Calculate diagnostics:
+		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
