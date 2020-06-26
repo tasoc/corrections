@@ -260,7 +260,6 @@ class BaseCorrector(object):
 		except (KeyboardInterrupt, SystemExit): # pragma: no cover
 			status = STATUS.ABORT
 			logger.warning("Correction was aborted (priority=%d)", task['priority'])
-
 		except: # noqa: E722 pragma: no cover
 			status = STATUS.ERROR
 			logger.exception("Correction failed (priority=%d)", task['priority'])
@@ -296,6 +295,9 @@ class BaseCorrector(object):
 			# Save the lightcurve to file:
 			try:
 				save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
+			except (KeyboardInterrupt, SystemExit): # pragma: no cover
+				status = STATUS.ABORT
+				logger.warning("Correction was aborted (priority=%d)", task['priority'])
 			except: # noqa: E722 pragma: no cover
 				status = STATUS.ERROR
 				logger.exception("Could not save lightcurve file (priority=%d)", task['priority'])

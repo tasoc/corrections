@@ -186,8 +186,10 @@ class CBV(object):
 		"""
 		coeffs = np.atleast_1d(coeffs)
 		Ncbvs = int((len(coeffs)-1)/2)
-		m = np.zeros(self.cbv.shape[0], dtype='float64')
-		
+
+		# Build the model
+		# Start with "ones" since we are working in relative flux around 1
+		m = np.ones(self.cbv.shape[0], dtype='float64')
 		for k in range(Ncbvs):
 			m += coeffs[k] * self.cbv[:, k] # CBV
 			m += coeffs[k+Ncbvs] * self.cbv_s[:, k] # Spike-CBV
