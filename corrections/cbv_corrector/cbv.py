@@ -374,7 +374,7 @@ class CBV(object):
 #				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux1, jj + no_cbv_coeff, pos, wscale, None), method=method).x
 
 #			offset = minimize(self._lhood_off_2, coeffs0[-1], args=(flux, err, res), method='Powell').x
-		offset = minimize(self._lhood_off, start_guess[-1], args=(flux, res, Ncbvs), method='Powell').x
+		offset = minimize(self._lhood_off, start_guess[-1], args=(lc, res, Ncbvs), method='Powell').x
 
 		res = np.append(res, offset)
 		return res
