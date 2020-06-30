@@ -14,6 +14,7 @@ import datetime
 from bottleneck import nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
 from scipy import stats
+from scipy.stats import norm
 import functools
 from ..utilities import loadPickle, fix_fits_table_headers
 from ..quality import CorrectorQualityFlags
@@ -110,10 +111,10 @@ class CBV(object):
 	#----------------------------------------------------------------------------------------------
 	def lsfit(self, lc, Ncbvs):
 		"""
-		Computes the least-squares solution to a linear matrix equation.
+		Computes the weighted least-squares solution to a linear matrix equation.
 
 		Parameters:
-			flux (ndarray): Flux array to fit.
+			lc (:class:`LightCurve`): Lightcurve to fit.
 			Ncbvs (int): Number of CBVs to include in fit.
 
 		Returns:
@@ -121,14 +122,19 @@ class CBV(object):
 		"""
 
 		# Make sure to remove points where CBV or FLUX is not defined:
-		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(lc.flux)
-		A0 = np.column_stack((self.cbv[idx,:Ncbvs], self.cbv_s[idx,:Ncbvs]))
+		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(lc.flux) & np.isfinite(lc.flux_err)
 
 		# Build matrix to solve:
-		X = np.column_stack((A0, np.ones(A0.shape[0])))
+		X = np.column_stack((self.cbv[idx,:Ncbvs], self.cbv_s[idx,:Ncbvs], np.ones(np.sum(idx))))
 		F = lc.flux[idx]
 
-		#C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
+		# Use the flux uncertainties as weights, by scaling the matrix and vector:
+		# https://en.wikipedia.org/wiki/Weighted_least_squares
+		# https://stackoverflow.com/questions/27128688/how-to-use-least-squares-with-weight-matrix
+		X = X * np.abs(lc.flux_err[idx, np.newaxis])
+		F = F * np.abs(lc.flux_err[idx])
+
+		# Try to fit with fast pseudo-inverse method:
 		try:
 			return (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
 		except np.linalg.LinAlgError:
@@ -153,7 +159,7 @@ class CBV(object):
 		logger.warning("Linear optimization failed. Trying non-linear optimize as last resort.")
 		coeff0 = np.zeros(2*Ncbvs+1, dtype='float64')
 		coeff0[-1] = nanmedian(lc.flux)
-		res = minimize(self._lhood, coeff0, args=(lc,))
+		res = minimize(self._negloglike, coeff0, args=(lc,))
 		if res.success:
 			return res.x
 		raise Exception("Minimization was not successful: " + res.message)
@@ -182,7 +188,8 @@ class CBV(object):
 				the next N are for the Spike-CBVs, and the last element is a constant offset.
 
 		Returns:
-			ndarray: Model lightcurve, given the CBV coefficients provided.
+			ndarray: Model lightcurve, given the CBV coefficients provided. Will be in relative
+				flux around 1.
 		"""
 		coeffs = np.atleast_1d(coeffs)
 		Ncbvs = int((len(coeffs)-1)/2)
@@ -227,8 +234,20 @@ class CBV(object):
 #		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
 
 	#----------------------------------------------------------------------------------------------
-	def _lhood(self, coeffs, lc):
-		return 0.5*nansum((lc.flux - self.mdl(coeffs))**2)
+	#@np.errstate(invalid='ignore')
+	def _negloglike(self, coeffs, lc):
+		"""
+		Negative log-likelihood.
+
+		Parameters:
+			coeffs (ndarray): CBV coefficients.
+			lc (:class:`LightCurve`): Lightcurve to be fitted. Should be in relative flux around 1.
+
+		Returns:
+			float: The negative log-likelihood of the coefficients, given the lightcurve.
+		"""
+		return -1 * nansum(norm.logpdf(lc.flux, self.mdl(coeffs), lc.flux_err))
+		#return 0.5*nansum((lc.flux - self.mdl(coeffs))**2)
 
 	#----------------------------------------------------------------------------------------------
 	def _lhood_off(self, coeffs, flux, fitted, Ncbvs):
@@ -320,7 +339,7 @@ class CBV(object):
 		if start_guess is not None:
 			start_guess = np.append(start_guess, 0)
 		else:
-			start_guess = np.zeros(Ncbvs*2+1, dtype='float64')
+			start_guess = np.zeros(2*Ncbvs+1, dtype='float64')
 
 		res = np.zeros(int(Ncbvs*2), dtype='float64')
 		tree = self.priors
@@ -329,7 +348,7 @@ class CBV(object):
 
 		# Define posterior function to be minimized:
 		def logposterior(coeff):
-			return self._lhood1d(coeff, lc, Ncbvs) - prior(coeff)
+			return self._negloglike(coeff, lc, Ncbvs) - prior(coeff)
 
 #
 #
@@ -380,7 +399,8 @@ class CBV(object):
 		return res
 
 	#--------------------------------------------------------------------------
-	def _fit(self, lc, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True, prior=None, start_guess=None):
+	def _fit(self, lc, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True,
+		prior=None, start_guess=None):
 		"""
 
 		"""
@@ -441,6 +461,7 @@ class CBV(object):
 
 				if np.any(indx):
 					lci.flux[indx] = np.nan
+					lci.flux_err[indx] = np.nan
 				else:
 					break
 
@@ -449,8 +470,8 @@ class CBV(object):
 
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
-				filt = self.mdl(res) * median_flux
-				bic = np.append(bic, np.log(np.sum(np.isfinite(lci.flux)))*len(res) + nansum( (lc.flux - filt)**2 )) # not using errors
+				mybic = len(res)*np.log(np.sum(np.isfinite(lci.flux))) + 2*self._negloglike(res, lci) # TODO: lc or lci?!?!
+				bic = np.append(bic, mybic)
 				solutions.append(res)
 
 		if use_bic:
