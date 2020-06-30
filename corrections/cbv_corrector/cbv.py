@@ -19,7 +19,7 @@ from ..utilities import loadPickle, fix_fits_table_headers
 from ..quality import CorrectorQualityFlags
 from .cbv_utilities import MAD_model, MAD_model2
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 	logger = logging.getLogger(__name__)
 
