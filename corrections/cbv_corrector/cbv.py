@@ -13,8 +13,7 @@ from astropy.time import Time
 import datetime
 from bottleneck import nansum, nanmedian
 from scipy.optimize import minimize, fmin_powell
-from scipy import stats
-from scipy.stats import norm
+from scipy.stats import norm, gaussian_kde
 import functools
 from ..utilities import loadPickle, fix_fits_table_headers
 from ..quality import CorrectorQualityFlags
@@ -159,7 +158,7 @@ class CBV(object):
 		logger.warning("Linear optimization failed. Trying non-linear optimize as last resort.")
 		coeff0 = np.zeros(2*Ncbvs+1, dtype='float64')
 		coeff0[-1] = nanmedian(lc.flux)
-		res = minimize(self._negloglike, coeff0, args=(lc,))
+		res = minimize(self.negloglike, coeff0, args=(lc,))
 		if res.success:
 			return res.x
 		raise Exception("Minimization was not successful: " + res.message)
@@ -230,14 +229,10 @@ class CBV(object):
 		return m
 
 	#----------------------------------------------------------------------------------------------
-#	def _lhood(self, coeffs, flux, err):
-#		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
-
-	#----------------------------------------------------------------------------------------------
-	#@np.errstate(invalid='ignore')
-	def _negloglike(self, coeffs, lc):
+	@np.errstate(invalid='ignore')
+	def negloglike(self, coeffs, lc):
 		"""
-		Negative log-likelihood.
+		Negative log-likelihood function.
 
 		Parameters:
 			coeffs (ndarray): CBV coefficients.
@@ -247,7 +242,6 @@ class CBV(object):
 			float: The negative log-likelihood of the coefficients, given the lightcurve.
 		"""
 		return -1 * nansum(norm.logpdf(lc.flux, self.mdl(coeffs), lc.flux_err))
-		#return 0.5*nansum((lc.flux - self.mdl(coeffs))**2)
 
 	#----------------------------------------------------------------------------------------------
 	def _lhood_off(self, coeffs, flux, fitted, Ncbvs):
@@ -297,8 +291,8 @@ class CBV(object):
 			V = self.inifit[ind,1+ncbv][0][1::]
 			VS = self.inifit[ind,1+ncbv + no_cbv_coeff][0][1::]
 
-			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-			KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
+			KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+			KDES = gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 			def kernel_opt(x):
 				return -1*KDE.logpdf(x)
@@ -333,7 +327,7 @@ class CBV(object):
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_pos_2(self, lc, Ncbvs, err, pos, wscale, N_neigh, start_guess=None):
+	def fitting_pos_2(self, lc, Ncbvs, err, pos, wscale, N_neigh, logprior=None, start_guess=None):
 
 		# Initial guesses for coefficients:
 		if start_guess is not None:
@@ -347,8 +341,8 @@ class CBV(object):
 		W = 1/dist[0][1::]**2
 
 		# Define posterior function to be minimized:
-		def logposterior(coeff):
-			return self._negloglike(coeff, lc, Ncbvs) - prior(coeff)
+		def neglogposterior(coeff):
+			return self.negloglike(coeff, lc) - logprior(coeff)
 
 #
 #
@@ -379,10 +373,10 @@ class CBV(object):
 
 		for jj in range(Ncbvs):
 			V = self.inifit[ind,1+jj][0][1::]
-			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+			KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 
 #				VS = self.inifit[ind,1+jj + no_cbv_coeff][0][1::]
-#				KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
+#				KDES = gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 #				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
 
@@ -403,6 +397,26 @@ class CBV(object):
 		prior=None, start_guess=None):
 		"""
 
+		Will do scaling of lightcurve to relative flux and perform an iterative fit using
+		sigma-clipping of outliers.
+
+		Parameters:
+			lc (:class:`LightCurve`): Lightcurve to be fitted.
+			Numcbvs (int, optional): Maximum number of CBVs to use in fit. If ``None`` (Default),
+				all CBVs are considered. If ``use_bic`` is False, this is the number of CBVs used.
+			use_bic (bool, optional): Use the Bayesian Information Criterion to select the best
+				number of CBVs to use. Default=True.
+			sigma_clip (float, optional): Sigma-clipping limit around model to ignore points.
+				Default=4.0.
+			maxiter (int, optional): Maximum number of iterations to do for sigma-clipping.
+				A warning is issued if this is reached. Default=50.
+
+		Returns:
+			tuple:
+			- ndarray: Flux of the final CBV model.
+			- ndarray: CBV coefficients.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
@@ -470,7 +484,7 @@ class CBV(object):
 
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
-				mybic = len(res)*np.log(np.sum(np.isfinite(lci.flux))) + 2*self._negloglike(res, lci) # TODO: lc or lci?!?!
+				mybic = len(res)*np.log(np.sum(np.isfinite(lci.flux))) + 2*self.negloglike(res, lci) # TODO: lc or lci?!?!
 				bic = np.append(bic, mybic)
 				solutions.append(res)
 
@@ -516,6 +530,7 @@ class CBV(object):
 		# Remove bad data based on quality
 		flag_good = CorrectorQualityFlags.filter(lc.quality)
 		lc.flux[~flag_good] = np.nan
+		lc.flux_err[~flag_good] = np.nan
 
 		# Diagnostics to return at the end about what was
 		# actually used in the fitting:
@@ -527,11 +542,9 @@ class CBV(object):
 
 		# Fit the CBV to the flux:
 		if use_prior:
-			"""
-			Do fits including prior information from the initial fits -
-			allow switching to a simple LSSQ fit depending on
-			variability measures (not fully implemented yet!)
-			"""
+			# Do fits including prior information from the initial fits
+			# allow switching to a simple LSSQ fit depending on
+			# variability measures (not fully implemented yet!)
 
 			# Position of target in multidimentional prior space:
 			row = lc.meta['task']['pos_row']
@@ -570,14 +583,16 @@ class CBV(object):
 			else:
 				logger.debug('Fitting using Priors')
 
-				#dist, ind = self.priors.query(pos, k=N_neigh+1)
-				#W = 1/dist[0][1:]**2
-				#V = self.inifit[ind, 1+jj][0][1:]
-				#KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-				#def logprior(coeff):
-				#	return wscale * KDE.logpdf(coeff)
+				# Define multi-dimentional prior:
+				dist, ind = self.priors.query(pos, k=N_neigh+1)
+				W = 1/dist[0][1:]**2
+				V = self.inifit[ind[1:], :]
+				KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+				wscale = 1.0
+				def logprior(coeff):
+					return wscale * KDE.logpdf(coeff)
 
-				flux_filter, res = self._fit(lc, err=residual, use_bic=use_bic, prior=logprior, start_guess=opts)
+				flux_filter, res = self._fit(lc, err=residual, use_bic=use_bic, logprior=logprior, start_guess=opts)
 
 				diagnostics.update({
 					'method': 'MAP',
@@ -587,10 +602,7 @@ class CBV(object):
 				})
 
 		else:
-			"""
-			Do "simple" LSSQ fits using BIC to decide on number of CBVs
-			to include
-			"""
+			# Do "simple" LSSQ fits using BIC to decide on number of CBVs to include
 			logger.debug('Fitting TIC %d using LLSQ', lc.targetid)
 			flux_filter, res = self._fit(lc, Numcbvs=cbvs, use_bic=use_bic)
 			diagnostics['method'] = 'LS'
