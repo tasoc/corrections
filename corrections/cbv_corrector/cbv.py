@@ -315,13 +315,13 @@ class CBV(object):
 			return float(KDE(c))
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh(self, lc, Ncbvs, err=None, start_guess=None):
+	def fitting_lh(self, lc, Ncbvs, start_guess=None):
 		res = self.lsfit(lc, Ncbvs)
 		res[-1] -= 1
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh_spike(self, lc, Ncbvs, err=None):
+	def fitting_lh_spike(self, lc, Ncbvs, start_guess=None):
 		res = self.lsfit_spike(lc, Ncbvs)
 		res[-1] -= 1
 		return res
@@ -394,7 +394,7 @@ class CBV(object):
 
 	#--------------------------------------------------------------------------
 	def _fit(self, lc, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True,
-		prior=None, start_guess=None):
+		logprior=None, start_guess=None):
 		"""
 
 		Will do scaling of lightcurve to relative flux and perform an iterative fit using
@@ -427,10 +427,10 @@ class CBV(object):
 			Numcbvs = self.cbv.shape[1]
 
 		# Function to use for fitting.
-		if prior:
-			fitfunc = functools.partial(self.fitting_pos_2, err=err, prior=prior)
+		if logprior:
+			fitfunc = functools.partial(self.fitting_pos_2, err=err, logprior=logprior)
 		else:
-			fitfunc = functools.partial(self.fitting_lh, err=err)
+			fitfunc = self.fitting_lh
 
 		# Find the median flux to normalise light curve
 		median_flux = nanmedian(lc.flux)
