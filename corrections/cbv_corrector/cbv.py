@@ -55,7 +55,7 @@ class CBV(object):
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def __init__(self, data_folder, cbv_area, datasource):
 		logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ class CBV(object):
 		coeffs = np.atleast_1d(coeffs)
 		m = np.ones(self.cbv.shape[0], dtype='float64')
 		for k in range(len(coeffs)-1):
-			m += (coeffs[k] * self.cbv_s[:, k])
+			m += coeffs[k] * self.cbv_s[:, k]
 
 		return m + coeffs[-1]
 
@@ -218,7 +218,9 @@ class CBV(object):
 		# Start with ones as the flux is median normalised
 		m = np.ones(self.cbv.shape[0], dtype='float64')
 		for k in range(Ncbvs):
-			m += (fitted[k] * self.cbv[:, k]) + (fitted[k+Ncbvs] * self.cbv_s[:, k])
+			m += fitted[k] * self.cbv[:, k]
+			m += fitted[k+Ncbvs] * self.cbv_s[:, k]
+
 		return m + coeff
 
 	#----------------------------------------------------------------------------------------------
@@ -244,16 +246,18 @@ class CBV(object):
 		return -1 * nansum(norm.logpdf(lc.flux, self.mdl(coeffs), lc.flux_err))
 
 	#----------------------------------------------------------------------------------------------
-	def _lhood_off(self, coeffs, flux, fitted, Ncbvs):
-		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted, Ncbvs))**2)
+	@np.errstate(invalid='ignore')
+	def _lhood_off(self, coeffs, lc, fitted, Ncbvs):
+		return -1 * nansum(norm.logpdf(lc.flux, self.mdl_off(coeffs, fitted, Ncbvs), lc.flux_err))
 
 	#----------------------------------------------------------------------------------------------
 #	def _lhood_off_2(self, coeffs, flux, err, fitted):
 #		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err**2)
 
 	#----------------------------------------------------------------------------------------------
+	@np.errstate(invalid='ignore')
 	def _lhood1d(self, coeff, lc, ncbv):
-		return 0.5*nansum((lc.flux - self.mdl1d(coeff, ncbv))**2)
+		return -1 * nansum(norm.logpdf(lc.flux, self.mdl1d(coeff, ncbv), lc.flux_err))
 
 	#----------------------------------------------------------------------------------------------
 #	def _lhood1d_2(self, coeff, flux, err, ncbv):
@@ -261,8 +265,7 @@ class CBV(object):
 
 	#----------------------------------------------------------------------------------------------
 	def _posterior1d(self, coeff, flux, ncbv, pos, wscale, KDE):
-		Post = self._lhood1d(coeff, flux, ncbv) - wscale*np.log(self._prior1d(coeff, KDE))
-		return Post
+		return self._lhood1d(coeff, flux, ncbv) - wscale*np.log(self._prior1d(coeff, KDE))
 
 	#----------------------------------------------------------------------------------------------
 #	def _posterior1d_2(self, coeff, flux, err, ncbv, pos, wscale, KDE):
@@ -392,7 +395,7 @@ class CBV(object):
 		res = np.append(res, offset)
 		return res
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def _fit(self, lc, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True,
 		logprior=None, start_guess=None):
 		"""
