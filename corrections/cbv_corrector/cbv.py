@@ -11,7 +11,7 @@ import h5py
 from astropy.io import fits
 from astropy.time import Time
 import datetime
-from bottleneck import nansum, nanmedian
+from bottleneck import nansum, nanmedian, allnan
 from scipy.optimize import minimize, fmin_powell
 from scipy.stats import norm, gaussian_kde
 import functools
@@ -527,10 +527,15 @@ class CBV(object):
 
 		logger = logging.getLogger(__name__)
 
+		# If no uncertainties are provided, fill it with ones:
+		if allnan(lc.flux_err):
+			lc.flux_err[:] = 1
+
 		# Remove bad data based on quality
-		flag_good = CorrectorQualityFlags.filter(lc.quality)
-		lc.flux[~flag_good] = np.nan
-		lc.flux_err[~flag_good] = np.nan
+		if not allnan(lc.quality):
+			flag_good = CorrectorQualityFlags.filter(lc.quality)
+			lc.flux[~flag_good] = np.nan
+			lc.flux_err[~flag_good] = np.nan
 
 		# Diagnostics to return at the end about what was
 		# actually used in the fitting:
