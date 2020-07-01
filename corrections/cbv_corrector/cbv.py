@@ -597,6 +597,7 @@ class CBV(object):
 				V = self.inifit[ind[1:], :]
 				KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 				wscale = 1.0
+
 				def logprior(coeff):
 					return wscale * KDE.logpdf(coeff)
 
