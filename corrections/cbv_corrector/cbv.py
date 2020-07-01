@@ -130,8 +130,8 @@ class CBV(object):
 		# Use the flux uncertainties as weights, by scaling the matrix and vector:
 		# https://en.wikipedia.org/wiki/Weighted_least_squares
 		# https://stackoverflow.com/questions/27128688/how-to-use-least-squares-with-weight-matrix
-		X = X * np.abs(lc.flux_err[idx, np.newaxis])
-		F = F * np.abs(lc.flux_err[idx])
+		X = X * np.abs(1/lc.flux_err[idx, np.newaxis])
+		F = F * np.abs(1/lc.flux_err[idx])
 
 		# Try to fit with fast pseudo-inverse method:
 		try:

@@ -75,6 +75,12 @@ def test_cbv_fit(INPUT_DIR):
 
 	# Create model using coefficients, and make fake lightcurve out of it:
 	mdl = cbv.mdl(coeffs) * abs_flux
+
+	# Another check of making crazy weights:
+	#sigma = np.ones_like(mdl)*100
+	#mdl[200] = 50000
+	#sigma[200] = 1e-17
+
 	lc = TessLightCurve(
 		time=cbv.time,
 		flux=mdl
