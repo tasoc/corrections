@@ -161,7 +161,7 @@ class CBV(object):
 		res = minimize(self.negloglike, coeff0, args=(lc,))
 		if res.success:
 			return res.x
-		raise Exception("Minimization was not successful: " + res.message)
+		raise ValueError("Minimization was not successful: " + res.message)
 
 	#----------------------------------------------------------------------------------------------
 	def lsfit_spike(self, lc, Ncbvs):
