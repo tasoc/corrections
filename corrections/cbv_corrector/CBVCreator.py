@@ -679,7 +679,7 @@ class CBVCreator(BaseCorrector):
 
 		# Initialize results array including CBV coefficients,
 		# Spike-CBV coefficients and an residual offset
-		Nres = 2*Ncbvs+1
+		Nres = int(2*Ncbvs+1)
 		coeffs = np.full((len(stars), Nres), np.NaN, dtype='float64')
 		pos = np.full((len(stars), 3), np.NaN, dtype='float64')
 
@@ -692,8 +692,8 @@ class CBVCreator(BaseCorrector):
 
 			try:
 				flux_filter, res, _ = cbv.fit(lc, cbvs=Ncbvs, use_bic=False, use_prior=False)
-			except ValueError:
-				logger.error("%d: Ini-fit failed with ValueError", lc.targetid)
+			except ValueError as e:
+				logger.error("%d: Ini-fit failed with ValueError: %s", lc.targetid, str(e))
 				continue
 
 			# TODO: compute diagnostics requiring the light curve
@@ -740,7 +740,7 @@ class CBVCreator(BaseCorrector):
 		ax2 = fig.add_subplot(222)
 		ax3 = fig.add_subplot(223)
 		ax4 = fig.add_subplot(224)
-		for kk in range(1, int(2*Ncbvs+1)):
+		for kk in range(1, Nres):
 			idx = np.nonzero(coeffs[:, kk])
 			r = coeffs[idx, kk]
 			idx2 = (r > np.percentile(r, 10)) & (r < np.percentile(r, 90))
