@@ -164,12 +164,12 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 
 		# Run LOWESS filter on two halves to eliminate effects of transit:
 		if kj-central1 < 0.5*int(width/dt):
-			w1 = np.hstack(([t[central1:kj],], [x[central1:kj],]))
+			w1 = np.column_stack((t[central1:kj], x[central1:kj]))
 		else:
 			w1 = lowess(x[central1:kj], t[central1:kj], frac=1./3, is_sorted=True)
 
 		if central2-kj < 0.5*int(width/dt):
-			w2 = np.hstack(([t[kj:central2],], [x[kj:central2],]))
+			w2 = np.column_stack((t[kj:central2], x[kj:central2]))
 		else:
 			w2 = lowess(x[kj:central2], t[kj:central2], frac=1./3, is_sorted=True)
 
