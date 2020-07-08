@@ -1074,7 +1074,8 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		# Create "flag"/weight indicating how much of the short filter and the long filter should
 		# be used at each timestep. Is a number between 0 (long filter) and 1 (short filter).
 		if scale_width > 0:
-			turnover = norm.cdf(snr, scale_clip, scale_width)
+			with np.errstate(invalid='ignore'):
+				turnover = norm.cdf(snr, scale_clip, scale_width)
 		else:
 			# For zero width, use the Heaviside function:
 			turnover = 0.5*(np.sign(snr-scale_clip) + 1)
