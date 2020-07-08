@@ -199,7 +199,7 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Sanity checks:
 		if not res.success:
-			raise Exception('Sanity check: Minimization not successful')
+			raise Exception('Sanity check: Minimization not successful: ' + res.message)
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians
