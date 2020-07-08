@@ -194,7 +194,7 @@ class EnsembleCorrector(BaseCorrector):
 			denom1 = nanmedian(args[0] / (args[1] + scalef))
 			return num1/denom1
 
-		res = minimize(func2, 1.0, args=(lc.flux, lc_medians))
+		res = minimize(func2, 1.0, args=(lc.flux, lc_medians), method='Powell')
 		k_corr = float(res.x)
 
 		# Sanity checks:
