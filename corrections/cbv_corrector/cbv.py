@@ -158,7 +158,7 @@ class CBV(object):
 		logger.warning("Linear optimization failed. Trying non-linear optimize as last resort.")
 		coeff0 = np.zeros(2*Ncbvs+1, dtype='float64')
 		coeff0[-1] = nanmedian(lc.flux)
-		res = minimize(self.negloglike, coeff0, args=(lc,))
+		res = minimize(self.negloglike, coeff0, args=(lc,), method='Powell')
 		if res.success:
 			return res.x
 		raise ValueError("Minimization was not successful: " + res.message)
