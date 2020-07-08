@@ -198,9 +198,8 @@ class EnsembleCorrector(BaseCorrector):
 		k_corr = float(res.x)
 
 		# Sanity checks:
-		with np.errstate(invalid='ignore'): # NaNs are okay here
-			if np.any(k_corr + lc_medians <= 0):
-				raise Exception('Sanity check: Optimization becomes negative')
+		if not res.success:
+			raise Exception('Sanity check: Minimization not successful')
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians
