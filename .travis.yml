@@ -72,7 +72,6 @@ jobs:
       script:
         - flake8
       after_success: skip
-      deploy: skip
 
   # Allow some newer versions of Python to fail for now
   # This will be changed once the required packages starts
@@ -80,7 +79,6 @@ jobs:
   fast_finish: true
   allow_failures:
     - name: "Flake8"
-    - os: windows
 
 # command to install dependencies
 install:
