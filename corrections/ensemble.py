@@ -48,7 +48,8 @@ class EnsembleCorrector(BaseCorrector):
 		Find the nearest neighbors to the given target in pixel-space.
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve object for target obtained from :func:`load_lightcurve`.
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve object for target
+				obtained from :func:`load_lightcurve`.
 			n_neighbors (integer): Number of targets to return.
 
 		Returns:
@@ -121,10 +122,10 @@ class EnsembleCorrector(BaseCorrector):
 		Add a given target to the ensemble list
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve for target obtained
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve for target obtained
 				from :func:`load_lightcurve`.
-			next_star_lc (`TESSLightCurve` object): Lightcurve for star to add to ensemble
-				obtained from :func:`load_lightcurve`.
+			next_star_lc (:class:`lightkurve.TessLightCurve`): Lightcurve for star to add to
+				ensemble obtained from :func:`load_lightcurve`.
 
 		Returns:
 			tuple:
@@ -138,7 +139,8 @@ class EnsembleCorrector(BaseCorrector):
 		target_flux_median = nanmedian(lc.flux)
 		mtarget_flux = lc.flux - target_flux_median
 		ens_flux = next_star_lc.flux
-		mens_flux = ens_flux - nanmedian(ens_flux)
+		ensemble_flux_median = nanmedian(ens_flux)
+		mens_flux = ens_flux - ensemble_flux_median
 
 		# 2 sigma
 		ens2sig = 2 * nanstd(mens_flux)
@@ -153,18 +155,22 @@ class EnsembleCorrector(BaseCorrector):
 			clip_target_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mtarget_flux, np.NaN)
 			clip_ens_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mens_flux, np.NaN)
 
-		args = (clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median)
+		# Define function to be minimized to obtain background-offset correction:
+		clip_ens_abs_flux = clip_ens_flux + ensemble_flux_median
+		term1 = (clip_target_flux + target_flux_median) / nanmedian(clip_target_flux + target_flux_median)
 
-		def func1(scaleK, *args):
-			temp = (args[1]/nanmedian(args[1])) - ((args[0]+scaleK)/nanmedian(args[0]+scaleK))
-			temp -= nanmedian(temp)
-			return nansum(temp**2)
+		def func1(scaleK):
+			temp = term1 - ((clip_ens_abs_flux + scaleK)/nanmedian(clip_ens_abs_flux + scaleK))
+			return nansum((temp - nanmedian(temp))**2)
 
-		res = minimize(func1, 100, args=args, method='Powell')
+		res = minimize(func1, 100, method='Powell')
 		bzeta = float(res.x)
 
-		ens_flux = ens_flux + bzeta
+		# Sanity checks:
+		if not res.success:
+			raise Exception('Bzeta: Minimization not successful: ' + res.message)
 
+		ens_flux = ens_flux + bzeta
 		return ens_flux/nanmedian(ens_flux), bzeta
 
 	#----------------------------------------------------------------------------------------------
@@ -173,14 +179,14 @@ class EnsembleCorrector(BaseCorrector):
 		Apply the ensemble correction method to the target light curve
 
 		Parameters:
-			lc (`TESSLightCurve` object): Lightcurve object for target obtained
+			lc (:class:`lightkurve.TessLightCurve`): Lightcurve object for target obtained
 				from :func:`load_lightcurve`.
 			lc_ensemble (list): List of ensemble members flux as ndarrays
 			lc_corr (`TESSLightCurve` object): Lightcurve object which stores the ensemble
 				corrected flux values.
 
 		Returns:
-			lc_corr (`TESSLightCurve` object): The updated object with corrected flux values.
+			:class:`lightkurve.TessLightCurve`: The updated object with corrected flux values.
 
 		.. codeauthor:: Lindsey Carboneau
 		.. codeauthor:: Derek Buzasi
@@ -188,17 +194,19 @@ class EnsembleCorrector(BaseCorrector):
 		# Calculate the median of all the ensemble lightcurves for each timestamp:
 		lc_medians = nanmedian(np.asarray(lc_ensemble), axis=0)
 
-		def func2(scalef, *args):
-			num1 = nansum(np.abs(np.diff(args[0] / (args[1] + scalef))))
-			denom1 = nanmedian(args[0] / (args[1] + scalef))
+		def func2(scalef):
+			num1 = nansum(np.abs(np.diff(lc.flux / (lc_medians + scalef))))
+			denom1 = nanmedian(lc.flux / (lc_medians + scalef))
 			return num1/denom1
 
-		res = minimize(func2, 1.0, args=(lc.flux, lc_medians))
+		res = minimize(func2, 1.0) # , method='Powell'
 		k_corr = float(res.x)
 
 		# Sanity checks:
-		if np.any(k_corr + lc_medians <= 0):
-			raise Exception('Sanity check: Optimization becomes negative')
+		if not res.success:
+			logger = logging.getLogger(__name__)
+			logger.warning('Sanity check: Minimization not successful: ' + res.message)
+			#raise Exception('Sanity check: Minimization not successful: ' + res.message)
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians
@@ -214,11 +222,11 @@ class EnsembleCorrector(BaseCorrector):
 		index for the star in the star_array and star_names list.
 
 		Parameters:
-			lc (``lightkurve.TessLightCurve``): Raw lightcurve stored in a TessLightCurve object.
+			lc (:class:`lightkurve.TessLightCurve`): Raw lightcurve stored in a TessLightCurve object.
 
 		Returns:
-			``lightkurve.TessLightCurve``: Corrected lightcurve stored in a TessLightCurve object.
-			``corrections.STATUS``: The status of the correction.
+			:class:`lightkurve.TessLightCurve`: Corrected lightcurve stored in a TessLightCurve object.
+			:class:`STATUS`: The status of the correction.
 		"""
 
 		logger = logging.getLogger(__name__)

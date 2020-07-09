@@ -30,9 +30,9 @@ def capture_run_tesscorr(params):
 	out, err = proc.communicate()
 	exitcode = proc.returncode
 
-	print(out)
-	print(err)
-	print(exitcode)
+	print("ExitCode: %d" % exitcode)
+	print("StdOut:\n%s" % out)
+	print("StdErr:\n%s" % err)
 	return out, err, exitcode
 
 #--------------------------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ def test_run_tesscorr_invalid_ccd():
 @pytest.mark.parametrize("method,starid,datasource,var_goal,rms_goal,ptp_goal", STAR_LIST)
 def test_run_tesscorr(SHARED_INPUT_DIR, method, starid, datasource, var_goal,rms_goal, ptp_goal):
 	with tempfile.TemporaryDirectory() as tmpdir:
-		params = '-o -p --starid={starid:d} --method={method:s} --datasource={datasource:s} "{input_dir:s}" "{output:s}"'.format(
+		params = '-o -d -p --starid={starid:d} --method={method:s} --datasource={datasource:s} "{input_dir:s}" "{output:s}"'.format(
 			starid=starid,
 			method=method,
 			datasource=datasource,

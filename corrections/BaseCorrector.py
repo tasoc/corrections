@@ -260,7 +260,6 @@ class BaseCorrector(object):
 		except (KeyboardInterrupt, SystemExit): # pragma: no cover
 			status = STATUS.ABORT
 			logger.warning("Correction was aborted (priority=%d)", task['priority'])
-
 		except: # noqa: E722 pragma: no cover
 			status = STATUS.ERROR
 			logger.exception("Correction failed (priority=%d)", task['priority'])
@@ -269,14 +268,24 @@ class BaseCorrector(object):
 		if status == STATUS.UNKNOWN: # pragma: no cover
 			raise Exception("STATUS was not set by do_correction")
 
-		# Do sanity checks and calculate diagnostics:
+		# Do sanity checks:
 		if status in (STATUS.OK, STATUS.WARNING):
 			# Simple check that entire lightcurve is not NaN:
 			if allnan(lc_corr.flux):
-				raise ValueError("Final lightcurve is all NaNs")
+				logger.error("Final lightcurve is all NaNs")
+				status = STATUS.ERROR
 			if allnan(lc_corr.flux_err):
-				raise ValueError("Final lightcurve errors is all NaNs")
+				logger.error("Final lightcurve errors is all NaNs")
+				status = STATUS.ERROR
+			if np.any(np.isinf(lc_corr.flux)):
+				logger.error("Final lightcurve contains Inf")
+				status = STATUS.ERROR
+			if np.any(np.isinf(lc_corr.flux_err)):
+				logger.error("Final lightcurve errors contains Inf")
+				status = STATUS.ERROR
 
+		# Calculate diagnostics:
+		if status in (STATUS.OK, STATUS.WARNING):
 			# Calculate diagnostics:
 			details['variance'] = nanvar(lc_corr.flux, ddof=1)
 			details['rms_hour'] = rms_timescale(lc_corr, timescale=3600/86400)
@@ -290,7 +299,14 @@ class BaseCorrector(object):
 				details['ens_fom'] = lc_corr.meta['FOM']
 
 			# Save the lightcurve to file:
-			save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
+			try:
+				save_file = self.save_lightcurve(lc_corr, output_folder=output_folder)
+			except (KeyboardInterrupt, SystemExit): # pragma: no cover
+				status = STATUS.ABORT
+				logger.warning("Correction was aborted (priority=%d)", task['priority'])
+			except: # noqa: E722 pragma: no cover
+				status = STATUS.ERROR
+				logger.exception("Could not save lightcurve file (priority=%d)", task['priority'])
 
 			# Plot the final lightcurve:
 			if self.plot:
@@ -303,9 +319,6 @@ class BaseCorrector(object):
 				ax.legend()
 				save_figure(os.path.join(self.plot_folder(lc), self.CorrMethod + '_final'), fig=fig)
 				plt.close(fig)
-
-			# Construct result dictionary from the original task
-			result = lc_corr.meta['task'].copy()
 
 		# Unpack any errors or warnings that were sent to the logger during the correction:
 		if self.message_queue:

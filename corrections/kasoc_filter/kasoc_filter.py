@@ -164,12 +164,12 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 
 		# Run LOWESS filter on two halves to eliminate effects of transit:
 		if kj-central1 < 0.5*int(width/dt):
-			w1 = np.hstack(([t[central1:kj],], [x[central1:kj],]))
+			w1 = np.column_stack((t[central1:kj], x[central1:kj]))
 		else:
 			w1 = lowess(x[central1:kj], t[central1:kj], frac=1./3, is_sorted=True)
 
 		if central2-kj < 0.5*int(width/dt):
-			w2 = np.hstack(([t[kj:central2],], [x[kj:central2],]))
+			w2 = np.column_stack((t[kj:central2], x[kj:central2]))
 		else:
 			w2 = lowess(x[kj:central2], t[kj:central2], frac=1./3, is_sorted=True)
 
@@ -182,8 +182,8 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 		# it will in many cases not work.
 		if gapsize < 2*width:
 			# Do robust linear fit of part before and after jump:
-			res1 = theil_sen(w1[:,0], w1[:,1], n_samples=1e5)
-			res2 = theil_sen(w2[:,0], w2[:,1], n_samples=1e5)
+			res1 = theil_sen(w1[:,0], w1[:,1], n_samples=100000)
+			res2 = theil_sen(w2[:,0], w2[:,1], n_samples=100000)
 
 			# Evaluate fitted lines at midpoint in the gap:
 			tmid = (t[kj] + t[kj-1])/2 # Midpoint in gap
@@ -843,7 +843,9 @@ def filter_position_1d(time, flux, star_movement, timescale_position_smooth=None
 	return xpos
 
 #--------------------------------------------------------------------------------------------------
-def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long=3.0, timescale_short=1/24, sigma_clip=4.5, scale_clip=5.0, scale_width=1.0, phase_smooth_factor=1000, transit_model=None, it=3):
+def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long=3.0,
+	timescale_short=1/24, sigma_clip=4.5, scale_clip=5.0, scale_width=1.0,
+	phase_smooth_factor=1000, transit_model=None, it=3):
 	"""
 	Main filter function.
 
@@ -1074,7 +1076,8 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		# Create "flag"/weight indicating how much of the short filter and the long filter should
 		# be used at each timestep. Is a number between 0 (long filter) and 1 (short filter).
 		if scale_width > 0:
-			turnover = norm.cdf(snr, scale_clip, scale_width)
+			with np.errstate(invalid='ignore'):
+				turnover = norm.cdf(snr, scale_clip, scale_width)
 		else:
 			# For zero width, use the Heaviside function:
 			turnover = 0.5*(np.sign(snr-scale_clip) + 1)

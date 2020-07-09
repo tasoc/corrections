@@ -92,10 +92,10 @@ def main():
 	# Get the class for the selected method:
 	CorrClass = corrections.corrclass(args.method)
 
-	# Initialize the corrector class:
-	with CorrClass(input_folder, plot=args.plot) as corr:
-		# Start the TaskManager:
-		with corrections.TaskManager(input_folder, overwrite=args.overwrite, cleanup_constraints=constraints) as tm:
+	# Start the TaskManager:
+	with corrections.TaskManager(input_folder, overwrite=args.overwrite, cleanup_constraints=constraints) as tm:
+		# Initialize the corrector class:
+		with CorrClass(input_folder, plot=args.plot) as corr:
 			while True:
 				if args.random:
 					task = tm.get_random_task()

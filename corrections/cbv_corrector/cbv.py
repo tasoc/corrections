@@ -11,15 +11,15 @@ import h5py
 from astropy.io import fits
 from astropy.time import Time
 import datetime
-from bottleneck import nansum, nanmedian
+from bottleneck import nansum, nanmedian, allnan
 from scipy.optimize import minimize, fmin_powell
-from scipy import stats
+from scipy.stats import norm, gaussian_kde
 import functools
 from ..utilities import loadPickle, fix_fits_table_headers
 from ..quality import CorrectorQualityFlags
 from .cbv_utilities import MAD_model, MAD_model2
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def cbv_snr_test(cbv_ini, threshold_snrtest=5.0):
 	logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class CBV(object):
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
-	#--------------------------------------------------------------------------
+	#----------------------------------------------------------------------------------------------
 	def __init__(self, data_folder, cbv_area, datasource):
 		logger = logging.getLogger(__name__)
 
@@ -108,48 +108,97 @@ class CBV(object):
 		self.cbv_s = self.cbv_s[:, ~indx_lowsnr]
 
 	#----------------------------------------------------------------------------------------------
-	def lsfit(self, flux, Ncbvs):
+	def lsfit(self, lc, Ncbvs):
 		"""
-		Computes the least-squares solution to a linear matrix equation.
+		Computes the weighted least-squares solution to a linear matrix equation.
+
+		Parameters:
+			lc (:class:`LightCurve`): Lightcurve to fit.
+			Ncbvs (int): Number of CBVs to include in fit.
+
+		Returns:
+			ndarray: Coefficients for CBV plus constant offset.
 		"""
-		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(flux)
-		A0 = np.column_stack((self.cbv[idx,:Ncbvs], self.cbv_s[idx,:Ncbvs]))
 
-		X = np.column_stack((A0, np.ones(A0.shape[0])))
-		F = flux[idx]
+		# Make sure to remove points where CBV or FLUX is not defined:
+		idx = np.isfinite(self.cbv[:,0]) & np.isfinite(lc.flux) & np.isfinite(lc.flux_err)
 
-#		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
+		# Build matrix to solve:
+		X = np.column_stack((self.cbv[idx,:Ncbvs], self.cbv_s[idx,:Ncbvs], np.ones(np.sum(idx))))
+		F = lc.flux[idx]
+
+		# Use the flux uncertainties as weights, by scaling the matrix and vector:
+		# https://en.wikipedia.org/wiki/Weighted_least_squares
+		# https://stackoverflow.com/questions/27128688/how-to-use-least-squares-with-weight-matrix
+		X = X * np.abs(1/lc.flux_err[idx, np.newaxis])
+		F = F * np.abs(1/lc.flux_err[idx])
+
+		# Try to fit with fast pseudo-inverse method:
 		try:
-			C = (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
+			return (np.linalg.pinv(X.T.dot(X)).dot(X.T)).dot(F)
 		except np.linalg.LinAlgError:
-			# Another (but slover) implementation
-			C = np.linalg.lstsq(X, F, rcond=None)[0]
+			pass
+		except ValueError:
+			logger = logging.getLogger(__name__)
+			logger.exception("Error calculating pseudo-inverse solution.")
 
-		return C
+		# If the above method fails, try
+		# another (but slower) implementation:
+		try:
+			return np.linalg.lstsq(X, F, rcond=None)[0]
+		except np.linalg.LinAlgError:
+			pass
+		except ValueError:
+			logger = logging.getLogger(__name__)
+			logger.exception("Error calculating least-squares solution.")
+
+		# If everything else fails, try doing a full (slow) non-linear optimization:
+		# 2*N+1 because we need coefficients for both CBVs, Spike-CBVs and constant offset:
+		logger = logging.getLogger(__name__)
+		logger.warning("Linear optimization failed. Trying non-linear optimize as last resort.")
+		coeff0 = np.zeros(2*Ncbvs+1, dtype='float64')
+		coeff0[-1] = nanmedian(lc.flux)
+		res = minimize(self.negloglike, coeff0, args=(lc,), method='Powell')
+		if res.success:
+			return res.x
+		raise ValueError("Minimization was not successful: " + res.message)
 
 	#----------------------------------------------------------------------------------------------
-	def lsfit_spike(self, flux, Ncbvs):
+	def lsfit_spike(self, lc, Ncbvs):
 		"""
 		Computes the least-squares solution to a linear matrix equation.
 		"""
-		idx = np.isfinite(self.cbv_s[:,0]) & np.isfinite(flux)
+		idx = np.isfinite(self.cbv_s[:,0]) & np.isfinite(lc.flux)
 
 		A0 = self.cbv_s[idx,:Ncbvs]
 		X = np.column_stack((A0, np.ones(A0.shape[0])))
-		F = flux[idx]
+		F = lc.flux[idx]
 
-		C = (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
-
-		return C
+		return (np.linalg.inv(X.T.dot(X)).dot(X.T)).dot(F)
 
 	#----------------------------------------------------------------------------------------------
 	def mdl(self, coeffs):
+		"""
+		Model lightcurve given CBV coefficients.
+
+		Parameters:
+			coeffs (ndarray): CBV coefficients and constant offset.
+				Should be of length 2*N+1, where the first N coefficients are for the CBVs,
+				the next N are for the Spike-CBVs, and the last element is a constant offset.
+
+		Returns:
+			ndarray: Model lightcurve, given the CBV coefficients provided. Will be in relative
+				flux around 1.
+		"""
 		coeffs = np.atleast_1d(coeffs)
-		m = np.ones(self.cbv.shape[0], dtype='float64')
 		Ncbvs = int((len(coeffs)-1)/2)
 
+		# Build the model
+		# Start with "ones" since we are working in relative flux around 1
+		m = np.ones(self.cbv.shape[0], dtype='float64')
 		for k in range(Ncbvs):
-			m += (coeffs[k] * self.cbv[:, k]) + (coeffs[k+Ncbvs] * self.cbv_s[:, k])
+			m += coeffs[k] * self.cbv[:, k] # CBV
+			m += coeffs[k+Ncbvs] * self.cbv_s[:, k] # Spike-CBV
 
 		return m + coeffs[-1]
 
@@ -158,7 +207,7 @@ class CBV(object):
 		coeffs = np.atleast_1d(coeffs)
 		m = np.ones(self.cbv.shape[0], dtype='float64')
 		for k in range(len(coeffs)-1):
-			m += (coeffs[k] * self.cbv_s[:, k])
+			m += coeffs[k] * self.cbv_s[:, k]
 
 		return m + coeffs[-1]
 
@@ -169,7 +218,9 @@ class CBV(object):
 		# Start with ones as the flux is median normalised
 		m = np.ones(self.cbv.shape[0], dtype='float64')
 		for k in range(Ncbvs):
-			m += (fitted[k] * self.cbv[:, k]) + (fitted[k+Ncbvs] * self.cbv_s[:, k])
+			m += fitted[k] * self.cbv[:, k]
+			m += fitted[k+Ncbvs] * self.cbv_s[:, k]
+
 		return m + coeff
 
 	#----------------------------------------------------------------------------------------------
@@ -180,20 +231,33 @@ class CBV(object):
 		return m
 
 	#----------------------------------------------------------------------------------------------
-#	def _lhood(self, coeffs, flux, err):
-#		return 0.5*nansum(((flux - self.mdl(coeffs))/err)**2)
+	@np.errstate(invalid='ignore')
+	def negloglike(self, coeffs, lc):
+		"""
+		Negative log-likelihood function.
+
+		Parameters:
+			coeffs (ndarray): CBV coefficients.
+			lc (:class:`LightCurve`): Lightcurve to be fitted. Should be in relative flux around 1.
+
+		Returns:
+			float: The negative log-likelihood of the coefficients, given the lightcurve.
+		"""
+		return -1 * nansum(norm.logpdf(lc.flux, self.mdl(coeffs), lc.flux_err))
 
 	#----------------------------------------------------------------------------------------------
-	def _lhood_off(self, coeffs, flux, fitted, Ncbvs):
-		return 0.5*nansum((flux - self.mdl_off(coeffs, fitted, Ncbvs))**2)
+	@np.errstate(invalid='ignore')
+	def _lhood_off(self, coeffs, lc, fitted, Ncbvs):
+		return -1 * nansum(norm.logpdf(lc.flux, self.mdl_off(coeffs, fitted, Ncbvs), lc.flux_err))
 
 	#----------------------------------------------------------------------------------------------
 #	def _lhood_off_2(self, coeffs, flux, err, fitted):
 #		return 0.5*nansum(((flux - self.mdl_off(coeffs, fitted))/err)**2) + 0.5*np.log(err**2)
 
 	#----------------------------------------------------------------------------------------------
-	def _lhood1d(self, coeff, flux, ncbv):
-		return 0.5*nansum((flux - self.mdl1d(coeff, ncbv))**2)
+	@np.errstate(invalid='ignore')
+	def _lhood1d(self, coeff, lc, ncbv):
+		return -1 * nansum(norm.logpdf(lc.flux, self.mdl1d(coeff, ncbv), lc.flux_err))
 
 	#----------------------------------------------------------------------------------------------
 #	def _lhood1d_2(self, coeff, flux, err, ncbv):
@@ -201,8 +265,7 @@ class CBV(object):
 
 	#----------------------------------------------------------------------------------------------
 	def _posterior1d(self, coeff, flux, ncbv, pos, wscale, KDE):
-		Post = self._lhood1d(coeff, flux, ncbv) - wscale*np.log(self._prior1d(coeff, KDE))
-		return Post
+		return self._lhood1d(coeff, flux, ncbv) - wscale*np.log(self._prior1d(coeff, KDE))
 
 	#----------------------------------------------------------------------------------------------
 #	def _posterior1d_2(self, coeff, flux, err, ncbv, pos, wscale, KDE):
@@ -231,8 +294,8 @@ class CBV(object):
 			V = self.inifit[ind,1+ncbv][0][1::]
 			VS = self.inifit[ind,1+ncbv + no_cbv_coeff][0][1::]
 
-			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-			KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
+			KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+			KDES = gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 			def kernel_opt(x):
 				return -1*KDE.logpdf(x)
@@ -255,25 +318,25 @@ class CBV(object):
 			return float(KDE(c))
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh(self, flux, Ncbvs, err=None, start_guess=None):
-		res = self.lsfit(flux, Ncbvs)
+	def fitting_lh(self, lc, Ncbvs, start_guess=None):
+		res = self.lsfit(lc, Ncbvs)
 		res[-1] -= 1
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_lh_spike(self, flux, Ncbvs, err=None):
-		res = self.lsfit_spike(flux, Ncbvs)
+	def fitting_lh_spike(self, lc, Ncbvs, start_guess=None):
+		res = self.lsfit_spike(lc, Ncbvs)
 		res[-1] -= 1
 		return res
 
 	#----------------------------------------------------------------------------------------------
-	def fitting_pos_2(self, flux, Ncbvs, err, pos, wscale, N_neigh, start_guess=None):
+	def fitting_pos_2(self, lc, Ncbvs, err, pos, wscale, N_neigh, logprior=None, start_guess=None):
 
 		# Initial guesses for coefficients:
 		if start_guess is not None:
 			start_guess = np.append(start_guess, 0)
 		else:
-			start_guess = np.zeros(Ncbvs*2+1, dtype='float64')
+			start_guess = np.zeros(2*Ncbvs+1, dtype='float64')
 
 		res = np.zeros(int(Ncbvs*2), dtype='float64')
 		tree = self.priors
@@ -281,8 +344,8 @@ class CBV(object):
 		W = 1/dist[0][1::]**2
 
 		# Define posterior function to be minimized:
-		def logposterior(coeff):
-			return self._lhood1d(coeff, flux, Ncbvs) - prior(coeff)
+		def neglogposterior(coeff):
+			return self.negloglike(coeff, lc) - logprior(coeff)
 
 #
 #
@@ -313,29 +376,50 @@ class CBV(object):
 
 		for jj in range(Ncbvs):
 			V = self.inifit[ind,1+jj][0][1::]
-			KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+			KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
 
 #				VS = self.inifit[ind,1+jj + no_cbv_coeff][0][1::]
-#				KDES = stats.gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
+#				KDES = gaussian_kde(VS, weights=W.flatten(), bw_method='scott')
 
 #				res[jj] = minimize(self._posterior1d_2, coeffs0[jj], args=(flux, err, jj, pos, wscale, KDE), method='Powell').x
 
-			res[jj] = minimize(self._posterior1d, start_guess[jj], args=(flux, jj, pos, wscale, KDE), method='Powell').x
+			res[jj] = minimize(self._posterior1d, start_guess[jj], args=(lc, jj, pos, wscale, KDE), method='Powell').x
 			# Using KDE prior:
 #				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux, jj + no_cbv_coeff, pos, wscale, KDES), method=method).x
 			# Using flat prior
 #				res[jj + Ncbvs] = minimize(self._posterior1d, coeffs0[jj + Ncbvs], args=(flux1, jj + no_cbv_coeff, pos, wscale, None), method=method).x
 
 #			offset = minimize(self._lhood_off_2, coeffs0[-1], args=(flux, err, res), method='Powell').x
-		offset = minimize(self._lhood_off, start_guess[-1], args=(flux, res, Ncbvs), method='Powell').x
+		offset = minimize(self._lhood_off, start_guess[-1], args=(lc, res, Ncbvs), method='Powell').x
 
 		res = np.append(res, offset)
 		return res
 
-	#--------------------------------------------------------------------------
-	def _fit(self, flux, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True, prior=None, start_guess=None):
+	#----------------------------------------------------------------------------------------------
+	def _fit(self, lc, err=None, Numcbvs=None, sigma_clip=4.0, maxiter=50, use_bic=True,
+		logprior=None, start_guess=None):
 		"""
 
+		Will do scaling of lightcurve to relative flux and perform an iterative fit using
+		sigma-clipping of outliers.
+
+		Parameters:
+			lc (:class:`LightCurve`): Lightcurve to be fitted.
+			Numcbvs (int, optional): Maximum number of CBVs to use in fit. If ``None`` (Default),
+				all CBVs are considered. If ``use_bic`` is False, this is the number of CBVs used.
+			use_bic (bool, optional): Use the Bayesian Information Criterion to select the best
+				number of CBVs to use. Default=True.
+			sigma_clip (float, optional): Sigma-clipping limit around model to ignore points.
+				Default=4.0.
+			maxiter (int, optional): Maximum number of iterations to do for sigma-clipping.
+				A warning is issued if this is reached. Default=50.
+
+		Returns:
+			tuple:
+			- ndarray: Flux of the final CBV model.
+			- ndarray: CBV coefficients.
+
+		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
@@ -346,13 +430,13 @@ class CBV(object):
 			Numcbvs = self.cbv.shape[1]
 
 		# Function to use for fitting.
-		if prior:
-			fitfunc = functools.partial(self.fitting_pos_2, err=err, prior=prior)
+		if logprior:
+			fitfunc = functools.partial(self.fitting_pos_2, err=err, logprior=logprior)
 		else:
-			fitfunc = functools.partial(self.fitting_lh, err=err)
+			fitfunc = self.fitting_lh
 
 		# Find the median flux to normalise light curve
-		median_flux = nanmedian(flux)
+		median_flux = nanmedian(lc.flux)
 
 		# Figure out how many CBVs to loop over:
 		if use_bic:
@@ -370,11 +454,11 @@ class CBV(object):
 		# Loop over the different number of CBVs to attempt:
 		for Ncbvs in range(Nstart, Numcbvs+1):
 
-			fluxi = np.copy(flux) / median_flux
+			lci = lc.copy() / median_flux
 
 			for iters in range(maxiter):
 				# Do the fit:
-				res = fitfunc(fluxi, Ncbvs, start_guess=start_guess)
+				res = fitfunc(lci, Ncbvs, start_guess=start_guess)
 
 				# Break if nothing changes
 				if iters == 0:
@@ -388,12 +472,13 @@ class CBV(object):
 				flux_filter = self.mdl(res)
 
 				# Do robust sigma clipping:
-				absdev = np.abs(fluxi - flux_filter)
+				absdev = np.abs(lci.flux - flux_filter)
 				mad = MAD_model(absdev)
 				indx = np.greater(absdev, sigma_clip*mad, where=np.isfinite(absdev))
 
 				if np.any(indx):
-					fluxi[indx] = np.nan
+					lci.flux[indx] = np.nan
+					lci.flux_err[indx] = np.nan
 				else:
 					break
 
@@ -402,8 +487,8 @@ class CBV(object):
 
 			if use_bic:
 				# Calculate the Bayesian Information Criterion (BIC) and store the solution:
-				filt = self.mdl(res) * median_flux
-				bic = np.append(bic, np.log(np.sum(np.isfinite(fluxi)))*len(res) + nansum( (flux - filt)**2 )) # not using errors
+				mybic = len(res)*np.log(np.sum(np.isfinite(lci.flux))) + 2*self.negloglike(res, lci) # TODO: lc or lci?!?!
+				bic = np.append(bic, mybic)
 				solutions.append(res)
 
 		if use_bic:
@@ -445,9 +530,15 @@ class CBV(object):
 
 		logger = logging.getLogger(__name__)
 
+		# If no uncertainties are provided, fill it with ones:
+		if allnan(lc.flux_err):
+			lc.flux_err[:] = 1
+
 		# Remove bad data based on quality
-		flag_good = CorrectorQualityFlags.filter(lc.quality)
-		lc.flux[~flag_good] = np.nan
+		if not allnan(lc.quality):
+			flag_good = CorrectorQualityFlags.filter(lc.quality)
+			lc.flux[~flag_good] = np.nan
+			lc.flux_err[~flag_good] = np.nan
 
 		# Diagnostics to return at the end about what was
 		# actually used in the fitting:
@@ -459,11 +550,9 @@ class CBV(object):
 
 		# Fit the CBV to the flux:
 		if use_prior:
-			"""
-			Do fits including prior information from the initial fits -
-			allow switching to a simple LSSQ fit depending on
-			variability measures (not fully implemented yet!)
-			"""
+			# Do fits including prior information from the initial fits
+			# allow switching to a simple LSSQ fit depending on
+			# variability measures (not fully implemented yet!)
 
 			# Position of target in multidimentional prior space:
 			row = lc.meta['task']['pos_row']
@@ -494,7 +583,7 @@ class CBV(object):
 
 			if WS > WS_lim:
 				logger.debug('Fitting using LLSQ')
-				flux_filter, res = self._fit(lc.flux, Numcbvs=5, use_bic=use_bic) # use smaller number of CBVs
+				flux_filter, res = self._fit(lc, Numcbvs=5, use_bic=use_bic) # use smaller number of CBVs
 				diagnostics['method'] = 'LS'
 				diagnostics['use_prior'] = False
 				diagnostics['use_bic'] = False
@@ -502,14 +591,17 @@ class CBV(object):
 			else:
 				logger.debug('Fitting using Priors')
 
-				#dist, ind = self.priors.query(pos, k=N_neigh+1)
-				#W = 1/dist[0][1:]**2
-				#V = self.inifit[ind, 1+jj][0][1:]
-				#KDE = stats.gaussian_kde(V, weights=W.flatten(), bw_method='scott')
-				#def logprior(coeff):
-				#	return wscale * KDE.logpdf(coeff)
+				# Define multi-dimentional prior:
+				dist, ind = self.priors.query(pos, k=N_neigh+1)
+				W = 1/dist[0][1:]**2
+				V = self.inifit[ind[1:], :]
+				KDE = gaussian_kde(V, weights=W.flatten(), bw_method='scott')
+				wscale = 1.0
 
-				flux_filter, res = self._fit(lc.flux, err=residual, use_bic=use_bic, prior=logprior, start_guess=opts)
+				def logprior(coeff):
+					return wscale * KDE.logpdf(coeff)
+
+				flux_filter, res = self._fit(lc, err=residual, use_bic=use_bic, logprior=logprior, start_guess=opts)
 
 				diagnostics.update({
 					'method': 'MAP',
@@ -519,12 +611,9 @@ class CBV(object):
 				})
 
 		else:
-			"""
-			Do "simple" LSSQ fits using BIC to decide on number of CBVs
-			to include
-			"""
+			# Do "simple" LSSQ fits using BIC to decide on number of CBVs to include
 			logger.debug('Fitting TIC %d using LLSQ', lc.targetid)
-			flux_filter, res = self._fit(lc.flux, Numcbvs=cbvs, use_bic=use_bic)
+			flux_filter, res = self._fit(lc, Numcbvs=cbvs, use_bic=use_bic)
 			diagnostics['method'] = 'LS'
 
 		return flux_filter, res, diagnostics
