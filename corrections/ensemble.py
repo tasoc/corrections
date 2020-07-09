@@ -203,8 +203,10 @@ class EnsembleCorrector(BaseCorrector):
 		k_corr = float(res.x)
 
 		# Sanity checks:
-		#if not res.success:
-		#	raise Exception('Sanity check: Minimization not successful: ' + res.message)
+		if not res.success:
+			logger = logging.getLogger(__name__)
+			logger.warning('Sanity check: Minimization not successful: ' + res.message)
+			#raise Exception('Sanity check: Minimization not successful: ' + res.message)
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians
