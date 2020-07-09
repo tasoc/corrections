@@ -277,6 +277,12 @@ class BaseCorrector(object):
 			if allnan(lc_corr.flux_err):
 				logger.error("Final lightcurve errors is all NaNs")
 				status = STATUS.ERROR
+			if np.any(np.isinf(lc_corr.flux)):
+				logger.error("Final lightcurve contains Inf")
+				status = STATUS.ERROR
+			if np.any(np.isinf(lc_corr.flux_err)):
+				logger.error("Final lightcurve errors contains Inf")
+				status = STATUS.ERROR
 
 		# Calculate diagnostics:
 		if status in (STATUS.OK, STATUS.WARNING):
