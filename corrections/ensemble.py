@@ -189,17 +189,17 @@ class EnsembleCorrector(BaseCorrector):
 		# Calculate the median of all the ensemble lightcurves for each timestamp:
 		lc_medians = nanmedian(np.asarray(lc_ensemble), axis=0)
 
-		def func2(scalef, *args):
-			num1 = nansum(np.abs(np.diff(args[0] / (args[1] + scalef))))
-			denom1 = nanmedian(args[0] / (args[1] + scalef))
+		def func2(scalef):
+			num1 = nansum(np.abs(np.diff(lc.flux / (lc_medians + scalef))))
+			denom1 = nanmedian(lc.flux / (lc_medians + scalef))
 			return num1/denom1
 
-		res = minimize(func2, 1.0, args=(lc.flux, lc_medians), method='Powell')
+		res = minimize(func2, 1.0) # , method='Powell'
 		k_corr = float(res.x)
 
 		# Sanity checks:
-		if not res.success:
-			raise Exception('Sanity check: Minimization not successful: ' + res.message)
+		#if not res.success:
+		#	raise Exception('Sanity check: Minimization not successful: ' + res.message)
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians
