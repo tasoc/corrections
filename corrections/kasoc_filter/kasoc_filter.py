@@ -182,8 +182,8 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 		# it will in many cases not work.
 		if gapsize < 2*width:
 			# Do robust linear fit of part before and after jump:
-			res1 = theil_sen(w1[:,0], w1[:,1], n_samples=1e5)
-			res2 = theil_sen(w2[:,0], w2[:,1], n_samples=1e5)
+			res1 = theil_sen(w1[:,0], w1[:,1], n_samples=100000)
+			res2 = theil_sen(w2[:,0], w2[:,1], n_samples=100000)
 
 			# Evaluate fitted lines at midpoint in the gap:
 			tmid = (t[kj] + t[kj-1])/2 # Midpoint in gap
@@ -843,7 +843,9 @@ def filter_position_1d(time, flux, star_movement, timescale_position_smooth=None
 	return xpos
 
 #--------------------------------------------------------------------------------------------------
-def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long=3.0, timescale_short=1/24, sigma_clip=4.5, scale_clip=5.0, scale_width=1.0, phase_smooth_factor=1000, transit_model=None, it=3):
+def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long=3.0,
+	timescale_short=1/24, sigma_clip=4.5, scale_clip=5.0, scale_width=1.0,
+	phase_smooth_factor=1000, transit_model=None, it=3):
 	"""
 	Main filter function.
 

@@ -49,7 +49,8 @@ class KASOCFilterCorrector(BaseCorrector):
 		else:
 			indx = (np.max(lc.time) - np.min(lc.time)) / np.array(periods) > 3.0
 			periods = periods[indx]
-			if len(periods) == 0: periods = None
+			if len(periods) == 0:
+				periods = None
 
 		logger.debug(periods)
 

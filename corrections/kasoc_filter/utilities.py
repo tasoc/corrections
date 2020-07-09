@@ -103,7 +103,7 @@ def autocorr(x, dt):
 	return x, ac
 
 #==============================================================================
-def theil_sen(x, y, n_samples=1e5):
+def theil_sen(x, y, n_samples=100000):
 	"""
 	Computes the Theil-Sen estimator for 2d data
 
@@ -127,13 +127,14 @@ def theil_sen(x, y, n_samples=1e5):
 
 	slope_ = nanmedian( slopes )
 	#find the optimal b as the median of y_i - slope*x_i
-	intercepts = np.empty(n, dtype=float)
+	intercepts = np.empty(n, dtype='float64')
 	for i in range(n):
 		intercepts[i] = y[i] - slope_*x[i]
-	intercept_ = median( intercepts )
+	intercept_ = nanmedian( intercepts )
 
 	return np.array([slope_, intercept_])
 
+@np.errstate(invalid='ignore')
 def _slope(x_1, x_2, y_1, y_2):
 	return (1 - 2*(x_1 > x_2)) * ((y_2 - y_1)/np.abs((x_2 - x_1)))
 
