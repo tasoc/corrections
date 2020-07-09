@@ -139,7 +139,8 @@ class EnsembleCorrector(BaseCorrector):
 		target_flux_median = nanmedian(lc.flux)
 		mtarget_flux = lc.flux - target_flux_median
 		ens_flux = next_star_lc.flux
-		mens_flux = ens_flux - nanmedian(ens_flux)
+		ensemble_flux_median = nanmedian(ens_flux)
+		mens_flux = ens_flux - ensemble_flux_median
 
 		# 2 sigma
 		ens2sig = 2 * nanstd(mens_flux)
@@ -154,18 +155,22 @@ class EnsembleCorrector(BaseCorrector):
 			clip_target_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mtarget_flux, np.NaN)
 			clip_ens_flux = np.where((abstarg < targ2sig) & (absens < ens2sig), mens_flux, np.NaN)
 
-		args = (clip_ens_flux + nanmedian(ens_flux), clip_target_flux + target_flux_median)
+		# Define function to be minimized to obtain background-offset correction:
+		clip_ens_abs_flux = clip_ens_flux + ensemble_flux_median
+		term1 = (clip_target_flux + target_flux_median) / nanmedian(clip_target_flux + target_flux_median)
 
-		def func1(scaleK, *args):
-			temp = (args[1]/nanmedian(args[1])) - ((args[0]+scaleK)/nanmedian(args[0]+scaleK))
-			temp -= nanmedian(temp)
-			return nansum(temp**2)
+		def func1(scaleK):
+			temp = term1 - ((clip_ens_abs_flux + scaleK)/nanmedian(clip_ens_abs_flux + scaleK))
+			return nansum((temp - nanmedian(temp))**2)
 
-		res = minimize(func1, 100, args=args, method='Powell')
+		res = minimize(func1, 100, method='Powell')
 		bzeta = float(res.x)
 
-		ens_flux = ens_flux + bzeta
+		# Sanity checks:
+		if not res.success:
+			raise Exception('Bzeta: Minimization not successful: ' + res.message)
 
+		ens_flux = ens_flux + bzeta
 		return ens_flux/nanmedian(ens_flux), bzeta
 
 	#----------------------------------------------------------------------------------------------
