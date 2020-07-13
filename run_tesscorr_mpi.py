@@ -148,17 +148,29 @@ def main():
 		CorrClass = corrections.corrclass(args.method)
 
 		try:
+			# Send signal that we are ready for task:
+			comm.send(None, dest=0, tag=tags.READY)
+
+			# Receive a task from the master:
+			# This will also make worker wait until master-process
+			# has finished initializing the TaskManager, which can
+			# make small changes to the input-TODO file.
+			first_task = True
+			tic = default_timer()
+			tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
+			tag = status.Get_tag()
+			toc = default_timer()
+
+			# We can now safely initialize the corrector on the input file:
 			with CorrClass(input_folder, plot=args.plot) as corr:
-
-				# Send signal that we are ready for task:
-				comm.send(None, dest=0, tag=tags.READY)
-
 				while True:
 					# Receive a task from the master:
-					tic = default_timer()
-					tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
-					tag = status.Get_tag()
-					toc = default_timer()
+					if not first_task:
+						tic = default_timer()
+						tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
+						tag = status.Get_tag()
+						toc = default_timer()
+						first_task = False
 
 					if tag == tags.START:
 						# Make sure we can loop through tasks,
