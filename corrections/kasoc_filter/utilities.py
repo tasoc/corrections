@@ -8,31 +8,37 @@ KASOC Filter for Asteroseismic Data Preparation - Utility functions
 """
 
 import numpy as np
-from numpy import zeros_like, diff, append, NaN
 from bottleneck import nanmedian, median, move_median, nanmean, nansum, move_mean
+from ..utilities import mad_to_sigma
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def smooth(x, window):
 	"""Calculate moving average of input with given window (number of points)"""
 	window = int(window)
-	if window <= 1: return x
-	if window % 2 == 0: window += 1
-	if window >= len(x): return zeros_like(x) + nanmean(x)
+	if window <= 1:
+		return x
+	if window % 2 == 0:
+		window += 1
+	if window >= len(x):
+		return np.zeros_like(x) + nanmean(x)
 	y = move_mean(x, window, min_count=1)
-	yny = append(y[window//2:], [NaN]*(window//2))
+	yny = np.append(y[window//2:], [np.NaN]*(window//2))
 	for k in range(window//2):
 		yny[k] = nanmean(x[:(2*k+1)])
 		yny[-(k+1)] = nanmean(x[-(2*k+1):])
 	return yny
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def smooth_cyclic(x, window):
 	"""Calculate cyclic moving average of input with given window (number of points)"""
 	window = int(window)
-	if window <= 1: return x
-	if window % 2 == 0: window += 1
+	if window <= 1:
+		return x
+	if window % 2 == 0:
+		window += 1
 	wh = window//2
-	if wh >= len(x): return zeros_like(x) + nanmean(x)
+	if wh >= len(x):
+		return np.zeros_like(x) + nanmean(x)
 	# Stitch ends onto the array:
 	N = len(x)
 	xny = np.concatenate((x[-wh-1:N-1], x, x[1:wh+1]))
@@ -43,43 +49,55 @@ def smooth_cyclic(x, window):
 	y = y[wh:N-wh]
 	return y
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def _median_central(x, width_points):
 	y = move_median(x, width_points, min_count=1)
-	yny = append(y[width_points//2:], [NaN]*(width_points//2))
+	yny = np.append(y[width_points//2:], [np.NaN]*(width_points//2))
 	for k in range(width_points//2):
 		yny[k] = nanmedian(x[:(2*k+1)])
 		yny[-(k+1)] = nanmedian(x[-(2*k+1):])
 	return yny
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def moving_median(t, x, w, dt=None):
 	"""Calculate moving median of input with given window (in t-units)"""
 	return moving_nanmedian(t, x, w, dt)
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def moving_nanmedian(t, x, w, dt=None):
 	"""Calculate moving median of input with given window (in t-units)"""
-	assert len(t) == len(x), "t and x must have the same length."
-	if dt is None: dt = median(diff(t))
+	if len(t) != len(x):
+		raise ValueError("t and x must have the same length.")
+	if dt is None:
+		dt = median(np.diff(t))
 	width_points = int(w/dt)
-	if width_points <= 1: return x
-	if width_points % 2 == 0: width_points += 1
-	if width_points >= len(x): return zeros_like(x) + nanmedian(x)
+	if width_points <= 1:
+		return x
+	if width_points % 2 == 0:
+		width_points += 1
+	if width_points >= len(x):
+		return np.zeros_like(x) + nanmedian(x)
 	return _median_central(x, width_points)
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def moving_nanmedian_cyclic(t, x, w, dt=None):
-	"""Calculate cyclic moving average of input with given window (in t-units) taking into account NaNs in the data."""
-	assert len(t) == len(x), "t and x must have the same length."
-	if dt is None: dt = median(diff(t))
+	"""
+	Calculate cyclic moving average of input with given window (in t-units)
+	taking into account NaNs in the data.
+	"""
+	if len(t) != len(x):
+		raise ValueError("t and x must have the same length.")
+	if dt is None:
+		dt = median(np.diff(t))
 	# Calculate width of filter:
 	width_points = int(w/dt)
-	if width_points <= 1: return x
-	if width_points % 2 == 0: width_points += 1 # Filter is much faster when using an odd number of points!
+	if width_points <= 1:
+		return x
+	if width_points % 2 == 0:
+		width_points += 1 # Filter is much faster when using an odd number of points!
 	wh = width_points//2
 	N = len(x)
-	if wh >= N: return zeros_like(x) + nanmedian(x)
+	if wh >= N: return np.zeros_like(x) + nanmedian(x)
 	# Stich ends onto the array:
 	xny = np.concatenate((x[-wh-1:N-1], x, x[1:wh+1]))
 	# Run moving median on longer series:
@@ -89,12 +107,26 @@ def moving_nanmedian_cyclic(t, x, w, dt=None):
 	y = y[wh:N-wh]
 	return y
 
-#==============================================================================
-def BIC(data, model, dof):
-	"""Calculate the Bayesian Information Criterion given vectors of data, model and degrees of freedom"""
-	return nansum((data - model)**2) + dof*np.log(len(data))
+#--------------------------------------------------------------------------------------------------
+def BIC(data, model, dof, scatter=None):
+	"""
+	Calculate the Bayesian Information Criterion given data, model and degrees of freedom.
 
-#==============================================================================
+	Parameters:
+		data (ndarray):
+		model (ndarray):
+		dof (int): Number of degrees of freedom in the model.
+		scatter (ndarray, optional):
+			If not provided, a robust mean scatter is calculated from the data.
+
+	Returns:
+		float: Bayesian Information Criterion.
+	"""
+	if scatter is None:
+		scatter = nanmedian(np.abs(np.diff(data))) * mad_to_sigma
+	return len(data)*np.log(2) + nansum((data - model)**2/scatter**2) + dof*np.log(len(data))
+
+#--------------------------------------------------------------------------------------------------
 def autocorr(x, dt):
 	ac = np.correlate(x, x, mode='full')
 	ac = ac[ac.size//2:]
@@ -102,10 +134,10 @@ def autocorr(x, dt):
 	x = np.arange(0, dt*ac.size, dt)
 	return x, ac
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def theil_sen(x, y, n_samples=100000):
 	"""
-	Computes the Theil-Sen estimator for 2d data
+	Computes the Theil-Sen estimator for 2D data.
 
 	This complexity is O(n**2), which can be poor for large n. We will perform a sampling
 	of data points to get an unbiased, but larger variance estimator.
@@ -113,12 +145,12 @@ def theil_sen(x, y, n_samples=100000):
 	up to n_samples times.
 
 	Parameters:
-		x: 1-d np array, the control variate
-		y: 1-d np.array, the ind variate.
-		n_samples: how many points to sample.
+		x (ndarray): 1-d np array, the control variate.
+		y (ndarray): 1-d np.array, the ind variate.
+		n_samples (int): how many points to sample.
 	"""
-
-	assert x.shape[0] == y.shape[0], "x and y must be the same shape."
+	if x.shape[0] != y.shape[0]:
+		raise ValueError("x and y must be the same shape.")
 	n = x.shape[0]
 
 	i1 = np.random.randint(0, n, n_samples)
@@ -138,7 +170,7 @@ def theil_sen(x, y, n_samples=100000):
 def _slope(x_1, x_2, y_1, y_2):
 	return (1 - 2*(x_1 > x_2)) * ((y_2 - y_1)/np.abs((x_2 - x_1)))
 
-#==============================================================================
+#--------------------------------------------------------------------------------------------------
 def gap_fill(t, y,maxgap=np.inf):
 	# Declare variables used:
 	times_max = 0

@@ -93,8 +93,10 @@ class KASOCFilterCorrector(BaseCorrector):
 		)
 
 		# Translate the quality flags from the KASOC filter to the real ones:
-		lc_corr.quality[kasoc_quality & 2 != 0] |= CorrectorQualityFlags.JumpAdditiveConstant # FIXME: Actually it could be multiplicative
-		lc_corr.quality[kasoc_quality & 4 != 0] |= CorrectorQualityFlags.JumpAdditiveLinear # FIXME: Actually it could be multiplicative
+		lc_corr.quality[kasoc_quality & 2 != 0] |= CorrectorQualityFlags.JumpAdditiveConstant
+		lc_corr.quality[kasoc_quality & 4 != 0] |= CorrectorQualityFlags.JumpAdditiveLinear
+		lc_corr.quality[kasoc_quality & 256 != 0] |= CorrectorQualityFlags.JumpMultiplicativeConstant
+		lc_corr.quality[kasoc_quality & 512 != 0] |= CorrectorQualityFlags.JumpMultiplicativeLinear
 		lc_corr.quality[kasoc_quality & 8+128 != 0] |= CorrectorQualityFlags.SigmaClip
 
 		# Set headers that will be saved to the FITS file:

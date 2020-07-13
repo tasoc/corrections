@@ -97,7 +97,7 @@ class InvalidSigmasWarning(UserWarning):
 #==============================================================================
 
 #--------------------------------------------------------------------------------------------------
-def remove_jumps(t, x, jumps, width=3, return_flags=False):
+def remove_jumps(t, x, jumps, width=3.0, return_flags=False):
 	"""
 	Remove jumps from timeseries.
 
@@ -107,6 +107,12 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 		jumps (list): Vector of timestamps where jumps are to be corrected.
 		width (float): Width of the region on each side of jumps to compare (default=3 days).
 		return_flags (boolean): Return two additional arrays with location of corrected jumps.
+
+	Returns:
+		tuple:
+		- ndarray: Corrected flux vector.
+		- list: List with the same length as ``jumps``, indicating if the particular jump was corrected.
+		- ndarray: Quality array with same length as ``x``, indicating where and which correction was performed.
 	"""
 
 	# Get the logger to use for printing messages:
@@ -119,24 +125,24 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 
 	# Convert a simple list of times to a jumps-dictionary:
 	jumps = np.atleast_1d(jumps)
-	for k,jump in enumerate(jumps):
+	for k, jump in enumerate(jumps):
 		if np.isscalar(jump):
 			jumps[k] = {'time': jump}
 		elif not isinstance(jump, dict):
-			raise Exception("Invalid input in JUMPS")
+			raise ValueError("Invalid input in JUMPS")
 
 	# Important that we correct the jumps in the right order:
 	jumps = sorted(jumps, key=lambda k: k['time'])
 
 	# Arrays needed for the following:
-	correction = empty(2, dtype='float64')
+	correction = np.empty(2, dtype='float64')
 	if return_flags:
 		flag_jumps = [False]*len(jumps)
-		flag_jumps2 = zeros(N, dtype='int64')
+		flag_jumps2 = np.zeros(N, dtype='int64')
 
 	# Correct jumps one after the other:
 	kj = 0
-	for k,jump in enumerate(jumps):
+	for k, jump in enumerate(jumps):
 		logger.debug(jump)
 		# Extract information about jump:
 		tjump = jump.get('time')
@@ -247,7 +253,7 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 				s2 = Inf
 
 		else:
-			raise Exception('Unknown jump type')
+			raise ValueError('Unknown jump type')
 
 		# Apply correction to entire timeseries if the standard deviation improves:
 		if jumpforce:
@@ -264,10 +270,22 @@ def remove_jumps(t, x, jumps, width=3, return_flags=False):
 				x[kj:] += correction[i-1]
 			else:
 				x[kj:] *= correction[i-1]
+
+			#corrections[kj] = correction[i-1]
+
 			# Set the flags, if required:
 			if return_flags:
 				flag_jumps[k] = True
-				flag_jumps2[kj] = 2**i # Returns 2 (mean) or 4 (linear) when correction was made, zero otherwise
+				if jumptype == 'additive':
+					if i == 1:
+						flag_jumps2[kj] |= 2 # constant additive
+					elif i == 2:
+						flag_jumps2[kj] |= 4 # linear additive
+				elif jumptype == 'multiplicative':
+					if i == 1:
+						flag_jumps2[kj] |= 256 # constant multiplicative
+					elif i == 2:
+						flag_jumps2[kj] |= 512 # linear multiplicative
 
 	if return_flags:
 		return x, flag_jumps, flag_jumps2
@@ -876,13 +894,15 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 
 	# Basic check of input:
 	N = len(t)
-	assert N == len(x), "TIME and DATA does not have the same length"
-	if transit_model is not None:
-		assert N == len(transit_model), "TRANSIT_MODEL is wrong length"
-	if quality is not None:
-		assert N == len(quality), "QUALITY is wrong length"
+	if len(x) != N:
+		raise ValueError("TIME and DATA does not have the same length")
+	if transit_model is not None and len(transit_model) != N:
+		raise ValueError("TRANSIT_MODEL is wrong length")
+	if quality is not None and len(quality) != N:
+		raise ValueError("QUALITY is wrong length")
 	if position is not None:
-		if not isinstance(position, dict): position = {'pixels': position, 'break': np.array([], dtype='float64')}
+		if not isinstance(position, dict):
+			position = {'pixels': position, 'break': np.array([], dtype='float64')}
 		assert position['pixels'].shape == (N, 2), "POSITION must have the shape (N,2)"
 	assert it > 0, "IT must be at least one."
 
@@ -893,15 +913,17 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	indx_sorttime = argsort(t)
 	x = x[indx_sorttime] # data sorted after time
 	t = t[indx_sorttime] # sorted time
-	if quality is not None: quality = quality[indx_sorttime] # sorted quality
-	if position is not None: position['pixels'] = position['pixels'][indx_sorttime, :] # sorted position
+	if quality is not None:
+		quality = quality[indx_sorttime] # sorted quality
+	if position is not None:
+		position['pixels'] = position['pixels'][indx_sorttime, :] # sorted position
 
 	# If not correcting position and transits, don't iterate:
 	if position is None and transit_model is None and P is None:
 		it = 1
 
 	# Find median cadence:
-	dt = median(diff(t))
+	dt = median(np.diff(t))
 
 	# Use the quality values to filter out bad values:
 	if quality is not None:
@@ -930,7 +952,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	if position is not None:
 		logger.info('Extracting position information...')
 		# Remove points that have been flagged as bad from positions:
-		position['pixels'][flag_removed, :] = NaN
+		position['pixels'][flag_removed, :] = np.NaN
 		# Fill the gaps in the position timeseries with NaNs:
 		posg = np.full((Ng, 2), np.NaN, dtype='float64')
 		posg[ori, :] = position['pixels']
@@ -942,7 +964,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		# NOTE: Not "+2" as Nchunks is the number of breaks and not the number of chunks
 		ncols = star_movement['Nchunks'] + 1
 	else:
-		flag_bad_pos = zeros(Ng, dtype='bool')
+		flag_bad_pos = np.zeros(Ng, dtype='bool')
 		ncols = 1
 
 	flux_ylim = np.percentile(x[isfinite(x)], [0.25, 99.75])
@@ -957,9 +979,9 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	fig.subplots_adjust(hspace=0.05)
 
 	# Repeat the determination of xlong and xpos to better disentangle them:
-	xpos = zeros(Ng, dtype='float64')
-	xtransit = zeros(Ng, dtype='float64')
-	xpos[flag_bad_pos] = NaN # Set points found to be bad to NaN so they wont contribute in the following
+	xpos = np.zeros(Ng, dtype='float64')
+	xtransit = np.zeros(Ng, dtype='float64')
+	xpos[flag_bad_pos] = np.NaN # Set points found to be bad to NaN so they wont contribute in the following
 	for i in range(it):
 		logger.info("Running %d iteration:", i+1)
 
@@ -978,7 +1000,8 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		ax1.set_ylabel(r'Flux (e$^-$/s)')
 		plt.yticks(fontsize=10)
 		ax1.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter(useOffset=False))
-		if i == 0: ax1.set_title(r'$x_\mathrm{long}$')
+		if i == 0:
+			ax1.set_title(r'$x_\mathrm{long}$')
 		if i == it-1:
 			ax1.set_xlabel('Time (days)', fontsize=10)
 			plt.xticks(fontsize=10)
@@ -1042,7 +1065,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		plt.close(fig)
 
 	# Make sure we have removed the bad datapoints:
-	xg[flag_bad_pos] = NaN
+	xg[flag_bad_pos] = np.NaN
 
 	# Construct the final filter:
 	filt = xlong + xtransit + xpos
@@ -1113,9 +1136,9 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 				fig.savefig(os.path.join(_output_folder, _output_prefix+'turnover.'+_output_format), format=_output_format, bbox_inches='tight')
 				plt.close(fig)
 	else:
-		xshort = zeros(Ng)
+		xshort = np.zeros(Ng, dtype='float64')
 		xshort_tilde = xshort
-		turnover = zeros(Ng)
+		turnover = np.zeros(Ng, dtype='float64')
 
 	# Flag with significant sharp and negative features (transits?):
 	with np.errstate(invalid='ignore'):
@@ -1171,19 +1194,19 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 				if flag_rem.any():
 					# Remove bad data points from timeseries:
 					flag_bad[flag_rem] = True
-					absx[flag_rem] = NaN
+					absx[flag_rem] = np.NaN
 					sigma = moving_nanmedian(tg, absx, timescale_long, dt=dt)
 				else:
 					break
 			#############################
 			# Bad data points should also be NaN:
-			xg[flag_bad] = NaN
+			xg[flag_bad] = np.NaN
 
 	# Convert to proper sigma indsted of MAD:
 	indx = ~isfinite(xg)
-	sigma[indx] = NaN
+	sigma[indx] = np.NaN
 	sigma = mad_to_sigma * smooth(sigma, int(timescale_long/dt))
-	sigma[indx] = NaN
+	sigma[indx] = np.NaN
 
 	# Return results:
 	# Remove the gap-filled data again:
@@ -1205,17 +1228,18 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	xshort = turnover * xshort_tilde[ori]
 
 	# Create KASOC flag vector:
-	quality_flags = zeros(N, dtype='int64')
-	quality_flags[flag_removed] += 1
-	if jumps is not None: quality_flags += flag_jumps2
-	quality_flags[flag_bad] += 8
-	quality_flags[flag_transit] += 16
+	quality_flags = np.zeros(N, dtype='int64')
+	quality_flags[flag_removed] |= 1
+	if jumps is not None:
+		quality_flags |= flag_jumps2 # Sets 2+4+256+512
+	quality_flags[flag_bad] |= 8
+	quality_flags[flag_transit] |= 16
 	if position is not None:
-		quality_flags[flag_bad_pos] += 32
+		quality_flags[flag_bad_pos] |= 32
 		# Find the indicies of points just after position breaks:
 		if len(star_movement['tbreaks']) >= 3:
 			ibreak = searchsorted(t, star_movement['tbreaks'][1:-1])
-			quality_flags[ibreak] += 64
+			quality_flags[ibreak] |= 64
 
 	# Check that the extracted errorbars make sense:
 	with np.errstate(invalid='ignore'):
@@ -1240,9 +1264,9 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 			print("Something went wrong in the logging of invalid sigmas")
 		# Set the timeseries to NaN where sigmas are invalid,
 		# and add a flag (128) to the quality-flags:
-		x[indx_invalid_sigma] = NaN
-		sigma[indx_invalid_sigma] = NaN
-		quality_flags[indx_invalid_sigma] += 128
+		x[indx_invalid_sigma] = np.NaN
+		sigma[indx_invalid_sigma] = np.NaN
+		quality_flags[indx_invalid_sigma] |= 128
 
 	# Plot the final filtered timeseries:
 	if _output_folder is not None:
