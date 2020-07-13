@@ -66,11 +66,12 @@ class TaskManager(object):
 
 		# Setup logging:
 		formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-		console = logging.StreamHandler()
-		console.setFormatter(formatter)
 		self.logger = logging.getLogger(__name__)
-		self.logger.addHandler(console)
 		self.logger.setLevel(logging.INFO)
+		if not self.logger.hasHandlers():
+			self._loghandler = logging.StreamHandler()
+			self._loghandler.setFormatter(formatter)
+			self.logger.addHandler(self._loghandler)
 
 		# Create table for settings if it doesn't already exits:
 		self.cursor.execute("""CREATE TABLE IF NOT EXISTS corr_settings (
@@ -201,6 +202,9 @@ class TaskManager(object):
 				self.summary['numtasks'] += row['cnt']
 				if row['corr_status'] is not None:
 					self.summary[STATUS(row['corr_status']).name] = row['cnt']
+			# Make sure the containing directory exists:
+			if not os.path.isdir(os.path.dirname(self.summary_file)):
+				os.makedirs(os.path.dirname(self.summary_file))
 			# Write summary to file:
 			self.write_summary()
 
@@ -239,6 +243,9 @@ class TaskManager(object):
 		if hasattr(self, 'conn') and self.conn:
 			self.conn.close()
 			self.conn = None
+
+		if hasattr(self, '_loghandler') and hasattr(self, 'logger') and self._loghandler:
+			self.logger.removeHandler(self._loghandler)
 
 	#----------------------------------------------------------------------------------------------
 	def save_settings(self):

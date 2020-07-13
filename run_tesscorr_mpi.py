@@ -37,7 +37,7 @@ def main():
 	parser = argparse.ArgumentParser(description='Run TESS Corrections in parallel using MPI.')
 	parser.add_argument('-d', '--debug', help='Print debug messages.', action='store_true')
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
-	parser.add_argument('-m', '--method', help='Corrector method to use.', default=None, choices=('ensemble', 'cbv', 'kasoc_filter'))
+	parser.add_argument('-m', '--method', help='Corrector method to use.', default='cbv', choices=('ensemble', 'cbv', 'kasoc_filter'))
 	parser.add_argument('-o', '--overwrite', help='Overwrite existing results.', action='store_true')
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
 	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
@@ -62,7 +62,7 @@ def main():
 	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(os.path.dirname(input_folder), 'lightcurves'))
 
 	# Define MPI message tags
-	tags = enum.IntEnum('tags', ('READY', 'DONE', 'EXIT', 'START'))
+	tags = enum.IntEnum('tags', ('INIT', 'READY', 'DONE', 'EXIT', 'START'))
 
 	# Initializations and preliminaries
 	comm = MPI.COMM_WORLD   # get MPI communicator object
@@ -79,10 +79,39 @@ def main():
 				'datasource': args.datasource
 			}
 
-			# Start TaskManager, which keeps track of the task that needs to be performed:
+			# File path to write summary to:
+			summary_file = os.path.join(output_folder, 'summary_corr_{0}.json'.format(args.method))
+
+			# Invoke the TaskManager to ensure that the input TODO-file has the correct columns
+			# and indicies, which is automatically created by the TaskManager init function.
 			with corrections.TaskManager(input_folder, cleanup=True, overwrite=args.overwrite,
-				cleanup_constraints=constraints,
-				summary=os.path.join(output_folder, 'summary_corr_{0}.json'.format(args.method))) as tm:
+				cleanup_constraints=constraints):
+				pass
+
+			# Broadcast to all workers that they are free to initialize:
+			num_workers = size - 1
+			for dest in range(1, num_workers+1):
+				comm.send(None, dest=dest, tag=tags.INIT)
+
+			# Wait for all workers to report they are ready:
+			closed_workers = 0
+			ready_workers = []
+			while len(ready_workers) + closed_workers < num_workers:
+				comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
+				source = status.Get_source()
+				tag = status.Get_tag()
+				if tag == tags.READY:
+					ready_workers.append(source)
+				elif tag == tags.EXIT:
+					closed_workers += 1
+				else:
+					# This should never happen, but just to
+					# make sure we don't run into an infinite loop:
+					raise Exception("Master received an unknown tag: '{0}'".format(tag))
+
+			# Start TaskManager, which keeps track of the task that needs to be performed:
+			with corrections.TaskManager(input_folder, overwrite=args.overwrite,
+				cleanup_constraints=constraints, summary=summary_file) as tm:
 
 				# Set level of TaskManager logger:
 				tm.logger.setLevel(logging_level)
@@ -93,14 +122,18 @@ def main():
 
 				# Start the master loop that will assign tasks
 				# to the workers:
-				num_workers = size - 1
-				closed_workers = 0
 				tm.logger.info("Master starting with %d workers", num_workers)
 				while closed_workers < num_workers:
-					# Ask workers for information:
-					data = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
-					source = status.Get_source()
-					tag = status.Get_tag()
+					if ready_workers:
+						# We have workers that have not yet received
+						# their first set of tasks
+						source = ready_workers.pop()
+						tag = tags.READY
+					else:
+						# Ask workers for information:
+						data = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
+						source = status.Get_source()
+						tag = status.Get_tag()
 
 					if tag == tags.DONE:
 						# The worker is done with a task
@@ -108,7 +141,7 @@ def main():
 						tm.save_results(data)
 
 					if tag in (tags.DONE, tags.READY):
-						# Worker is ready, so send it a task
+						# Worker is ready for a new task, so send it a task
 						tasks = tm.get_task(**constraints, chunk=10)
 						if tasks:
 							tm.start_task(tasks)
@@ -148,29 +181,21 @@ def main():
 		CorrClass = corrections.corrclass(args.method)
 
 		try:
-			# Send signal that we are ready for task:
-			comm.send(None, dest=0, tag=tags.READY)
-
-			# Receive a task from the master:
-			# This will also make worker wait until master-process
-			# has finished initializing the TaskManager, which can
-			# make small changes to the input-TODO file.
-			first_task = True
-			tic = default_timer()
-			tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
-			tag = status.Get_tag()
-			toc = default_timer()
+			# Wait for signal that we are okay to initialize:
+			comm.recv(None, source=0, tag=tags.INIT, status=status)
 
 			# We can now safely initialize the corrector on the input file:
 			with CorrClass(input_folder, plot=args.plot) as corr:
+
+				# Send signal that we are ready for task:
+				comm.send(None, dest=0, tag=tags.READY)
+
 				while True:
 					# Receive a task from the master:
-					if not first_task:
-						tic = default_timer()
-						tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
-						tag = status.Get_tag()
-						toc = default_timer()
-						first_task = False
+					tic = default_timer()
+					tasks = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
+					tag = status.Get_tag()
+					toc = default_timer()
 
 					if tag == tags.START:
 						# Make sure we can loop through tasks,
