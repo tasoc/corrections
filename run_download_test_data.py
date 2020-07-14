@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# pragma: no cover
 """
 Script that will download data for extensive tests.
 
