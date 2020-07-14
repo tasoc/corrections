@@ -22,6 +22,17 @@ jobs:
     - name: "Python 3.8 on Linux"
       python: "3.8"
 
+    - name: "Python 3.6 on Linux, OpenMPI"
+      python: "3.6"
+      before_install:
+        - sudo apt-get install -y libopenmpi-dev
+      install:
+        - $PYTHON -m pip install --upgrade pip
+        - $PIP install -r requirements.txt
+        - $PIP install mpi4py codecov pytest-cov
+      script:
+        - $PYTHON -m pytest -m mpi --cov=./
+
     - name: "Python 3.7 on Mac"
       os: osx
       osx_image: xcode11.2 # Python 3.7.4 running on macOS 10.14.4
