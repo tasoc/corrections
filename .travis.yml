@@ -25,7 +25,7 @@ jobs:
     - name: "Python 3.6 on Linux, OpenMPI"
       python: "3.6"
       before_install:
-        - sudo apt-get install -y libopenmpi-dev
+        - sudo apt-get install -y openmpi-bin libopenmpi-dev
       install:
         - $PYTHON -m pip install --upgrade pip
         - $PIP install -r requirements.txt
