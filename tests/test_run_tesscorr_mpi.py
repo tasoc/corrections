@@ -84,7 +84,10 @@ def test_run_tesscorr_mpi(PRIVATE_TODO_FILE, method):
 	with TaskManager(PRIVATE_TODO_FILE) as tm:
 		tm.cursor.execute("UPDATE todolist SET corr_status=1;")
 		for s in STAR_LIST:
-			meth, starid, datasource = s.values[0:3]
+			if isinstance(s, (tuple, list)):
+				meth, starid, datasource = s[0:3]
+			else:
+				meth, starid, datasource = s.values[0:3]
 			if meth != method:
 				continue
 			tm.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE starid=? AND datasource=?;", [starid, datasource])

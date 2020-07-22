@@ -38,18 +38,18 @@ DATA_ONLY = pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a ful
 #  5) Expected RMS (1 hour)
 #  6) Expected PTP
 STAR_LIST = (
-	pytest.param('cbv', 29281992, 'ffi', 1.485801e+06, 8.949764e+02, 2.572604e+02),
-	pytest.param('cbv', 29281992, 'tpf', 1.664423e+06, 9.052271e+02, 6.864500e+01),
-	pytest.param('ensemble', 8196567, 'ffi', 2.419432e+07, 6.305472e+03, 6.530170e+02),
+	('cbv', 29281992, 'ffi', 1.485801e+06, 8.949764e+02, 2.572604e+02),
+	('cbv', 29281992, 'tpf', 1.664423e+06, 9.052271e+02, 6.864500e+01),
+	('ensemble', 8196567, 'ffi', 2.419432e+07, 6.305472e+03, 6.530170e+02),
 	pytest.param('ensemble', 8195216, 'ffi', 4.548763e+06, 2.213988e+03, 1.049298e+03, marks=DATA_ONLY),
 	pytest.param('ensemble', 8196502, 'ffi', 6.901682e+07, 5.227739e+03, 2.679721e+03, marks=DATA_ONLY),
 	pytest.param('ensemble', 165109591, 'tpf', 4.462307e+05, 5.684376e+02, 1.107972e+02, marks=DATA_ONLY),
 	pytest.param('ensemble', 147424478, 'tpf', 4.115776e+06, 1.190016e+03, 3.930971e+02, marks=DATA_ONLY),
 	pytest.param('ensemble', 159778915, 'tpf', 3.985035e+06, 5.127329e+02, 1.754027e+03, marks=DATA_ONLY),
-	pytest.param('kasoc_filter', 29281992, 'ffi', None, None, None), # KASOC Filter performs baaaaaaad here
-	pytest.param('kasoc_filter', 336732616, 'ffi', 4.311563e+06, 1.429098e+03, 8.663223e+02),
-	pytest.param('kasoc_filter', 29281992, 'tpf', 3.970388e+04, 1.239991e+02, 6.421494e+01),
-	pytest.param('kasoc_filter', 336732616, 'tpf', 1.262934e+07, 7.343828e+02, 3.362000e+03) # HATS-3: Known planet
+	('kasoc_filter', 29281992, 'ffi', None, None, None), # KASOC Filter performs baaaaaaad here
+	('kasoc_filter', 336732616, 'ffi', 4.311563e+06, 1.429098e+03, 8.663223e+02),
+	('kasoc_filter', 29281992, 'tpf', 3.970388e+04, 1.239991e+02, 6.421494e+01),
+	('kasoc_filter', 336732616, 'tpf', 1.262934e+07, 7.343828e+02, 3.362000e+03) # HATS-3: Known planet
 )
 
 #--------------------------------------------------------------------------------------------------
