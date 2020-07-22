@@ -5,10 +5,12 @@ The TASOC Lightcurve Corrections module
     :target: https://travis-ci.org/tasoc/corrections
 .. image:: https://img.shields.io/codecov/c/github/tasoc/corrections
     :target: https://codecov.io/github/tasoc/corrections
+.. image:: https://hitsofcode.com/github/tasoc/corrections?branch=devel
+    :alt: Hits-of-Code
+    :target: https://hitsofcode.com/view/github/tasoc/corrections?branch=devel
 .. image:: https://img.shields.io/github/license/tasoc/corrections.svg
     :alt: license
     :target: https://github.com/tasoc/corrections/blob/master/LICENSE
-
 This module provides the lightcurve corrections setup for the TESS Asteroseismic Science Operations Center (TASOC).
 
 The code is available through our GitHub organization (https://github.com/tasoc/corrections) and full documentation for this code can be found on https://tasoc.dk/code/.
