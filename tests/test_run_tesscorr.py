@@ -29,6 +29,7 @@ def capture_run_tesscorr(params):
 	)
 	out, err = proc.communicate()
 	exitcode = proc.returncode
+	proc.kill()
 
 	print("ExitCode: %d" % exitcode)
 	print("StdOut:\n%s" % out)

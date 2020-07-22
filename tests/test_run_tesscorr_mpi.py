@@ -20,9 +20,11 @@ from corrections import TaskManager
 pytest.importorskip("mpi4py")
 
 #--------------------------------------------------------------------------------------------------
-def capture_run_tesscorr_mpi(params):
+def capture_run_tesscorr_mpi(params, mpiexec=True):
 
-	command = 'mpiexec -n 2 "%s" run_tesscorr_mpi.py %s' % (sys.executable, params.strip())
+	command = '"%s" run_tesscorr_mpi.py %s' % (sys.executable, params.strip())
+	if mpiexec:
+		command = 'mpiexec -n 2 ' + command
 	print(command)
 
 	cmd = shlex.split(command)
@@ -44,28 +46,28 @@ def capture_run_tesscorr_mpi(params):
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_method():
-	out, err, exitcode = capture_run_tesscorr_mpi("--method=invalid")
+	out, err, exitcode = capture_run_tesscorr_mpi("--method=invalid", mpiexec=False)
 	assert exitcode == 2
 	assert "error: argument -m/--method: invalid choice: 'invalid'" in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_datasource():
-	out, err, exitcode = capture_run_tesscorr_mpi("--datasource=invalid")
+	out, err, exitcode = capture_run_tesscorr_mpi("--datasource=invalid", mpiexec=False)
 	assert exitcode == 2
 	assert "error: argument --datasource: invalid choice: 'invalid'" in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_camera():
-	out, err, exitcode = capture_run_tesscorr_mpi("--camera=5")
+	out, err, exitcode = capture_run_tesscorr_mpi("--camera=5", mpiexec=False)
 	assert exitcode == 2
 	assert 'error: argument --camera: invalid choice: 5 (choose from 1, 2, 3, 4)' in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_ccd():
-	out, err, exitcode = capture_run_tesscorr_mpi("--ccd=14")
+	out, err, exitcode = capture_run_tesscorr_mpi("--ccd=14", mpiexec=False)
 	assert exitcode == 2
 	assert 'error: argument --ccd: invalid choice: 14 (choose from 1, 2, 3, 4)' in err
 
