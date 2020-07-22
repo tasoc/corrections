@@ -274,7 +274,7 @@ class TaskManager(object):
 					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN ens_fom REAL DEFAULT NULL;")
 
 			self.conn.commit()
-		except: # noqa: E722, pragma: nocover
+		except: # noqa: E722, pragma: no cover
 			self.conn.rollback()
 			raise
 
