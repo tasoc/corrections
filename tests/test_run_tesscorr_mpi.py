@@ -34,6 +34,7 @@ def capture_run_tesscorr_mpi(params):
 	)
 	out, err = proc.communicate()
 	exitcode = proc.returncode
+	proc.kill()
 
 	print("ExitCode: %d" % exitcode)
 	print("StdOut:\n%s" % out)
@@ -87,6 +88,7 @@ def test_run_tesscorr_mpi(PRIVATE_TODO_FILE, method):
 		num = tm.cursor.fetchone()[0]
 
 	print(num)
+	assert num < 10
 
 	with tempfile.TemporaryDirectory() as tmpdir:
 		params = '-d --method={method:s} "{input_dir:s}" "{output:s}"'.format(
