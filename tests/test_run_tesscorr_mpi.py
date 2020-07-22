@@ -76,14 +76,17 @@ def test_run_tesscorr_mpi_invalid_ccd():
 @pytest.mark.parametrize('method', ['cbv', 'ensemble', 'kasoc_filter'])
 def test_run_tesscorr_mpi(PRIVATE_TODO_FILE, method):
 
+	# We are using all the stars in the STAR_LIST even
+	# if data is downloaded or not, since we are actually
+	# not using any data at all.
+	# All corrections will fail, but we are only checking
+	# if things run under MPI here.
 	with TaskManager(PRIVATE_TODO_FILE) as tm:
 		tm.cursor.execute("UPDATE todolist SET corr_status=1;")
 		for s in STAR_LIST:
-			print(s)
 			meth, starid, datasource = s.values[0:3]
 			if meth != method:
 				continue
-			print(meth, starid, datasource)
 			tm.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE starid=? AND datasource=?;", [starid, datasource])
 		tm.conn.commit()
 		tm.cursor.execute("SELECT COUNT(*) FROM todolist WHERE corr_status IS NULL;")
