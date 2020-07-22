@@ -98,7 +98,7 @@ install:
   - $PIP install -r requirements.txt
   - $PIP install codecov pytest-cov
 script:
-  - $PYTHON -m pytest --cov=corrections/
+  - $PYTHON -m pytest --cov=./
 after_success:
   - $PYTHON -m codecov
 
