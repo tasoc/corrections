@@ -130,6 +130,7 @@ class TaskManager(object):
 			errors TEXT,
 			FOREIGN KEY (priority) REFERENCES todolist(priority) ON DELETE CASCADE ON UPDATE CASCADE
 		);""")
+		self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS diagnostics_corr_lightcurve_idx ON diagnostics_corr (lightcurve);")
 		self.conn.commit()
 
 		# The corrector is not stored, so try to infer it from the diagnostics information:
