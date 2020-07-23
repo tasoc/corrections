@@ -11,6 +11,7 @@ The TASOC Lightcurve Corrections module
 .. image:: https://img.shields.io/github/license/tasoc/corrections.svg
     :alt: license
     :target: https://github.com/tasoc/corrections/blob/master/LICENSE
+
 This module provides the lightcurve corrections setup for the TESS Asteroseismic Science Operations Center (TASOC).
 
 The code is available through our GitHub organization (https://github.com/tasoc/corrections) and full documentation for this code can be found on https://tasoc.dk/code/.
@@ -55,3 +56,9 @@ Running the program
 More text coming soon...
 
 >>> python run_tesscorr.py --method=cbv 
+
+Contributing to the code
+========================
+You are more than welcome to contribute to this code!
+Please contact `Rasmus Handberg <rasmush@phys.au.dk>`_ or `Derek Buzasi <dbuzasi@fgcu.edu>`_ if you wish to contribute.
+
