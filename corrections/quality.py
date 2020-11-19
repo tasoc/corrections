@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Handling of TESS data quality flags.
@@ -87,6 +87,7 @@ class CorrectorQualityFlags(QualityFlagsBase):
 	JumpMultiplicativeConstant = 32
 	JumpMultiplicativeLinear = 64
 	Interpolated = 128
+	Rejected = 256
 
 	# Default bitmask
 	DEFAULT_BITMASK = (FlaggedBadData | ManualExclude)
@@ -103,7 +104,8 @@ class CorrectorQualityFlags(QualityFlagsBase):
 		JumpAdditiveLinear: "Jump corrected using additive linear trend",
 		JumpMultiplicativeConstant: "Jumb corrected using multiplicative constant",
 		JumpMultiplicativeLinear: "Jump corrected using multiplicative linear trend",
-		Interpolated: "Point is interpolated"
+		Interpolated: "Point is interpolated",
+		Rejected: "Point has been rejected in processing"
 	}
 
 #--------------------------------------------------------------------------------------------------
