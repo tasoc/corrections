@@ -631,7 +631,7 @@ class BaseCorrector(object):
 
 					wm = fits.BinTableHDU.from_columns([c1, c2], name='ENSEMBLE')
 					wm.header['TDISP1'] = 'I10'
-					wm.header['TDISP2'] = 'E'
+					wm.header['TDISP2'] = 'E26.17'
 					fix_fits_table_headers(wm, {
 						'TIC': 'TIC identifier',
 						'BZETA': 'background scale'
