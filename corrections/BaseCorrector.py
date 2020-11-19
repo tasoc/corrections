@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 The basic correction class for the TASOC Photomety pipeline.
@@ -602,14 +602,10 @@ class BaseCorrector(object):
 			else:
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
 
-			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 			logger.debug("Saving lightcurve to '%s'", save_file)
 
-			# Change permission of copied file to allow the addition of the corrected lightcurve
-			os.chmod(save_file, 0o640)
-
 			# Open the FITS file to overwrite the corrected flux columns:
-			with fits.open(save_file, mode='update') as hdu:
+			with fits.open(os.path.join(self.input_folder, fname), mode='readonly') as hdu:
 				# Filter out invalid parts of the input lightcurve:
 				hdu = _filter_fits_hdu(hdu)
 
@@ -643,6 +639,9 @@ class BaseCorrector(object):
 
 					# Add the new table to the list of HDUs:
 					hdu.append(wm)
+
+				# Write the modified HDUList to the new filename:
+				hdu.writeto(save_file, checksum=True, overwrite=True)
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":

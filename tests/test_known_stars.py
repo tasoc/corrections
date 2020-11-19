@@ -18,7 +18,7 @@ import os.path
 from bottleneck import nanvar, allnan
 from astropy.io import fits
 from astropy.table import Table
-#import gzip
+import subprocess
 import tempfile
 import conftest # noqa: F401
 import corrections
@@ -63,7 +63,7 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 	__dir__ = os.path.abspath(os.path.dirname(__file__))
 	logger = logging.getLogger(__name__)
 	logger.info("-------------------------------------------------------------")
-	logger.info("CORRECTOR = %s, DATASOURCE = %s, STARID = %d" % (corrector, datasource, starid))
+	logger.info("CORRECTOR = %s, DATASOURCE = %s, STARID = %d", corrector, datasource, starid)
 
 	# All stars are from the same CCD, find the task for it:
 	with corrections.TaskManager(SHARED_INPUT_DIR) as tm:
@@ -212,6 +212,9 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 			fitslc = hdu['LIGHTCURVE'].data
 			hdr = hdu['LIGHTCURVE'].header
 
+			# Simple checks of header values:
+			assert hdu[0].header['TICID'] == starid
+
 			# Checks of things in FITS table that should not have changed at all:
 			assert_array_equal(fitslc['TIME'], inlc.time, "FITS: TIME has changed")
 			assert_array_equal(fitslc['TIMECORR'], inlc.timecorr, "FITS: TIMECORR has changed")
@@ -269,6 +272,25 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 					assert np.isfinite(hdr['PER_%d' % k]) and hdr['PER_%d' % k] > 0
 				# Check that no other periods are present
 				assert 'PER_%d' % (hdr['NUM_PER'] + 1) not in hdr
+
+		# Test that the Gzip FITS file has the correct uncompressed file name, by simply
+		# decompressing the Gzip file, asking to keep the original file name.
+		# This uses the system GZIP utility, since there doesn't seem to be a way to do this
+		# through the Python gzip module:
+		fpath = os.path.join(tmpdir, save_file)
+		fpath_uncompressed = fpath.replace('.fits.gz', '.fits')
+		assert not os.path.exists(fpath_uncompressed), "Uncompressed file already exists"
+		gzip_output = subprocess.check_output(['gzip', '-dkNv', os.path.basename(fpath)],
+			cwd=os.path.dirname(fpath),
+			stderr=subprocess.STDOUT,
+			encoding='utf8')
+		print("Gzip output:")
+		print(gzip_output)
+		assert os.path.isfile(fpath_uncompressed), "Incorrect uncompressed file name"
+
+		# Just see if we can in fact also open the uncompressed FITS file and get a simple header:
+		with fits.open(fpath_uncompressed, mode='readonly') as hdu:
+			assert hdu[0].header['TICID'] == starid
 
 		# Save a new version of the lightcurve to compare with in the future:
 		# For some reason Table is very picky with the gzip fileobj, hence the newline definition
