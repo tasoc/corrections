@@ -21,6 +21,48 @@ from astropy.visualization import (PercentileInterval, ImageNormalize,
 plt.switch_backend('Agg')
 
 #--------------------------------------------------------------------------------------------------
+def plots_interactive(backend=('Qt5Agg', 'MacOSX', 'Qt4Agg', 'Qt5Cairo', 'TkAgg')):
+	"""
+	Change plotting to using an interactive backend.
+
+	Parameters:
+		backend (str or list): Backend to change to. If not provided, will try different
+			interactive backends and use the first one that works.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+
+	logger = logging.getLogger(__name__)
+	logger.debug("Valid interactive backends: %s", matplotlib.rcsetup.interactive_bk)
+
+	if isinstance(backend, str):
+		backend = [backend]
+
+	for bckend in backend:
+		if bckend not in matplotlib.rcsetup.interactive_bk:
+			logger.warning("Interactive backend '%s' is not found", bckend)
+			continue
+
+		# Try to change the backend, and catch errors
+		# it it didn't work:
+		try:
+			plt.switch_backend(bckend)
+		except (ModuleNotFoundError, ImportError):
+			pass
+		else:
+			break
+
+#--------------------------------------------------------------------------------------------------
+def plots_noninteractive():
+	"""
+	Change plotting to using a non-interactive backend, which can e.g. be used on a cluster.
+	Will set backend to 'Agg'.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	plt.switch_backend('Agg')
+
+#--------------------------------------------------------------------------------------------------
 def plot_image(image, scale='log', origin='lower', xlabel='Pixel Column Number',
 	ylabel='Pixel Row Number', make_cbar=False, clabel='Flux ($e^{-}s^{-1}$)',
 	title=None, percentile=95.0, vmin=None, vmax=None, ax=None, cmap=plt.cm.Blues,
