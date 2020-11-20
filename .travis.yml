@@ -26,10 +26,8 @@ jobs:
       python: "3.6"
       before_install:
         - sudo apt-get install -y openmpi-bin libopenmpi-dev
-      install:
-        - $PYTHON -m pip install --upgrade pip
-        - $PIP install -r requirements.txt
-        - $PIP install mpi4py codecov pytest-cov
+      before_script:
+        - $PIP install mpi4py
       script:
         - $PYTHON -m pytest -m mpi --cov=./
 
@@ -78,8 +76,6 @@ jobs:
       python: "3.6"
       git:
         lfs_skip_smudge: true
-      install:
-        - pip install flake8
       script:
         - flake8
       after_success: skip
