@@ -275,7 +275,7 @@ class BaseCorrector(object):
 				logger.error("Final lightcurve is all NaNs")
 				status = STATUS.ERROR
 			if allnan(lc_corr.flux_err):
-				logger.error("Final lightcurve errors is all NaNs")
+				logger.error("Final lightcurve errors are all NaNs")
 				status = STATUS.ERROR
 			if np.any(np.isinf(lc_corr.flux)):
 				logger.error("Final lightcurve contains Inf")
