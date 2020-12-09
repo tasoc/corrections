@@ -130,6 +130,7 @@ class TaskManager(object):
 			errors TEXT,
 			FOREIGN KEY (priority) REFERENCES todolist(priority) ON DELETE CASCADE ON UPDATE CASCADE
 		);""")
+		self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS diagnostics_corr_lightcurve_idx ON diagnostics_corr (lightcurve);")
 		self.conn.commit()
 
 		# The corrector is not stored, so try to infer it from the diagnostics information:
@@ -273,7 +274,7 @@ class TaskManager(object):
 					self.cursor.execute("ALTER TABLE diagnostics_corr ADD COLUMN ens_fom REAL DEFAULT NULL;")
 
 			self.conn.commit()
-		except: # noqa: E722, pragma: nocover
+		except: # noqa: E722, pragma: no cover
 			self.conn.rollback()
 			raise
 

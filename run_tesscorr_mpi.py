@@ -44,6 +44,7 @@ def main():
 	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default=None, help='Data source or cadence. Default is to run all.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
+	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
 
 	# Set logging level:
@@ -59,7 +60,10 @@ def main():
 		input_folder = os.environ.get('TESSCORR_INPUT')
 	if not input_folder:
 		parser.error("Please specify an INPUT_FOLDER.")
-	output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(os.path.dirname(input_folder), 'lightcurves'))
+
+	output_folder = args.output_folder
+	if output_folder is None:
+		output_folder = os.environ.get('TESSCORR_OUTPUT', os.path.join(os.path.dirname(input_folder), 'lightcurves'))
 
 	# Define MPI message tags
 	tags = enum.IntEnum('tags', ('INIT', 'READY', 'DONE', 'EXIT', 'START'))
@@ -88,26 +92,11 @@ def main():
 				cleanup_constraints=constraints):
 				pass
 
-			# Broadcast to all workers that they are free to initialize:
-			num_workers = size - 1
-			for dest in range(1, num_workers+1):
-				comm.send(None, dest=dest, tag=tags.INIT)
+			# Signal that workers are free to initialize:
+			comm.Barrier() # Barrier 1
 
-			# Wait for all workers to report they are ready:
-			closed_workers = 0
-			ready_workers = []
-			while len(ready_workers) + closed_workers < num_workers:
-				comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
-				source = status.Get_source()
-				tag = status.Get_tag()
-				if tag == tags.READY:
-					ready_workers.append(source)
-				elif tag == tags.EXIT:
-					closed_workers += 1
-				else:
-					# This should never happen, but just to
-					# make sure we don't run into an infinite loop:
-					raise Exception("Master received an unknown tag: '{0}'".format(tag))
+			# Wait for all workers to initialize:
+			comm.Barrier() # Barrier 2
 
 			# Start TaskManager, which keeps track of the task that needs to be performed:
 			with corrections.TaskManager(input_folder, overwrite=args.overwrite,
@@ -122,18 +111,14 @@ def main():
 
 				# Start the master loop that will assign tasks
 				# to the workers:
+				num_workers = size - 1
+				closed_workers = 0
 				tm.logger.info("Master starting with %d workers", num_workers)
 				while closed_workers < num_workers:
-					if ready_workers:
-						# We have workers that have not yet received
-						# their first set of tasks
-						source = ready_workers.pop()
-						tag = tags.READY
-					else:
-						# Ask workers for information:
-						data = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
-						source = status.Get_source()
-						tag = status.Get_tag()
+					# Get information from worker:
+					data = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
+					source = status.Get_source()
+					tag = status.Get_tag()
 
 					if tag == tags.DONE:
 						# The worker is done with a task
@@ -182,10 +167,13 @@ def main():
 
 		try:
 			# Wait for signal that we are okay to initialize:
-			comm.recv(None, source=0, tag=tags.INIT, status=status)
+			comm.Barrier() # Barrier 1
 
 			# We can now safely initialize the corrector on the input file:
 			with CorrClass(input_folder, plot=args.plot) as corr:
+
+				# Wait for all workers do be done initializing:
+				comm.Barrier() # Barrier 2
 
 				# Send signal that we are ready for task:
 				comm.send(None, dest=0, tag=tags.READY)

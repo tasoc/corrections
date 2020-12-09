@@ -14,7 +14,7 @@ import pytest
 import numpy as np
 import scipy
 import conftest # noqa: F401
-from corrections.plots import plt, plot_image, plot_image_fit_residuals
+from corrections.plots import plt, plot_image, plot_image_fit_residuals, plots_interactive
 
 kwargs = {'baseline_dir': 'baseline_images'}
 
@@ -130,7 +130,7 @@ def test_plot_image_data_change():
 
 #-------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	plt.switch_backend('TkAgg')
+	plots_interactive()
 	plt.close('all')
 	pytest.main([__file__])
 	plt.show()

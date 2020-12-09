@@ -5,6 +5,9 @@ The TASOC Lightcurve Corrections module
     :target: https://travis-ci.org/tasoc/corrections
 .. image:: https://img.shields.io/codecov/c/github/tasoc/corrections
     :target: https://codecov.io/github/tasoc/corrections
+.. image:: https://hitsofcode.com/github/tasoc/corrections?branch=devel
+    :alt: Hits-of-Code
+    :target: https://hitsofcode.com/view/github/tasoc/corrections?branch=devel
 .. image:: https://img.shields.io/github/license/tasoc/corrections.svg
     :alt: license
     :target: https://github.com/tasoc/corrections/blob/master/LICENSE
@@ -53,3 +56,9 @@ Running the program
 More text coming soon...
 
 >>> python run_tesscorr.py --method=cbv 
+
+Contributing to the code
+========================
+You are more than welcome to contribute to this code!
+Please contact `Rasmus Handberg <rasmush@phys.au.dk>`_ or `Derek Buzasi <dbuzasi@fgcu.edu>`_ if you wish to contribute.
+

@@ -350,7 +350,7 @@ class CBVCreator(BaseCorrector):
 		indx_nancol = allnan(mat, axis=0)
 		mat = mat[:, ~indx_nancol]
 
-		logger.info("Matrix size: %d x %d" % mat.shape)
+		logger.info("Matrix size: %d x %d", mat.shape[0], mat.shape[1])
 
 		logger.info("Gap-filling lightcurves...")
 		cadenceno = np.arange(mat.shape[1])
@@ -543,10 +543,10 @@ class CBVCreator(BaseCorrector):
 		logger.info('------------------------------------')
 
 		if 'cbv-single-scale' in self.hdf and 'cbv-spike' in self.hdf:
-			logger.info('Separated CBVs for %s area %d already calculated' % (self.datasource, self.cbv_area))
+			logger.info('Separated CBVs for %s area %d already calculated', self.datasource, self.cbv_area)
 			return
 
-		logger.info('Computing CBV spike separation for %s area %d' % (self.datasource, self.cbv_area))
+		logger.info('Computing CBV spike separation for %s area %d', self.datasource, self.cbv_area)
 
 		# Load initial CBV from "compute_CBV"
 		cbv = self.hdf['cbv-ini']
@@ -692,8 +692,8 @@ class CBVCreator(BaseCorrector):
 
 			try:
 				flux_filter, res, _ = cbv.fit(lc, cbvs=Ncbvs, use_bic=False, use_prior=False)
-			except ValueError as e:
-				logger.error("%d: Ini-fit failed with ValueError: %s", lc.targetid, str(e))
+			except ValueError:
+				logger.exception("%d: Ini-fit failed with ValueError", lc.targetid)
 				continue
 
 			# TODO: compute diagnostics requiring the light curve

@@ -14,7 +14,7 @@ from lightkurve import TessLightCurve
 import os.path
 import conftest # noqa: F401
 from corrections import CBV
-from corrections.plots import plt
+from corrections.plots import plt, plots_interactive
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("datasource", ['ffi', 'tpf'])
@@ -111,7 +111,7 @@ def test_cbv_fit(INPUT_DIR):
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	plt.switch_backend('Qt5Agg')
+	plots_interactive()
 	plt.close('all')
 	pytest.main([__file__])
 	plt.show(True)

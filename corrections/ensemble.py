@@ -205,7 +205,7 @@ class EnsembleCorrector(BaseCorrector):
 		# Sanity checks:
 		if not res.success:
 			logger = logging.getLogger(__name__)
-			logger.warning('Sanity check: Minimization not successful: ' + res.message)
+			logger.warning('Sanity check: Minimization not successful: %s', res.message)
 			#raise Exception('Sanity check: Minimization not successful: ' + res.message)
 
 		# Correct the lightcurve:
@@ -369,5 +369,5 @@ class EnsembleCorrector(BaseCorrector):
 			save_figure(os.path.join(self.plot_folder(lc), 'ensemble_lc_medians'), fig=fig)
 			plt.close(fig)
 
-		logger.debug("Status of correction: {}".format((np.isnan(np.asarray(lc_corr.flux))).tolist().count(False)))
+		logger.debug("Status of correction: %d", np.sum(np.isfinite(lc_corr.flux)))
 		return lc_corr, STATUS.OK

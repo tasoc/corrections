@@ -97,7 +97,8 @@ def moving_nanmedian_cyclic(t, x, w, dt=None):
 		width_points += 1 # Filter is much faster when using an odd number of points!
 	wh = width_points//2
 	N = len(x)
-	if wh >= N: return np.zeros_like(x) + nanmedian(x)
+	if wh >= N:
+		return np.zeros_like(x) + nanmedian(x)
 	# Stich ends onto the array:
 	xny = np.concatenate((x[-wh-1:N-1], x, x[1:wh+1]))
 	# Run moving median on longer series:

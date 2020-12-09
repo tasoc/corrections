@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 The basic correction class for the TASOC Photomety pipeline.
@@ -270,12 +270,15 @@ class BaseCorrector(object):
 
 		# Do sanity checks:
 		if status in (STATUS.OK, STATUS.WARNING):
+			# Make sure all NaN fluxes have corresponding NaN errors:
+			lc_corr.flux_err[np.isnan(lc_corr.flux)] = np.NaN
+
 			# Simple check that entire lightcurve is not NaN:
 			if allnan(lc_corr.flux):
 				logger.error("Final lightcurve is all NaNs")
 				status = STATUS.ERROR
 			if allnan(lc_corr.flux_err):
-				logger.error("Final lightcurve errors is all NaNs")
+				logger.error("Final lightcurve errors are all NaNs")
 				status = STATUS.ERROR
 			if np.any(np.isinf(lc_corr.flux)):
 				logger.error("Final lightcurve contains Inf")
@@ -602,14 +605,10 @@ class BaseCorrector(object):
 			else:
 				save_file = os.path.join(output_folder, os.path.dirname(fname), filename)
 
-			shutil.copy(os.path.join(self.input_folder, fname), save_file)
 			logger.debug("Saving lightcurve to '%s'", save_file)
 
-			# Change permission of copied file to allow the addition of the corrected lightcurve
-			os.chmod(save_file, 0o640)
-
 			# Open the FITS file to overwrite the corrected flux columns:
-			with fits.open(save_file, mode='update') as hdu:
+			with fits.open(os.path.join(self.input_folder, fname), mode='readonly') as hdu:
 				# Filter out invalid parts of the input lightcurve:
 				hdu = _filter_fits_hdu(hdu)
 
@@ -635,7 +634,7 @@ class BaseCorrector(object):
 
 					wm = fits.BinTableHDU.from_columns([c1, c2], name='ENSEMBLE')
 					wm.header['TDISP1'] = 'I10'
-					wm.header['TDISP2'] = 'E'
+					wm.header['TDISP2'] = 'E26.17'
 					fix_fits_table_headers(wm, {
 						'TIC': 'TIC identifier',
 						'BZETA': 'background scale'
@@ -643,6 +642,9 @@ class BaseCorrector(object):
 
 					# Add the new table to the list of HDUs:
 					hdu.append(wm)
+
+				# Write the modified HDUList to the new filename:
+				hdu.writeto(save_file, checksum=True, overwrite=True)
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
