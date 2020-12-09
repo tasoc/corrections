@@ -270,6 +270,9 @@ class BaseCorrector(object):
 
 		# Do sanity checks:
 		if status in (STATUS.OK, STATUS.WARNING):
+			# Make sure all NaN fluxes have corresponding NaN errors:
+			lc_corr.flux_err[np.isnan(lc_corr.flux)] = np.NaN
+
 			# Simple check that entire lightcurve is not NaN:
 			if allnan(lc_corr.flux):
 				logger.error("Final lightcurve is all NaNs")
