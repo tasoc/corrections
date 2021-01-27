@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Run preparation of CBVs for single or several CBV-areas.
@@ -35,6 +35,7 @@ def main():
 	group.add_argument('--snr', type=float, default=5, help='SNR (dB) for selection of CBVs.')
 	group.add_argument('--el', type=float, default=-0.5, help='Entropy limit for discarting star contribution to CBV.')
 
+	parser.add_argument('--version', type=int, required=True, help='Data release number to store in output files.')
 	parser.add_argument('input_folder', type=str, nargs='?', default=None, help='Directory to create catalog files in.')
 	args = parser.parse_args()
 
@@ -105,6 +106,7 @@ def main():
 	# Create wrapper function which only takes a single cbv_area as input:
 	create_cbv_wrapper = partial(corrections.create_cbv,
 		input_folder=input_folder,
+		version=args.version,
 		threshold_correlation=args.corr,
 		threshold_snrtest=args.snr,
 		ncbv=args.ncbv,

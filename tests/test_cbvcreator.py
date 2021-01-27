@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Tests of CBVCreator.
@@ -105,6 +105,7 @@ def test_create_cbv(PRIVATE_INPUT_DIR):
 	assert cbv.sector == 1
 	assert cbv.camera == 1
 	assert cbv.ccd == 1
+	assert cbv.data_rel == 1
 
 	#assert os.path.isfile(cbv.filepath), "HDF5 file does not exist"
 

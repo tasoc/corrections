@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Tests Cotrending Basis Vector objects.
@@ -31,24 +31,26 @@ def test_cbv(INPUT_DIR, datasource):
 	assert cbv.ccd == 4
 	assert cbv.cbv_area == 143
 	assert cbv.cadence == 1800 if datasource == 'ffi' else 120
+	assert cbv.data_rel == 1
 
 	# Save the CBV object to a FITS file:
 	with tempfile.TemporaryDirectory() as tmpdir:
 		# Test saving to FITS file to directory that does not exist:
 		with pytest.raises(FileNotFoundError):
-			cbv.save_to_fits(os.path.join(tmpdir, 'non-existing'), datarel=5)
+			cbv.save_to_fits(os.path.join(tmpdir, 'non-existing'), version=5)
 
 		# Save CBV to FITS file:
-		fitsfile = cbv.save_to_fits(tmpdir, datarel=5)
+		fitsfile = cbv.save_to_fits(tmpdir, version=5)
 		print(fitsfile)
 
 		# Open generated FITS file and check saved values:
-		with fits.open(fitsfile) as hdu:
+		with fits.open(fitsfile, mode='readonly') as hdu:
 			assert hdu[0].header['SECTOR'] == 1
 			assert hdu[0].header['CAMERA'] == 1
 			assert hdu[0].header['CCD'] == 4
 			assert hdu[0].header['CBV_AREA'] == 143
-			assert hdu[0].header['DATA_REL'] == 5
+			assert hdu[0].header['DATA_REL'] == 1
+			assert hdu[0].header['VERSION'] == 5
 
 #--------------------------------------------------------------------------------------------------
 def test_cbv_invalid(INPUT_DIR):

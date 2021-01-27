@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Creation of Cotrending Basis Vectors.
@@ -36,24 +36,25 @@ from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_ma
 __version__ = get_version(pep440=False)
 
 #--------------------------------------------------------------------------------------------------
-def create_cbv(cbv_area, input_folder=None, datasource='ffi', ncbv=16,
+def create_cbv(cbv_area, input_folder=None, version=5, datasource='ffi', ncbv=16,
 	threshold_correlation=0.5, threshold_snrtest=5.0, threshold_entropy=-0.5, ip=False):
 	"""
-
+	Create CBV for given area.
 
 	It is required the ``corrections.TaskManager`` has been initialized on the
 	``input_dir`` at least ones before the function is called, since this will
 	ensure that the proper database columns and indicies have been created.
 
 	Parameters:
-		cbv_area (integer):
-		input_folder (string):
-		datasource (string, optional): Default='ffi'.
-		ncbv (integer, optional):
+		cbv_area (int):
+		input_folder (str):
+		version (int): Version to add to output files.
+		datasource (str, optional): Default='ffi'.
+		ncbv (int, optional):
 		threshold_correlation (float, optional):
 		threshold_snrtest (float, optional):
 		threshold_entropy (float, optional):
-		ip (boolean, optional): Default=False.
+		ip (bool, optional): Default=False.
 
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
@@ -69,7 +70,7 @@ def create_cbv(cbv_area, input_folder=None, datasource='ffi', ncbv=16,
 		C.spike_sep()
 		C.cotrend_ini(do_ini_plots=ip)
 		#C.compute_distance_map()
-		C.save_cbv_to_fits()
+		C.save_cbv_to_fits(version=version)
 
 		if datasource == 'ffi':
 			C.interpolate_to_higher_cadence()
@@ -101,7 +102,7 @@ class CBVCreator(BaseCorrector):
 		threshold_correlation=0.5, threshold_snrtest=5.0, threshold_variability=1.3,
 		threshold_entropy=-0.5, **kwargs):
 		"""
-		Initialise the CBV Creator.
+		Initialize the CBV Creator.
 
 		Parameters:
 			datasource (str):
@@ -130,7 +131,7 @@ class CBVCreator(BaseCorrector):
 			raise ValueError("Invalid DATASOURCE")
 		if cbv_area is None or not isinstance(cbv_area, int):
 			raise ValueError("Invalid CBV_AREA")
-		if not isinstance(cbv_area, int) or ncomponents <= 0:
+		if not isinstance(ncomponents, int) or ncomponents <= 0:
 			raise ValueError("Invalid NCOMPONENTS")
 		if threshold_correlation is None:
 			threshold_correlation = 1.0
@@ -191,6 +192,7 @@ class CBVCreator(BaseCorrector):
 		# Save all settings in the attributes of the root of the HDF5 file:
 		if file_is_new:
 			self.hdf.attrs['method'] = 'normal'
+			self.hdf.attrs['datasource'] = self.datasource
 			self.hdf.attrs['cbv_area'] = cbv_area
 			self.hdf.attrs['cadence'] = (1800 if datasource == 'ffi' else 120)
 			self.hdf.attrs['version'] = __version__
@@ -293,6 +295,7 @@ class CBVCreator(BaseCorrector):
 		self.hdf.attrs['sector'] = lc.sector
 		self.hdf.attrs['camera'] = lc.camera
 		self.hdf.attrs['ccd'] = lc.ccd
+		self.hdf.attrs['data_rel'] = lc.meta['data_rel']
 		self.hdf.flush()
 
 		logger.info("Matrix size: %d x %d", Nstars, Ntimes)
@@ -865,7 +868,7 @@ class CBVCreator(BaseCorrector):
 		return newfile
 
 	#----------------------------------------------------------------------------------------------
-	def save_cbv_to_fits(self, datarel=5):
+	def save_cbv_to_fits(self, version=5):
 		"""
 		Save Cotrending Basis Vectors (CBVs) to FITS file.
 
@@ -876,4 +879,4 @@ class CBVCreator(BaseCorrector):
 		"""
 
 		cbv = CBV(self.data_folder, self.cbv_area, self.datasource)
-		return cbv.save_to_fits(self.data_folder, datarel=datarel)
+		return cbv.save_to_fits(self.data_folder, version=version)
