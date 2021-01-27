@@ -536,6 +536,7 @@ class BaseCorrector(object):
 				quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
 				meta={}
 			)
+
 		else:
 			raise ValueError("Invalid file format")
 

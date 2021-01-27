@@ -146,9 +146,10 @@ class CBVCreator(BaseCorrector):
 		self.threshold_correlation = threshold_correlation
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_entropy = threshold_entropy
+		self.random_state = 2187
 
 		# Path to the HDF5 file which will contain all the information for a set of CBVs:
-		self.hdf_filepath = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, cbv_area))
+		self.hdf_filepath = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, self.cbv_area))
 
 		# If the file already extsts, determine if it was created using the same settings:
 		if os.path.exists(self.hdf_filepath):
@@ -193,7 +194,7 @@ class CBVCreator(BaseCorrector):
 		if file_is_new:
 			self.hdf.attrs['method'] = 'normal'
 			self.hdf.attrs['datasource'] = self.datasource
-			self.hdf.attrs['cbv_area'] = cbv_area
+			self.hdf.attrs['cbv_area'] = self.cbv_area
 			self.hdf.attrs['cadence'] = (1800 if datasource == 'ffi' else 120)
 			self.hdf.attrs['version'] = __version__
 			self.hdf.attrs['Ncbvs'] = self.ncomponents
@@ -387,7 +388,7 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 
 		# Calculate the principle components:
-		pca = PCA(self.ncomponents)
+		pca = PCA(self.ncomponents, random_state=self.random_state)
 		U, _, _ = pca._fit(matrix)
 
 		ent = compute_entropy(U)
@@ -458,7 +459,7 @@ class CBVCreator(BaseCorrector):
 
 		# Calculate initial CBVs
 		logger.info('Computing %d CBVs', self.ncomponents)
-		pca = PCA(self.ncomponents)
+		pca = PCA(self.ncomponents, random_state=self.random_state)
 		U0, _, _ = pca._fit(mat)
 
 		cbv0 = np.full((Ntimes, self.ncomponents), np.nan, dtype='float64')
@@ -856,6 +857,7 @@ class CBVCreator(BaseCorrector):
 
 			# Change the headers that are different now:
 			hdf.attrs['cadence'] = 120
+			hdf.attrs['datasource'] = 'tpf'
 			hdf.attrs['Ntimes'] = Ntimes
 			hdf.attrs['method'] = 'interpolated'
 

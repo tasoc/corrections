@@ -49,10 +49,10 @@ class CBV(object):
 	Cotrending Basis Vector object.
 
 	Attributes:
-		cbv (numpy.array)
-		cbv_s (numpy.array)
+		cbv (numpy.array):
+		cbv_s (numpy.array):
 		priors
-		inifit (numpy.array)
+		inifit (numpy.array):
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -75,7 +75,7 @@ class CBV(object):
 		with h5py.File(filepath, 'r') as hdf:
 			self.sector = int(hdf.attrs['sector'])
 			self.cadence = int(hdf.attrs['cadence'])
-			self.datasource = str(hdf.attrs.get('datasource', datasource))
+			self.datasource = str(hdf.attrs.get('datasource', ''))
 			self.camera = int(hdf.attrs['camera'])
 			self.ccd = int(hdf.attrs['ccd'])
 			self.cbv_area = int(hdf.attrs['cbv_area'])
@@ -94,6 +94,10 @@ class CBV(object):
 
 			if 'inifit' in hdf:
 				self.inifit = np.asarray(hdf['inifit'])
+
+		# Catch for backwards capability for old CBV files:
+		if self.datasource == '':
+			self.datasource = 'ffi' if self.cadence == 1800 else 'tpf'
 
 		# Warn about missing DATA_REL headers:
 		if self.data_rel <= 0:

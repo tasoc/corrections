@@ -86,7 +86,6 @@ jobs:
   fast_finish: true
   allow_failures:
     - name: "Flake8"
-    - name: "Python 3.6 on Linux, OpenMPI"
 
 # command to install dependencies
 install:

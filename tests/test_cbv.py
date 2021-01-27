@@ -32,6 +32,7 @@ def test_cbv(INPUT_DIR, datasource):
 	assert cbv.cbv_area == 143
 	assert cbv.cadence == 1800 if datasource == 'ffi' else 120
 	assert cbv.data_rel == 1
+	assert cbv.datasource == datasource
 
 	# Save the CBV object to a FITS file:
 	with tempfile.TemporaryDirectory() as tmpdir:
