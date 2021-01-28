@@ -24,7 +24,7 @@ def capture_run_cli(cli, params, mpiexec=False):
 
 	cmd = [sys.executable, cli] + params
 	if mpiexec:
-		cmd = ['mpiexec', '-n 2'] + cmd
+		cmd = ['mpiexec', '-n', '2'] + cmd
 
 	proc = subprocess.Popen(cmd,
 		cwd=os.path.join(os.path.dirname(__file__), '..'),
