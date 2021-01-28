@@ -52,6 +52,7 @@ def test_cbv(INPUT_DIR, datasource):
 			assert hdu[0].header['CBV_AREA'] == 143
 			assert hdu[0].header['DATA_REL'] == 1
 			assert hdu[0].header['VERSION'] == 5
+			assert hdu[0].header['CADENCE'] == cbv.cadence
 
 #--------------------------------------------------------------------------------------------------
 def test_cbv_invalid(INPUT_DIR):
