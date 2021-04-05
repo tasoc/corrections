@@ -1,8 +1,10 @@
 =======================================
 The TASOC Lightcurve Corrections module
 =======================================
-.. image:: https://travis-ci.org/tasoc/corrections.svg?branch=devel
-    :target: https://travis-ci.org/tasoc/corrections
+.. image:: https://zenodo.org/badge/152142537.svg
+    :target: https://zenodo.org/badge/latestdoi/152142537
+.. image:: https://github.com/tasoc/corrections/actions/workflows/tests.yml/badge.svg?branch=devel
+    :target: https://github.com/tasoc/corrections/actions/workflows/tests.yml
 .. image:: https://img.shields.io/codecov/c/github/tasoc/corrections
     :target: https://codecov.io/github/tasoc/corrections
 .. image:: https://hitsofcode.com/github/tasoc/corrections?branch=devel
@@ -55,7 +57,7 @@ Running the program
 
 More text coming soon...
 
->>> python run_tesscorr.py --method=cbv 
+>>> python run_tesscorr.py --method=cbv
 
 Contributing to the code
 ========================
