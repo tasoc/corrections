@@ -9,6 +9,7 @@ Plotting utilities.
 import logging
 import os
 import copy
+import warnings
 import numpy as np
 from bottleneck import allnan, anynan
 import matplotlib
@@ -22,7 +23,7 @@ import astropy.visualization as viz
 plt.switch_backend('Agg')
 
 #--------------------------------------------------------------------------------------------------
-def plots_interactive(backend=('Qt5Agg', 'MacOSX', 'Qt4Agg', 'Qt5Cairo', 'TkAgg')):
+def plots_interactive(backend=('Qt5Agg', 'MacOSX', 'Qt4Agg', 'GTK3Agg', 'Qt5Cairo', 'GTK3Cairo', 'TkAgg')):
 	"""
 	Change plotting to using an interactive backend.
 
@@ -113,7 +114,7 @@ def plot_image(image, ax=None, scale='log', cmap=None, origin='lower', xlabel=No
 	# Backward compatible settings:
 	make_cbar = kwargs.pop('make_cbar', None)
 	if make_cbar:
-		raise FutureWarning("'make_cbar' is deprecated. Use 'cbar' instead.")
+		warnings.warn("'make_cbar' is deprecated. Use 'cbar' instead.", category=DeprecationWarning)
 		if not cbar:
 			cbar = make_cbar
 
@@ -210,44 +211,14 @@ def plot_image(image, ax=None, scale='log', cmap=None, origin='lower', xlabel=No
 	ax.set_ylim([extent[2], extent[3]])
 
 	if cbar:
-		fig = ax.figure
-		divider = make_axes_locatable(ax)
-		if cbar == 'top':
-			cbar_pad = 0.05 if cbar_pad is None else cbar_pad
-			cax = divider.append_axes('top', size=cbar_size, pad=cbar_pad)
-			orientation = 'horizontal'
-		elif cbar == 'bottom':
-			cbar_pad = 0.35 if cbar_pad is None else cbar_pad
-			cax = divider.append_axes('bottom', size=cbar_size, pad=cbar_pad)
-			orientation = 'horizontal'
-		elif cbar == 'left':
-			cbar_pad = 0.35 if cbar_pad is None else cbar_pad
-			cax = divider.append_axes('left', size=cbar_size, pad=cbar_pad)
-			orientation = 'vertical'
-		else:
-			cbar_pad = 0.05 if cbar_pad is None else cbar_pad
-			cax = divider.append_axes('right', size=cbar_size, pad=cbar_pad)
-			orientation = 'vertical'
-
-		cb = fig.colorbar(im, cax=cax, orientation=orientation)
-
-		if cbar == 'top':
-			cax.xaxis.set_ticks_position('top')
-			cax.xaxis.set_label_position('top')
-		elif cbar == 'left':
-			cax.yaxis.set_ticks_position('left')
-			cax.yaxis.set_label_position('left')
-
-		if clabel is not None:
-			cb.set_label(clabel)
-		if cbar_ticks is not None:
-			cb.set_ticks(cbar_ticks)
-		if cbar_ticklabels is not None:
-			cb.set_ticklabels(cbar_ticklabels)
-
-		#cax.yaxis.set_major_locator(matplotlib.ticker.AutoLocator())
-		#cax.yaxis.set_minor_locator(matplotlib.ticker.AutoLocator())
-		cax.tick_params(which='both', direction='out', pad=5)
+		colorbar(im,
+			ax=ax,
+			loc=cbar,
+			size=cbar_size,
+			pad=cbar_pad,
+			label=clabel,
+			ticks=cbar_ticks,
+			ticklabels=cbar_ticklabels)
 
 	# Settings for ticks:
 	integer_locator = MaxNLocator(nbins=10, integer=True)
@@ -319,26 +290,145 @@ def plot_image_fit_residuals(fig, image, fit, residuals=None, percentile=95.0):
 	return [ax1, ax2, ax3]
 
 #--------------------------------------------------------------------------------------------------
-def save_figure(path, fig=None, format='png', **kwargs):
+def colorbar(im, ax=None, loc='right', pad=None, size='5%', label=None, ticks=None, ticklabels=None):
+	"""
+	Draw colorbar next to the given axes.
+
+	Returns:
+		:class:`matplotlib.colorbar.Colorbar`: Colorbar handle.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+
+	if ax is None:
+		ax = plt.gca()
+	fig = ax.figure
+
+	# Create new colorbar axes:
+	divider = make_axes_locatable(ax)
+	if loc == 'top':
+		pad = 0.05 if pad is None else pad
+		cax = divider.append_axes('top', size=size, pad=pad)
+		orientation = 'horizontal'
+	elif loc == 'bottom':
+		pad = 0.35 if pad is None else pad
+		cax = divider.append_axes('bottom', size=size, pad=pad)
+		orientation = 'horizontal'
+	elif loc == 'left':
+		pad = 0.35 if pad is None else pad
+		cax = divider.append_axes('left', size=size, pad=pad)
+		orientation = 'vertical'
+	else:
+		pad = 0.05 if pad is None else pad
+		cax = divider.append_axes('right', size=size, pad=pad)
+		orientation = 'vertical'
+
+	cb = fig.colorbar(im, cax=cax, orientation=orientation)
+
+	if loc == 'top':
+		cax.xaxis.set_ticks_position('top')
+		cax.xaxis.set_label_position('top')
+	elif loc == 'left':
+		cax.yaxis.set_ticks_position('left')
+		cax.yaxis.set_label_position('left')
+
+	if label is not None:
+		cb.set_label(label)
+	if ticks is not None:
+		cb.set_ticks(ticks)
+	if ticklabels is not None:
+		cb.set_ticklabels(ticklabels)
+
+	#cax.yaxis.set_major_locator(matplotlib.ticker.AutoLocator())
+	#cax.yaxis.set_minor_locator(matplotlib.ticker.AutoLocator())
+	cax.tick_params(which='both', direction='out', pad=5)
+
+	cb.set_alpha(1)
+	cb.draw_all()
+
+	return cb
+
+#--------------------------------------------------------------------------------------------------
+def plot_outline(img, ax=None, threshold=0.5, **kwargs):
+	"""
+	Plot outline of pixel mask.
+
+	Parameters:
+		img (ndarray):
+		ax (:class:`matplotlib.pyplot.Axes`): Axes to plot outline into.
+		threshold (float): If ``img`` is not a boolean array, this is used for defining
+			the pixels which should be outlined. Ignored if ``img`` is boolean.
+		**kwargs: Additional keywords are passed to :func:`matplotlib.pyplot.plot`.
+
+	Returns:
+		narray or :class:`matplotlib.pyplot.Axes`:
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+
+	# Special treatment for boolean arrays:
+	if isinstance(img, np.ndarray) and img.dtype == 'bool':
+		mapimg = img
+	else:
+		mapimg = (img > threshold)
+
+	ver_seg = np.where(mapimg[:,1:] != mapimg[:,:-1])
+	hor_seg = np.where(mapimg[1:,:] != mapimg[:-1,:])
+
+	lines = []
+	for p in zip(*hor_seg):
+		lines.append((p[1], p[0]+1))
+		lines.append((p[1]+1, p[0]+1))
+		lines.append((np.nan, np.nan))
+
+	# and the same for vertical segments
+	for p in zip(*ver_seg):
+		lines.append((p[1]+1, p[0]))
+		lines.append((p[1]+1, p[0]+1))
+		lines.append((np.nan, np.nan))
+
+	segments = np.array(lines, dtype='float64')
+
+	x0 = -0.5
+	x1 = img.shape[1] + x0
+	y0 = -0.5
+	y1 = img.shape[0] + y0
+
+	# now we need to know something about the image which is shown
+	#   at this point let's assume it has extents (x0, y0)..(x1,y1) on the axis
+	#   drawn with origin='lower'
+	# with this information we can rescale our points
+	segments[:,0] = x0 + (x1-x0) * segments[:,0] / mapimg.shape[1]
+	segments[:,1] = y0 + (y1-y0) * segments[:,1] / mapimg.shape[0]
+
+	if ax is None:
+		return segments
+
+	return ax.plot(segments[:,0], segments[:,1], **kwargs)
+
+#--------------------------------------------------------------------------------------------------
+def save_figure(path, fig=None, fmt='png', **kwargs):
 	"""
 	Write current figure to file. Creates directory to place it in if needed.
 
+	Keyword arguments to be passed to `matplotlib.pyplot.savefig`.
+
 	Parameters:
-		path (string): Path where to save figure. If no file extension is provided, the extension
+		path (str): Path where to save figure. If no file extension is provided, the extension
 			of the format is automatically appended.
-		format (string): Figure file type. Default is ``'png'``.
-		kwargs (dict, optional): Keyword arguments to be passed to `matplotlib.pyplot.savefig`.
+		fig (:class:`matplotlib.pyplot.Figure`): Figure to save. Default is to save current figure.
+		fmt (str): Figure file type. Default is ``'png'``.
 	"""
 
 	logger = logging.getLogger(__name__)
 	logger.debug("Saving figure '%s' to '%s'.", os.path.basename(path), os.path.dirname(path))
 
-	if not path.endswith('.' + format):
-		path += '.' + format
+	if not path.endswith('.' + fmt):
+		path += '.' + fmt
 
 	os.makedirs(os.path.dirname(path), exist_ok=True)
 
 	# Write current figure to file if it doesn't exist:
 	if fig is None:
 		fig = plt.gcf()
-	fig.savefig(path, format=format, bbox_inches='tight', **kwargs)
+	fig.savefig(path, format=fmt, bbox_inches='tight', **kwargs)
