@@ -59,7 +59,7 @@ def test_search_database(PRIVATE_TODO_FILE):
 #--------------------------------------------------------------------------------------------------
 def test_search_database_changes(PRIVATE_TODO_FILE):
 	"""
-	Test wheter changing corr_status will change what is returned by search_database
+	Test wheter changing corr_status will change what is returned by search_database.
 	"""
 
 	with BaseCorrector(PRIVATE_TODO_FILE) as bc:
@@ -76,20 +76,26 @@ def test_search_database_changes(PRIVATE_TODO_FILE):
 
 	assert len(rows1) == len(rows2)
 
-	# For the test-data the "method_used" column should appear after
-	# the TaskManager has been run:
-	assert 'method_used' not in rows1[0]
-	assert rows2[0]['method_used'] == 'aperture'
-
 	# Only the corr_status column was allowed to change!
 	assert rows1[0]['corr_status'] is None
 	assert rows2[0]['corr_status'] == STATUS.STARTED.value
 	for k in range(len(rows1)):
 		r1 = rows1[k]
-		r1.pop('corr_status')
 		r2 = rows2[k]
+		r1.pop('corr_status')
 		r2.pop('corr_status')
+
+		# For the test-data the "method_used" column should appear after
+		# the TaskManager has been run:
+		assert 'method_used' not in r1
+		assert r2['method_used'] == 'aperture'
 		r2.pop('method_used')
+
+		# For the test-data the cadence is added by TaskManager when initializing it:
+		assert 'cadence' not in r1
+		assert r2['cadence'] in (120, 1800)
+		r2.pop('cadence')
+
 		assert r1 == r2
 
 #--------------------------------------------------------------------------------------------------

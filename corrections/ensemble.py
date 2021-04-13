@@ -50,7 +50,7 @@ class EnsembleCorrector(BaseCorrector):
 		Parameters:
 			lc (:class:`lightkurve.TessLightCurve`): Lightcurve object for target
 				obtained from :func:`load_lightcurve`.
-			n_neighbors (integer): Number of targets to return.
+			n_neighbors (int): Number of targets to return.
 
 		Returns:
 			list: List of `priority` identifiers of the `n_neighbors` nearest stars.
@@ -63,8 +63,8 @@ class EnsembleCorrector(BaseCorrector):
 		sector = lc.sector
 		camera = lc.camera
 		ccd = lc.ccd
-		ds = 'ffi' if lc.meta["task"]["datasource"] == 'ffi' else 'tpf'
-		key = (sector, ds, camera, ccd)
+		cadence = lc.meta['task']['cadence']
+		key = (sector, cadence, camera, ccd)
 
 		# Check if the NearestNeighbors object already exists for this camera and CCD.
 		# If not create it, and store it for later use.
@@ -74,15 +74,12 @@ class EnsembleCorrector(BaseCorrector):
 			search_params = [
 				'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
 				"method_used='aperture'", # Only including aperature photometry targets
-				"camera={:d}".format(camera),
-				"ccd={:d}".format(ccd),
-				"sector={:d}".format(sector),
+				f"camera={camera:d}",
+				f"ccd={ccd:d}",
+				f"sector={sector:d}",
+				f"cadence={cadence:d}",
 				"mean_flux>0"
 			]
-			if ds == 'ffi':
-				search_params.append("datasource = 'ffi'")
-			else:
-				search_params.append("datasource != 'ffi'")
 			db_raw = self.search_database(select=select_params, search=search_params)
 			priority = np.asarray([row['priority'] for row in db_raw], dtype='int64')
 			pixel_coords = np.array([[row['pos_row'], row['pos_column']] for row in db_raw])
@@ -230,7 +227,7 @@ class EnsembleCorrector(BaseCorrector):
 		"""
 
 		logger = logging.getLogger(__name__)
-		logger.info("Data Source: %s", lc.meta['task']['datasource'])
+		logger.info("DataSource=%s, Cadence=%d", lc.meta['task']['datasource'], lc.meta['task']['cadence'])
 
 		# Settings:
 		drange_lim = 1.0 # Limit on differenced range - not in log10!

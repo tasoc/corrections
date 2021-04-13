@@ -179,13 +179,16 @@ class BaseCorrector(object):
 	#----------------------------------------------------------------------------------------------
 	def _close_basecorrector(self):
 		"""Close BaseCorrection object."""
-		if hasattr(self, 'cursor') and self.cursor:
+		if hasattr(self, 'cursor') and hasattr(self, 'conn') and self.cursor is not None:
 			try:
+				self.conn.rollback()
 				self.cursor.close()
+				self.cursor = None
 			except sqlite3.ProgrammingError:
 				pass
-		if hasattr(self, 'conn') and self.conn:
+		if hasattr(self, 'conn') and self.conn is not None:
 			self.conn.close()
+			self.conn = None
 		if hasattr(self, 'todo_file_readonly') and os.path.isfile(self.todo_file_readonly):
 			os.remove(self.todo_file_readonly)
 

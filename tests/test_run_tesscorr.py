@@ -18,10 +18,16 @@ def test_run_tesscorr_invalid_method():
 	assert "error: argument -m/--method: invalid choice: 'invalid'" in err
 
 #--------------------------------------------------------------------------------------------------
-def test_run_tesscorr_invalid_datasource():
-	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --datasource=invalid")
+def test_run_tesscorr_invalid_sector():
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --sector=invalid")
 	assert exitcode == 2
-	assert "error: argument --datasource: invalid choice: 'invalid'" in err
+	assert "error: argument --sector: invalid int value: 'invalid'" in err
+
+#--------------------------------------------------------------------------------------------------
+def test_run_tesscorr_invalid_cadence():
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --cadence=15")
+	assert exitcode == 2
+	assert "error: argument --cadence: invalid choice: 15 (choose from 1800, 600, 120, 20)" in err
 
 #--------------------------------------------------------------------------------------------------
 def test_run_tesscorr_invalid_camera():
@@ -36,16 +42,16 @@ def test_run_tesscorr_invalid_ccd():
 	assert 'error: argument --ccd: invalid choice: 14 (choose from 1, 2, 3, 4)' in err
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize("method,starid,datasource,var_goal,rms_goal,ptp_goal", STAR_LIST)
-def test_run_tesscorr(SHARED_INPUT_DIR, method, starid, datasource, var_goal,rms_goal, ptp_goal):
+@pytest.mark.parametrize("method,starid,cadence,var_goal,rms_goal,ptp_goal", STAR_LIST)
+def test_run_tesscorr(SHARED_INPUT_DIR, method, starid, cadence, var_goal,rms_goal, ptp_goal):
 	with tempfile.TemporaryDirectory() as tmpdir:
 		params = [
-			'-o',
-			'-d',
-			'-p',
-			'--starid={starid:d}'.format(starid=starid),
-			'--method={method:s}'.format(method=method),
-			'--datasource={datasource:s}'.format(datasource=datasource),
+			'--overwrite',
+			'--debug',
+			'--plot',
+			f'--starid={starid:d}',
+			f'--method={method:s}',
+			f'--cadence={cadence:d}',
 			SHARED_INPUT_DIR,
 			tmpdir
 		]

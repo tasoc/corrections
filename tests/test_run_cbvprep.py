@@ -14,10 +14,16 @@ INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available_v2.txt'))
 
 #--------------------------------------------------------------------------------------------------
-def test_run_cbvprep_invalid_datasource():
-	out, err, exitcode = capture_run_cli('run_cbvprep.py', "--datasource=invalid")
+def test_run_cbvprep_invalid_sector():
+	out, err, exitcode = capture_run_cli('run_cbvprep.py', "--sector=invalid")
 	assert exitcode == 2
-	assert "error: argument --datasource: invalid choice: 'invalid'" in err
+	assert "error: argument --sector: invalid int value: 'invalid'" in err
+
+#--------------------------------------------------------------------------------------------------
+def test_run_cbvprep_invalid_cadence():
+	out, err, exitcode = capture_run_cli('run_cbvprep.py', "--cadence=invalid")
+	assert exitcode == 2
+	assert "error: argument --cadence: invalid int value: 'invalid'" in err
 
 #--------------------------------------------------------------------------------------------------
 def test_run_cbvprep_invalid_camera():
@@ -33,11 +39,12 @@ def test_run_cbvprep_invalid_ccd():
 
 #--------------------------------------------------------------------------------------------------
 #@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a full sector of data.")
-#def disable_test_run_cbvprep():
+#def test_run_cbvprep():
 #
 #	params = [
 #		'--debug',
 #		'--version=17',
+#		'--area=114',
 #		INPUT_DIR
 #	]
 #	out, err, exitcode = capture_run_cli('run_cbvprep.py', params)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Pytest fixture to create temp copy of input data, shared across all tests.
@@ -84,3 +84,16 @@ def PRIVATE_TODO_FILE():
 		tmp = os.path.join(my_tmpdir, 'todo.sqlite')
 		shutil.copy(TODO_FILE, tmp)
 		yield tmp
+
+#--------------------------------------------------------------------------------------------------
+@pytest.fixture(scope='function')
+def PRIVATE_INPUT_DIR_NOLC():
+	"""
+	Pytest fixture to create temp copy of input todo-file, private to the individual test.
+	"""
+	INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+	TODO_FILE = os.path.join(os.path.dirname(__file__), 'input', 'todo.sqlite')
+	with tempfile.TemporaryDirectory(prefix='pytest-private-todo-') as tmpdir:
+		shutil.copy2(TODO_FILE, tmpdir)
+		shutil.copytree(os.path.join(INPUT_DIR, 'cbv-prepare'), os.path.join(tmpdir, 'cbv-prepare'))
+		yield tmpdir

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Scheduler using MPI for running the TESS lightcurve corrections
@@ -40,9 +40,11 @@ def main():
 	parser.add_argument('-m', '--method', help='Corrector method to use.', default='cbv', choices=('ensemble', 'cbv', 'kasoc_filter'))
 	parser.add_argument('-o', '--overwrite', help='Overwrite existing results.', action='store_true')
 	parser.add_argument('-p', '--plot', help='Save plots when running.', action='store_true')
-	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
-	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
-	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default=None, help='Data source or cadence. Default is to run all.')
+	group = parser.add_argument_group('Filter which targets to process')
+	group.add_argument('--sector', type=int, default=None, help='TESS Sector.')
+	group.add_argument('--cadence', type=int, choices=(1800,600,120,20), default=None, help='Cadence. Default is to run all.')
+	group.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
+	group.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
@@ -78,13 +80,14 @@ def main():
 		try:
 			# Constraints on which targets to process:
 			constraints = {
+				'sector': args.sector,
+				'cadence': args.cadence,
 				'camera': args.camera,
-				'ccd': args.ccd,
-				'datasource': args.datasource
+				'ccd': args.ccd
 			}
 
 			# File path to write summary to:
-			summary_file = os.path.join(output_folder, 'summary_corr_{0}.json'.format(args.method))
+			summary_file = os.path.join(output_folder, f'summary_corr_{args.method:s}.json')
 
 			# Invoke the TaskManager to ensure that the input TODO-file has the correct columns
 			# and indicies, which is automatically created by the TaskManager init function.
@@ -143,7 +146,7 @@ def main():
 					else:
 						# This should never happen, but just to
 						# make sure we don't run into an infinite loop:
-						raise Exception("Master received an unknown tag: '{0}'".format(tag))
+						raise RuntimeError(f"Master received an unknown tag: '{tag}'")
 
 				tm.logger.info("Master finishing")
 
@@ -220,7 +223,7 @@ def main():
 					else:
 						# This should never happen, but just to
 						# make sure we don't run into an infinite loop:
-						raise Exception("Worker received an unknown tag: '{0}'".format(tag))
+						raise RuntimeError(f"Worker received an unknown tag: '{tag}'")
 
 		except: # noqa: E722, pragma: no cover
 			logger.exception("Something failed in worker")

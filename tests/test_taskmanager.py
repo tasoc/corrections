@@ -36,6 +36,7 @@ def test_taskmanager(PRIVATE_TODO_FILE):
 		assert task1['ccd'] == 4
 		assert task1['datasource'] == 'ffi'
 		assert task1['sector'] == 1
+		assert task1['cadence'] == 1800
 		assert task1['cbv_area'] == 143
 
 		# Start task with priority=17:
@@ -51,6 +52,7 @@ def test_taskmanager(PRIVATE_TODO_FILE):
 		assert task2['ccd'] == 4
 		assert task2['datasource'] == 'tpf'
 		assert task2['sector'] == 1
+		assert task2['cadence'] == 120
 		assert task2['cbv_area'] == 143
 
 		# Check that the status did actually change in the todolist:
@@ -69,7 +71,7 @@ def test_taskmanager_notexist(INPUT_DIR):
 #--------------------------------------------------------------------------------------------------
 def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 
-	constraints = {'datasource': 'tpf', 'priority': 17}
+	constraints = {'cadence': 120, 'priority': 17}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
 		numtasks = tm.get_number_tasks(**constraints)
@@ -77,7 +79,7 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task is None, "Task1 should be None"
 		assert numtasks == 0, "Task1 search should give no results"
 
-	constraints = {'datasource': 'tpf', 'priority': 17, 'camera': None}
+	constraints = {'cadence': 120, 'priority': 17, 'camera': None}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task2 = tm.get_task(**constraints)
 		numtasks2 = tm.get_number_tasks(**constraints)
@@ -85,7 +87,7 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task2 == task, "Tasks should be identical"
 		assert numtasks2 == 0, "Task2 search should give no results"
 
-	constraints = {'datasource': 'ffi', 'priority': 17}
+	constraints = {'cadence': 'ffi', 'priority': 17}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
 		numtasks = tm.get_number_tasks(**constraints)
@@ -96,7 +98,7 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task['ccd'] == 4
 		assert numtasks == 1, "Priority search should give one results"
 
-	constraints = {'datasource': 'ffi', 'priority': 17, 'camera': 1, 'ccd': 4}
+	constraints = {'cadence': 1800, 'priority': 17, 'camera': 1, 'ccd': 4}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task3 = tm.get_task(**constraints)
 		numtasks3 = tm.get_number_tasks(**constraints)

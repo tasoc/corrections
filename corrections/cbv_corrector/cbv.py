@@ -49,27 +49,35 @@ class CBV(object):
 	Cotrending Basis Vector object.
 
 	Attributes:
-		cbv (numpy.array):
-		cbv_s (numpy.array):
-		priors
-		inifit (numpy.array):
+		sector (int): TESS Sector.
+		cadence (int): TESS observing cadence in seconds.
+		camera (int): TESS Camera (1-4).
+		ccd (int): TESS CCD (1-4).
+		cbv_area (int):
+		data_rel (int): TESS Data release number.
+		version (int): TASOC version/data release number.
+		filepath (str): Path to file where CVB is stored.
+
+		time (:class:`numpy.ndarray`):
+		cadenceno (:class:`numpy.ndarray`):
+		cbv (:class:`numpy.ndarray`):
+		cbv_s (:class:`numpy.ndarray`):
+		inifit (:class:`numpy.ndarray`):
+		priors:
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
 	#----------------------------------------------------------------------------------------------
-	def __init__(self, data_folder, cbv_area, datasource):
+	def __init__(self, filepath):
 		logger = logging.getLogger(__name__)
 
-		if datasource not in ('ffi', 'tpf'):
-			raise ValueError("Invalid datasource: '%s'" % datasource)
+		if not os.path.isfile(filepath):
+			raise FileNotFoundError(f"Could not find CBV file: {filepath}")
 
-		self.data_folder = data_folder
-
-		filepath = os.path.join(data_folder, 'cbv-%s-%d.hdf5' % (datasource, cbv_area))
-		if not os.path.exists(filepath):
-			raise FileNotFoundError("Could not find CBV file: %s" % filepath)
+		self.filepath = os.path.abspath(filepath)
+		data_folder = os.path.abspath(os.path.dirname(filepath))
 
 		self.inifit = None
 		with h5py.File(filepath, 'r') as hdf:
@@ -80,6 +88,7 @@ class CBV(object):
 			self.ccd = int(hdf.attrs['ccd'])
 			self.cbv_area = int(hdf.attrs['cbv_area'])
 			self.data_rel = int(hdf.attrs.get('data_rel', -1))
+			self.ncomponents = int(hdf.attrs['Ncbvs'])
 			self.threshold_correlation = float(hdf.attrs['threshold_correlation'])
 			self.threshold_variability = float(hdf.attrs['threshold_variability'])
 			self.threshold_snrtest = float(hdf.attrs['threshold_snrtest'])
@@ -88,7 +97,6 @@ class CBV(object):
 
 			self.time = np.asarray(hdf['time'])
 			self.cadenceno = np.asarray(hdf['cadenceno'])
-
 			self.cbv = np.asarray(hdf['cbv-single-scale'])
 			self.cbv_s = np.asarray(hdf['cbv-spike'])
 
@@ -108,8 +116,8 @@ class CBV(object):
 		self.remove_cols(indx_lowsnr)
 
 		self.priors = None
-		priorpath = os.path.join(data_folder, 'D_%s-area%d.pkl' % (self.datasource, self.cbv_area))
-		if os.path.exists(priorpath):
+		priorpath = os.path.join(data_folder, f'cbv-prior-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.pickle')
+		if os.path.isfile(priorpath):
 			self.priors = loadPickle(priorpath)
 		else:
 			logger.info('Path to prior distance file does not exist: %s', priorpath)
@@ -631,7 +639,7 @@ class CBV(object):
 		return flux_filter, res, diagnostics
 
 	#----------------------------------------------------------------------------------------------
-	def save_to_fits(self, output_folder, version=5):
+	def save_to_fits(self, output_folder, version=6):
 		"""
 		Save CBVs to FITS file.
 
@@ -654,7 +662,7 @@ class CBV(object):
 			raise FileNotFoundError("Invalid output directory")
 
 		# Store the date that the file is created
-		now = datetime.datetime.now()
+		now = datetime.datetime.now(tz=datetime.timezone.utc)
 
 		# Timestamps of start and end of timeseries:
 		tdel = self.cadence/86400
@@ -755,12 +763,7 @@ class CBV(object):
 		table_hdu2.header.comments['TTYPE2'] = 'column title: unique cadence number'
 
 		# Name of the
-		fname = 'tess-s{sector:04d}-c{cadence:04d}-a{cbvarea:d}-v{version:d}-tasoc_cbv.fits.gz'.format(
-			sector=self.sector,
-			cadence=self.cadence,
-			cbvarea=self.cbv_area,
-			version=version
-		)
+		fname = f'tess-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}-v{version:d}-tasoc_cbv.fits.gz'
 		filepath = os.path.join(output_folder, fname)
 
 		# store as HDU list and write to fits file
