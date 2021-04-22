@@ -402,17 +402,26 @@ class CBVCreator(BaseCorrector):
 
 		logger.info("Gap-filling lightcurves...")
 		cadenceno = np.arange(mat.shape[1])
+		count_interp = 0
 		for k in tqdm(range(Nstars), total=Nstars, **tqdm_settings):
 			# Normalize the lightcurves by their variances:
 			mat[k, :] /= varis[k]
 
 			# Fill out missing values by interpolating the lightcurve:
-			indx = np.isfinite(mat[k, :])
-			mat[k, ~indx] = pchip_interpolate(cadenceno[indx], mat[k, indx], cadenceno[~indx])
+			ibad = ~np.isfinite(mat[k, :])
+			Ninterp = int(np.sum(ibad))
+			count_interp += Ninterp
+			if Ninterp > 0:
+				mat[k, ibad] = pchip_interpolate(cadenceno[~ibad], mat[k, ~ibad], cadenceno[ibad])
+
+		# Print the average number of interpolated points:
+		avg_interp = count_interp/Nstars
+		logger.info("Average interpolated per star: %f points, %.3f%%", avg_interp, 100*avg_interp/Ntimes)
 
 		# Save something for debugging:
 		self.hdf.attrs['Ntimes'] = Ntimes
 		self.hdf.attrs['Nstars'] = Nstars
+		self.hdf.attrs['average_interpolated_points'] = avg_interp
 		if logger.isEnabledFor(logging.DEBUG): # pragma: no cover
 			self.hdf.create_dataset('matrix', data=mat)
 			self.hdf.create_dataset('nancols', data=indx_nancol)
