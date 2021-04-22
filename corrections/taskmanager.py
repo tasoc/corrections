@@ -113,6 +113,7 @@ class TaskManager(object):
 		existing_columns = [r['name'] for r in self.cursor.fetchall()]
 		if 'cadence' not in existing_columns:
 			self.logger.debug("Adding CADENCE column to todolist")
+			self.cursor.execute("BEGIN TRANSACTION;")
 			self.cursor.execute("ALTER TABLE todolist ADD COLUMN cadence INTEGER DEFAULT NULL;")
 			self.cursor.execute("UPDATE todolist SET cadence=1800 WHERE datasource='ffi' AND sector < 27;")
 			self.cursor.execute("UPDATE todolist SET cadence=600 WHERE datasource='ffi' AND sector >= 27 AND sector <= 55;")
@@ -137,6 +138,7 @@ class TaskManager(object):
 			# new column after creation, by finding ketwords in other columns.
 			# This can be a pretty slow process, but it only has to be done once.
 			self.logger.debug("Adding method_used column to diagnostics")
+			self.cursor.execute("BEGIN TRANSACTION;")
 			self.cursor.execute("ALTER TABLE diagnostics ADD COLUMN method_used TEXT NOT NULL DEFAULT 'aperture';")
 			for m in ('aperture', 'halo', 'psf', 'linpsf'):
 				self.cursor.execute("UPDATE diagnostics SET method_used=? WHERE priority IN (SELECT priority FROM todolist WHERE method=?);", [m, m])
@@ -322,7 +324,7 @@ class TaskManager(object):
 
 	#----------------------------------------------------------------------------------------------
 	def get_number_tasks(self, priority=None, starid=None, sector=None, cadence=None,
-		camera=None, ccd=None):
+		camera=None, ccd=None, cbv_area=None):
 		"""
 		Get number of tasks due to be processed.
 
@@ -346,14 +348,15 @@ class TaskManager(object):
 			sector=sector,
 			cadence=cadence,
 			camera=camera,
-			ccd=ccd)
+			ccd=ccd,
+			cbv_area=cbv_area)
 
 		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL" + constraints + ";")
 		return int(self.cursor.fetchone()['num'])
 
 	#----------------------------------------------------------------------------------------------
 	def get_task(self, priority=None, starid=None, sector=None, cadence=None,
-		camera=None, ccd=None, chunk=1):
+		camera=None, ccd=None, cbv_area=None, chunk=1):
 		"""
 		Get next task to be processed.
 
@@ -379,7 +382,8 @@ class TaskManager(object):
 			sector=sector,
 			cadence=cadence,
 			camera=camera,
-			ccd=ccd)
+			ccd=ccd,
+			cbv_area=cbv_area)
 
 		self.cursor.execute(f"SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL {constraints:s} ORDER BY todolist.priority LIMIT {chunk:d};")
 		tasks = self.cursor.fetchall()
