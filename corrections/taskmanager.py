@@ -240,6 +240,8 @@ class TaskManager(object):
 			self.summary[s.name] = 0
 		# If we are going to output summary, make sure to fill it up:
 		if self.summary_file:
+			# Ensure it is an absolute file path:
+			self.summary_file = os.path.abspath(self.summary_file)
 			# Extract information from database:
 			self.cursor.execute("SELECT corr_status,COUNT(*) AS cnt FROM todolist GROUP BY corr_status;")
 			for row in self.cursor.fetchall():
@@ -247,8 +249,7 @@ class TaskManager(object):
 				if row['corr_status'] is not None:
 					self.summary[STATUS(row['corr_status']).name] = row['cnt']
 			# Make sure the containing directory exists:
-			if not os.path.isdir(os.path.dirname(self.summary_file)):
-				os.makedirs(os.path.dirname(self.summary_file))
+			os.makedirs(os.path.dirname(self.summary_file), exist_ok=True)
 			# Write summary to file:
 			self.write_summary()
 
