@@ -15,6 +15,7 @@ import os
 import argparse
 import logging
 import corrections
+from corrections.utilities import CadenceType
 
 #--------------------------------------------------------------------------------------------------
 def main():
@@ -32,7 +33,7 @@ def main():
 	group.add_argument('--priority', type=int, default=None, help='Priority of target.')
 	group.add_argument('--starid', type=int, default=None, help='TIC identifier of target.')
 	group.add_argument('--sector', type=int, default=None, help='TESS Sector.')
-	group.add_argument('--cadence', type=int, choices=(1800,600,120,20), default=None, help='Cadence. Default is to run all.')
+	group.add_argument('--cadence', type=CadenceType, choices=('ffi',1800,600,120,20), default=None, help='Cadence. Default is to run all.')
 	group.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
 	group.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)

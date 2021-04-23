@@ -14,6 +14,7 @@ from functools import partial
 import multiprocessing
 import corrections
 from corrections.taskmanager import _build_constraints
+from corrections.utilities import CadenceType
 
 #--------------------------------------------------------------------------------------------------
 def main():
@@ -23,10 +24,11 @@ def main():
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots.', action='store_true')
 	parser.add_argument('--threads', type=int, default=None, help="Number of parallel threads to use. If not specified, all available CPUs will be used.")
+	parser.add_argument('--output', type=str, default=None, help="Directory where output CBVs will be saved.")
 
 	group = parser.add_argument_group('Specifying CBVs to calculate')
 	group.add_argument('--sector', type=int, default=None, help='Sector to create CBVs for.')
-	group.add_argument('--cadence', type=int, default='ffi', help='Cadence for the creation of CBVs.')
+	group.add_argument('--cadence', type=CadenceType, default='ffi', choices=('ffi', 1800, 600, 120, 20), help='Cadence for the creation of CBVs.')
 	group.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
 	group.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
 	group.add_argument('-a', '--area', type=int, action='append', default=None, help='Single CBV_area for which to prepare photometry. Default is to run all areas.')
@@ -106,6 +108,7 @@ def main():
 	# Create wrapper function which only takes a single cbv_area as input:
 	create_cbv_wrapper = partial(corrections.create_cbv,
 		input_folder=input_folder,
+		output_folder=args.output,
 		cadence=args.cadence,
 		version=args.version,
 		threshold_correlation=args.corr,

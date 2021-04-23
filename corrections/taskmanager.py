@@ -12,6 +12,7 @@ import os.path
 import sqlite3
 import logging
 import json
+from numpy import atleast_1d
 from . import STATUS
 
 #--------------------------------------------------------------------------------------------------
@@ -20,28 +21,21 @@ def _build_constraints(priority=None, starid=None, sector=None, cadence=None,
 
 	constraints = []
 	if priority is not None:
-		constraints.append(f'todolist.priority={priority:d}')
+		constraints.append('todolist.priority IN (' + ','.join([str(int(c)) for c in atleast_1d(priority)]) + ')')
 	if starid is not None:
-		constraints.append(f'todolist.starid={starid:d}')
+		constraints.append('todolist.starid IN (' + ','.join([str(int(c)) for c in atleast_1d(starid)]) + ')')
 	if sector is not None:
-		constraints.append(f'todolist.sector={sector:d}')
+		constraints.append('todolist.sector IN (' + ','.join([str(int(c)) for c in atleast_1d(sector)]) + ')')
 	if cadence == 'ffi':
 		constraints.append("todolist.datasource='ffi'")
 	elif cadence is not None:
 		constraints.append(f'todolist.cadence={cadence:d}')
 	if camera is not None:
-		constraints.append(f'todolist.camera={camera:d}')
+		constraints.append('todolist.camera IN (' + ','.join([str(int(c)) for c in atleast_1d(camera)]) + ')')
 	if ccd is not None:
-		constraints.append(f'todolist.ccd={ccd:d}')
+		constraints.append('todolist.ccd IN (' + ','.join([str(int(c)) for c in atleast_1d(ccd)]) + ')')
 	if cbv_area is not None:
-		constraints.append(f'todolist.cbv_area={cbv_area:d}')
-
-	#if args.camera:
-	#	constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
-	#if args.ccd:
-	#	constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
-	#if args.area:
-	#	constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
+		constraints.append('todolist.cbv_area IN (' + ','.join([str(int(c)) for c in atleast_1d(cbv_area)]) + ')')
 
 	# If asked for it, return the list if constraints otherwise return string
 	# which fits into the other queries done by the TaskManager:

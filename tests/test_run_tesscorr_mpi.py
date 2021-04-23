@@ -36,7 +36,7 @@ def test_run_tesscorr_mpi_invalid_sector():
 def test_run_tesscorr_mpi_invalid_cadence():
 	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--cadence=15")
 	assert exitcode == 2
-	assert 'error: argument --cadence: invalid choice: 15 (choose from 1800, 600, 120, 20)' in err
+	assert "error: argument --cadence: invalid choice: 15 (choose from 'ffi', 1800, 600, 120, 20)" in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi

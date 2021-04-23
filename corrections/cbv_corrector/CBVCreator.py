@@ -38,18 +38,18 @@ from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_ma
 __version__ = get_version(pep440=False)
 
 #--------------------------------------------------------------------------------------------------
-def create_cbv(sector, cbv_area, input_folder=None, cadence='ffi', version=6, ncbv=16,
-	threshold_correlation=0.5, threshold_snrtest=5.0, threshold_entropy=-0.5, ip=False):
+def create_cbv(sector_and_area, input_folder=None, cadence='ffi', version=6, ncbv=16,
+	threshold_correlation=0.5, threshold_snrtest=5.0, threshold_entropy=-0.5, ip=False,
+	output_folder=None):
 	"""
-	Create CBV for given area.
+	Create CBV for given sector and area.
 
 	It is required that the :class:`corrections.TaskManager` has been initialized on the
 	``input_dir`` at least ones before the function is called, since this will
 	ensure that the proper database columns and indicies have been created.
 
 	Parameters:
-		sector (int): TESS Sector.
-		cbv_area (int):
+		sector_and_area (tuple): 2-tuple containing TESS Sector and CBV area to process.
 		input_folder (str):
 		cadence (str, optional): Default='ffi'.
 		version (int): Version to add to output files.
@@ -58,6 +58,7 @@ def create_cbv(sector, cbv_area, input_folder=None, cadence='ffi', version=6, nc
 		threshold_snrtest (float, optional):
 		threshold_entropy (float, optional):
 		ip (bool, optional): Default=False.
+		output_folder (str, optional): Directory where output (CBVs and plots) will be saved.
 
 	Returns:
 		:class:`CBV`: CBV object.
@@ -66,11 +67,14 @@ def create_cbv(sector, cbv_area, input_folder=None, cadence='ffi', version=6, nc
 	"""
 
 	logger = logging.getLogger(__name__)
+
+	# Unpack sector and area:
+	sector, cbv_area = sector_and_area
 	logger.info('Running CBV for SECTOR=%d, AREA=%d', sector, cbv_area)
 
 	with CBVCreator(input_folder, cadence=cadence, sector=sector, cbv_area=cbv_area,
 		threshold_correlation=threshold_correlation, threshold_snrtest=threshold_snrtest,
-		threshold_entropy=threshold_entropy, ncomponents=ncbv) as C:
+		threshold_entropy=threshold_entropy, ncomponents=ncbv, output_folder=output_folder) as C:
 
 		C.compute_cbvs()
 		C.spike_sep()
@@ -79,7 +83,7 @@ def create_cbv(sector, cbv_area, input_folder=None, cadence='ffi', version=6, nc
 
 		# Convert to CBV object and save to FITS:
 		cbv_ffi = CBV(C.hdf_filepath)
-		cbv_ffi.save_to_fits(C.data_folder, version=version)
+		cbv_ffi.save_to_fits(C.output_folder, version=version)
 
 		# Interpolate FFI CBVs to higher cadences:
 		if cadence == 'ffi':
@@ -87,13 +91,13 @@ def create_cbv(sector, cbv_area, input_folder=None, cadence='ffi', version=6, nc
 			# and save to FITS file as well:
 			newfile = C.interpolate_to_higher_cadence(120)
 			cbv_120s = CBV(newfile)
-			cbv_120s.save_to_fits(C.data_folder, version=version)
+			cbv_120s.save_to_fits(C.output_folder, version=version)
 
 			# For later sectors, also create 20s cadence CBVs:
 			if sector >= 27:
 				newfile = C.interpolate_to_higher_cadence(20)
 				cbv_20s = CBV(newfile)
-				cbv_20s.save_to_fits(C.data_folder, version=version)
+				cbv_20s.save_to_fits(C.output_folder, version=version)
 
 		# Return CBV object for the generated area:
 		return cbv_ffi
@@ -124,7 +128,7 @@ class CBVCreator(BaseCorrector):
 
 	def __init__(self, *args, cadence='ffi', sector=None, cbv_area=None, ncomponents=16,
 		threshold_correlation=0.5, threshold_snrtest=5.0, threshold_variability=1.3,
-		threshold_entropy=-0.5, **kwargs):
+		threshold_entropy=-0.5, output_folder=None, **kwargs):
 		"""
 		Initialize the CBV Creator.
 
@@ -137,6 +141,7 @@ class CBVCreator(BaseCorrector):
 			threshold_correlation (float, optional):
 			threshold_snrtest (float, optional):
 			threshold_entropy (float, optional):
+			output_folder (str, optional):
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -179,10 +184,21 @@ class CBVCreator(BaseCorrector):
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_entropy = threshold_entropy
 		self.random_state = 2187
+		if output_folder is None:
+			self.output_folder = self.data_folder
+		elif os.path.isdir(os.path.abspath(output_folder)):
+			self.output_folder = os.path.abspath(output_folder)
+		else:
+			self.close()
+			raise FileNotFoundError("The output directory does not exist.")
 
 		# Lookup FFI cadence:
-		self.cursor.execute("SELECT cadence FROM todolist WHERE sector=? AND datasource='ffi' LIMIT 1;", [sector])
-		ffi_cadence = self.cursor.fetchone()['cadence']
+		self.cursor.execute("SELECT DISTINCT cadence FROM todolist WHERE sector=? AND datasource='ffi';", [sector])
+		ffi_cadence = self.cursor.fetchall()
+		if len(ffi_cadence) != 1:
+			self.close()
+			raise ValueError(f"The CADENCE for FFIs from sector {sector:d} is ambigious in the todo-file.")
+		ffi_cadence = ffi_cadence[0]['cadence']
 		if cadence == 'ffi':
 			self.cadence = ffi_cadence
 		else:
@@ -192,7 +208,7 @@ class CBVCreator(BaseCorrector):
 		self.datasource = 'ffi' if self.cadence == ffi_cadence else 'tpf'
 
 		# Path to the HDF5 file which will contain all the information for a set of CBVs:
-		self.hdf_filepath = os.path.join(self.data_folder, f'cbv-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.hdf5')
+		self.hdf_filepath = os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.hdf5')
 
 		# If the file already extsts, determine if it was created using the same settings:
 		if os.path.exists(self.hdf_filepath):
@@ -250,7 +266,7 @@ class CBVCreator(BaseCorrector):
 			self.hdf.flush()
 
 		# Create directory for plots:
-		self.cbv_plot_folder = os.path.join(self.data_folder, 'plots')
+		self.cbv_plot_folder = os.path.join(self.output_folder, 'plots')
 		os.makedirs(self.cbv_plot_folder, exist_ok=True)
 
 	#----------------------------------------------------------------------------------------------
@@ -287,7 +303,7 @@ class CBVCreator(BaseCorrector):
 		"""
 
 		logger = logging.getLogger(__name__)
-		tqdm_settings = {'disable': not logger.isEnabledFor(logging.INFO)}
+		tqdm_settings = {'disable': None if logger.isEnabledFor(logging.INFO) else True}
 
 		logger.info('Running matrix clean')
 		if logger.isEnabledFor(logging.DEBUG) and 'matrix' in self.hdf: # pragma: no cover
@@ -712,6 +728,7 @@ class CBVCreator(BaseCorrector):
 			logger.info("Initial co-trending in SECTOR=%d, CADENCE=%d, AREA=%d already done.", self.sector, self.cadence, self.cbv_area)
 			return
 		logger.info("Initial co-trending in SECTOR=%d, CADENCE=%d, AREA=%d...", self.sector, self.cadence, self.cbv_area)
+		tqdm_settings = {'disable': None if logger.isEnabledFor(logging.INFO) else True}
 
 		# Create search parameters for the database:
 		search_params = [
@@ -728,7 +745,7 @@ class CBVCreator(BaseCorrector):
 			search=search_params)
 
 		# Load the cbv from file:
-		cbv = CBV(os.path.join(self.data_folder, f'cbv-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.hdf5'))
+		cbv = CBV(os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.hdf5'))
 
 		# Update maximum number of components
 		Ncbvs = cbv.cbv.shape[1]
@@ -741,7 +758,7 @@ class CBVCreator(BaseCorrector):
 		pos = np.full((len(stars), 3), np.NaN, dtype='float64')
 
 		# Loop through stars
-		for k, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
+		for k, star in tqdm(enumerate(stars), total=len(stars), **tqdm_settings):
 
 			lc = self.load_lightcurve(star)
 
@@ -855,7 +872,7 @@ class CBVCreator(BaseCorrector):
 		tree = BallTree(pos_mag0, metric=dist)
 
 		# Save the tree to a pickle file to be easily loaded by the CBV class:
-		savePickle(os.path.join(self.data_folder, f'cbv-prior-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.pickle'), tree)
+		savePickle(os.path.join(self.output_folder, f'cbv-prior-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.pickle'), tree)
 
 	#----------------------------------------------------------------------------------------------
 	def interpolate_to_higher_cadence(self, cadence=120):
@@ -881,7 +898,7 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		logger.info("Interpolating to higher cadence")
 
-		newfile = os.path.join(self.data_folder, f'cbv-s{self.sector:04d}-c{cadence:04d}-a{self.cbv_area:d}.hdf5')
+		newfile = os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{cadence:04d}-a{self.cbv_area:d}.hdf5')
 		if os.path.exists(newfile):
 			logger.warning("File already exists: %s", newfile)
 			return

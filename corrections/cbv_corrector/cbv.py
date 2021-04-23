@@ -735,7 +735,7 @@ class CBV(object):
 			col_titles[col_name] = 'column title: co-trending basis vector %d' % (n+1)
 
 		# append CBVs as hdu columns
-		table_hdu1 = fits.BinTableHDU.from_columns(cols, header=table_header, name='CBV.SINGLE-SCALE.%d' % self.cbv_area)
+		table_hdu1 = fits.BinTableHDU.from_columns(cols, header=table_header, name=f'CBV.SINGLE-SCALE.{self.cbv_area:d}')
 
 		# Fix table headers:
 		fix_fits_table_headers(table_hdu1, column_titles=col_titles)
@@ -754,7 +754,7 @@ class CBV(object):
 			cols.append(col)
 
 		# append CBVs as hdu columns
-		table_hdu2 = fits.BinTableHDU.from_columns(cols, header=table_header, name='CBV.SPIKE.%d' % self.cbv_area)
+		table_hdu2 = fits.BinTableHDU.from_columns(cols, header=table_header, name=f'CBV.SPIKE.{self.cbv_area:d}')
 
 		# Fix table headers:
 		fix_fits_table_headers(table_hdu2, column_titles=col_titles)

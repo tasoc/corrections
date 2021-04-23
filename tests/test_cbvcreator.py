@@ -9,19 +9,30 @@ Tests of CBVCreator.
 import pytest
 import os.path
 import conftest # noqa: F401
-from corrections import CBV, CBVCreator, create_cbv, TaskManager, get_version
+from corrections import CBVCreator, TaskManager
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available_v2.txt'))
 
 #--------------------------------------------------------------------------------------------------
-def test_import_nonexistent(INPUT_DIR):
+def test_import_input_nonexistent(INPUT_DIR):
 	"""
 	Tests that CBVCreator handles being called with non-existing input directory.
 	"""
-	with pytest.raises(FileNotFoundError):
+	with pytest.raises(FileNotFoundError) as e:
 		with CBVCreator(INPUT_DIR + '/does/not/exist/'):
 			pass
+	assert str(e.value) == "TODO file not found"
+
+#--------------------------------------------------------------------------------------------------
+def test_import_output_nonexistent(SHARED_INPUT_DIR):
+	"""
+	Tests that CBVCreator handles being called with non-existing output directory.
+	"""
+	with pytest.raises(FileNotFoundError) as e:
+		with CBVCreator(input_folder=SHARED_INPUT_DIR, output_folder=SHARED_INPUT_DIR + '/does/not/exist/'):
+			pass
+	assert str(e.value) == "The output directory does not exist."
 
 #--------------------------------------------------------------------------------------------------
 def test_invalid_input(PRIVATE_INPUT_DIR_NOLC):
@@ -99,49 +110,6 @@ def test_load_existing(PRIVATE_INPUT_DIR_NOLC):
 		assert C.threshold_correlation == 0.5
 		assert C.threshold_snrtest == 5.0
 		assert C.threshold_entropy == -0.5
-
-#--------------------------------------------------------------------------------------------------
-@pytest.mark.fulldata
-@pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a full sector of data.")
-def test_create_cbv(PRIVATE_INPUT_DIR):
-	"""
-	Test create_cbv.
-	"""
-	# Invoke the TaskManager to ensure that the input TODO-file has the correct columns
-	# and indicies, which is automatically created by the TaskManager init function.
-	with TaskManager(PRIVATE_INPUT_DIR, cleanup=False):
-		pass
-
-	# Run the creation of a single CBV on an area the doesn't already exist:
-	cbv = create_cbv(sector=1, cbv_area=114, input_folder=PRIVATE_INPUT_DIR, version=42)
-
-	# Check the returned object:
-	assert isinstance(cbv, CBV), "Not a CBV object"
-	assert cbv.cbv_area == 114
-	assert cbv.datasource == 'ffi'
-	assert cbv.cadence == 1800
-	assert cbv.sector == 1
-	assert cbv.camera == 1
-	assert cbv.ccd == 1
-	assert cbv.data_rel == 1
-	assert cbv.ncomponents == 16
-	assert cbv.threshold_variability == 1.3
-	assert cbv.threshold_correlation == 0.5
-	assert cbv.threshold_snrtest == 5.0
-	assert cbv.threshold_entropy == -0.5
-
-	# Check that the version has been set correctly:
-	assert cbv.version == get_version()
-
-	# The file should also exist:
-	assert os.path.isfile(cbv.filepath), "HDF5 file does not exist"
-
-	# Check arrays stored in CBV object:
-	N = len(cbv.time)
-	assert N > 0, "Time column is length 0"
-	assert len(cbv.cadenceno) == N
-	assert cbv.cbv.shape == (N, 16)
-	assert cbv.cbv_s.shape == (N, 16)
 
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
