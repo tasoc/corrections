@@ -30,7 +30,8 @@ def test_import_output_nonexistent(SHARED_INPUT_DIR):
 	Tests that CBVCreator handles being called with non-existing output directory.
 	"""
 	with pytest.raises(FileNotFoundError) as e:
-		with CBVCreator(input_folder=SHARED_INPUT_DIR, output_folder=SHARED_INPUT_DIR + '/does/not/exist/'):
+		with CBVCreator(input_folder=SHARED_INPUT_DIR, sector=1, cbv_area=114,
+			output_folder=SHARED_INPUT_DIR + '/does/not/exist/'):
 			pass
 	assert str(e.value) == "The output directory does not exist."
 
