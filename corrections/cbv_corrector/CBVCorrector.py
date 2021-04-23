@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Correct lightcurves using Cotrending Basis Vectors.
@@ -69,21 +69,18 @@ class CBVCorrector(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		logger.info('Co-trending star with TIC ID: %d', lc.targetid)
 
+		sector = lc.meta['task']['sector']
+		cadence = lc.meta['task']['cadence']
+		cbv_area = lc.meta['task']['cbv_area']
+		datasource = lc.meta['task']['datasource'][0:3]
+
 		# Load the CBV (and Prior) from memory and if it is not already loaded,
 		# load it in from file and keep it in memory for next time:
-		datasource = lc.meta['task']['datasource']
-		cbv_area = lc.meta['task']['cbv_area']
-
-		# Convert datasource into query-string for the database:
-		# This will change once more different cadences (i.e. 20s) is defined
-		if datasource != 'ffi':
-			datasource = "tpf"
-
-		cbv_key = (datasource, cbv_area)
+		cbv_key = (sector, cadence, cbv_area)
 		cbv = self.cbvs.get(cbv_key)
 		if cbv is None:
 			logger.debug("Loading CBV for area %d into memory", cbv_area)
-			cbv = CBV(self.data_folder, cbv_area, datasource)
+			cbv = CBV(os.path.join(self.data_folder, f'cbv-s{sector:04d}-c{cadence:04d}-a{cbv_area:d}.hdf5'))
 			self.cbvs[cbv_key] = cbv
 
 			if use_prior and cbv.priors is None:
@@ -174,7 +171,7 @@ class CBVCorrector(BaseCorrector):
 				ax.set_xlabel('Time (TBJD)')
 				ax.set_ylabel('Flux (%s)' % lc.flux_unit)
 				ax.legend()
-				ax.set_title(r'TIC %d - $\alpha = %.3f$' % (lc.targetid, alpha))
+				ax.set_title(f'TIC {lc.targetid:d} - $\\alpha = {alpha:.3f}$')
 				filename = 'tess%011d-cbv_corr-tpf.png' % lc.targetid
 				fig.savefig(os.path.join(self.plot_folder(lc), filename))
 				plt.close(fig)
@@ -229,8 +226,7 @@ class CBVCorrector(BaseCorrector):
 			ax2.set_xlabel('Time (TBJD)')
 			ax2.set_ylabel('Relative flux (ppm)')
 			plt.tight_layout()
-			filename = 'tess%011d-cbv_corr.png' % lc.targetid
-			fig.savefig(os.path.join(self.plot_folder(lc), filename))
+			fig.savefig(os.path.join(self.plot_folder(lc), f'tess{lc.targetid:011d}-cbv_corr.png'))
 			plt.close(fig)
 
 		return lc_corr, status

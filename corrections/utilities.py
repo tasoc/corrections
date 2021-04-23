@@ -231,3 +231,12 @@ class LoggerWriter(object):
 	def write(self, message):
 		if message.strip() != '':
 			self.logger.log(self.level, message)
+
+#--------------------------------------------------------------------------------------------------
+def CadenceType(x):
+	"""
+	Type-checker function to be used with argparse for "cadence" inputs.
+
+	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
+	"""
+	return 'ffi' if isinstance(x, str) and x.lower() == 'ffi' else int(x)

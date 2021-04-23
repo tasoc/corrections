@@ -3,12 +3,14 @@
 """
 Creation of Cotrending Basis Vectors.
 
-The CBV creation has three major steps, which are wrapped in the CBVCreator class:
+The CBV creation has three major steps, which are wrapped in the :class:`CBVCreator` class:
 
-1. The CBVs for the specific todo list are computed using the :py:func:`CBVCorrector.compute_cbv` function.
-2. CBVs are split into "single-scale" CBVs and "spike" CBVs using the :py:func:`CBVCorrector.spike_sep` function.
-3. An initial fitting are performed for all targets using linear least squares using the :py:func:`CBVCreator.cotrend_ini` function. This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
-4. Prior from step 3 are constructed using the :py:func:`CBVCreator.compute_weight_interpolations` function. This function saves interpolation functions for each of the CBV coefficient priors.
+1. The CBVs for the specific todo-list are computed using the :func:`CBVCreator.compute_cbv` function.
+2. CBVs are split into "single-scale" CBVs and "spike" CBVs using the :func:`CBVCreator.spike_sep` function.
+3. An initial fitting is performed for all targets using linear least squares using the :func:`CBVCreator.cotrend_ini` function.
+   This is done to obtain fitting coefficients for the CBVs that will be used to form priors for the final fit.
+4. Priors are constructed using the output from step 3, using the :func:`CBVCreator.compute_weight_interpolations` function.
+   This function saves interpolation functions for each of the CBV coefficient priors.
 
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -36,47 +38,69 @@ from .cbv_utilities import MAD_model2, compute_scores, lightcurve_correlation_ma
 __version__ = get_version(pep440=False)
 
 #--------------------------------------------------------------------------------------------------
-def create_cbv(cbv_area, input_folder=None, version=5, datasource='ffi', ncbv=16,
-	threshold_correlation=0.5, threshold_snrtest=5.0, threshold_entropy=-0.5, ip=False):
+def create_cbv(sector_and_area, input_folder=None, cadence='ffi', version=6, ncbv=16,
+	threshold_correlation=0.5, threshold_snrtest=5.0, threshold_entropy=-0.5, ip=False,
+	output_folder=None):
 	"""
-	Create CBV for given area.
+	Create CBV for given sector and area.
 
-	It is required the ``corrections.TaskManager`` has been initialized on the
+	It is required that the :class:`corrections.TaskManager` has been initialized on the
 	``input_dir`` at least ones before the function is called, since this will
 	ensure that the proper database columns and indicies have been created.
 
 	Parameters:
-		cbv_area (int):
+		sector_and_area (tuple): 2-tuple containing TESS Sector and CBV area to process.
 		input_folder (str):
+		cadence (str, optional): Default='ffi'.
 		version (int): Version to add to output files.
-		datasource (str, optional): Default='ffi'.
 		ncbv (int, optional):
 		threshold_correlation (float, optional):
 		threshold_snrtest (float, optional):
 		threshold_entropy (float, optional):
 		ip (bool, optional): Default=False.
+		output_folder (str, optional): Directory where output (CBVs and plots) will be saved.
+
+	Returns:
+		:class:`CBV`: CBV object.
 
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
 	logger = logging.getLogger(__name__)
-	logger.info('Running CBV for area %d', cbv_area)
 
-	with CBVCreator(input_folder, datasource=datasource, cbv_area=cbv_area,
+	# Unpack sector and area:
+	sector, cbv_area = sector_and_area
+	logger.info('Running CBV for SECTOR=%d, AREA=%d', sector, cbv_area)
+
+	with CBVCreator(input_folder, cadence=cadence, sector=sector, cbv_area=cbv_area,
 		threshold_correlation=threshold_correlation, threshold_snrtest=threshold_snrtest,
-		threshold_entropy=threshold_entropy, ncomponents=ncbv) as C:
+		threshold_entropy=threshold_entropy, ncomponents=ncbv, output_folder=output_folder) as C:
 
 		C.compute_cbvs()
 		C.spike_sep()
 		C.cotrend_ini(do_ini_plots=ip)
 		#C.compute_distance_map()
-		C.save_cbv_to_fits(version=version)
 
-		if datasource == 'ffi':
-			C.interpolate_to_higher_cadence()
+		# Convert to CBV object and save to FITS:
+		cbv_ffi = CBV(C.hdf_filepath)
+		cbv_ffi.save_to_fits(C.output_folder, version=version)
+
+		# Interpolate FFI CBVs to higher cadences:
+		if cadence == 'ffi':
+			# Create new HDF5 file with higher cadence,
+			# and save to FITS file as well:
+			newfile = C.interpolate_to_higher_cadence(120)
+			cbv_120s = CBV(newfile)
+			cbv_120s.save_to_fits(C.output_folder, version=version)
+
+			# For later sectors, also create 20s cadence CBVs:
+			if sector >= 27:
+				newfile = C.interpolate_to_higher_cadence(20)
+				cbv_20s = CBV(newfile)
+				cbv_20s.save_to_fits(C.output_folder, version=version)
 
 		# Return CBV object for the generated area:
-		return CBV(C.data_folder, C.cbv_area, C.datasource)
+		return cbv_ffi
 
 #--------------------------------------------------------------------------------------------------
 class CBVCreator(BaseCorrector):
@@ -84,34 +108,40 @@ class CBVCreator(BaseCorrector):
 	Creation of Cotrending Basis Vectors.
 
 	Attributes:
-		datasource (str):
+		sector (int): TESS Sector.
+		cadence (int): TESS observing cadence in seconds.
 		cbv_area (int):
-		ncomponents (int):
+		datasource (str):
+		ncomponents (int): Number of CBVs to be created.
 		threshold_variability (float):
 		threshold_correlation (float):
 		threshold_snrtest (float):
 		threshold_entropy (float):
 		hdf (:class:`h5py.File`):
+		hdf_filepath (str): Path to the HDF5 file containing the CBV.
 		cbv_plot_folder (str):
+		random_state (int):
 
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	def __init__(self, *args, datasource='ffi', cbv_area=None, ncomponents=16,
+	def __init__(self, *args, cadence='ffi', sector=None, cbv_area=None, ncomponents=16,
 		threshold_correlation=0.5, threshold_snrtest=5.0, threshold_variability=1.3,
-		threshold_entropy=-0.5, **kwargs):
+		threshold_entropy=-0.5, output_folder=None, **kwargs):
 		"""
 		Initialize the CBV Creator.
 
 		Parameters:
-			datasource (str):
-			cbv_area (int):
-			ncomponents (int):
-			threshold_variability (float):
-			threshold_correlation (float):
-			threshold_snrtest (float):
-			threshold_entropy (float):
+			sector (int, required): TESS Sector.
+			cbv_area (int, required):
+			cadence (int or str, optional): TESS observing cadence in seconds.
+			ncomponents (int, optional): Number of CBVs to be created.
+			threshold_variability (float, optional):
+			threshold_correlation (float, optional):
+			threshold_snrtest (float, optional):
+			threshold_entropy (float, optional):
+			output_folder (str, optional):
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
@@ -127,19 +157,26 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 
 		# Basic input checks:
-		if datasource not in ('ffi', 'tpf'):
-			raise ValueError("Invalid DATASOURCE")
-		if cbv_area is None or not isinstance(cbv_area, int):
+		if not isinstance(sector, int):
+			self.close()
+			raise ValueError("Invalid SECTOR")
+		if not isinstance(cadence, int) and cadence != 'ffi':
+			self.close()
+			raise ValueError("Invalid CADENCE")
+		if not isinstance(cbv_area, int):
+			self.close()
 			raise ValueError("Invalid CBV_AREA")
 		if not isinstance(ncomponents, int) or ncomponents <= 0:
+			self.close()
 			raise ValueError("Invalid NCOMPONENTS")
 		if threshold_correlation is None:
 			threshold_correlation = 1.0
 		elif threshold_correlation <= 0 or threshold_correlation > 1:
+			self.close()
 			raise ValueError("Invalid THRESHOLD_CORRELATION")
 
 		# Store input settings:
-		self.datasource = datasource
+		self.sector = sector
 		self.cbv_area = cbv_area
 		self.ncomponents = ncomponents
 		self.threshold_variability = threshold_variability
@@ -147,9 +184,31 @@ class CBVCreator(BaseCorrector):
 		self.threshold_snrtest = threshold_snrtest
 		self.threshold_entropy = threshold_entropy
 		self.random_state = 2187
+		if output_folder is None:
+			self.output_folder = self.data_folder
+		elif os.path.isdir(os.path.abspath(output_folder)):
+			self.output_folder = os.path.abspath(output_folder)
+		else:
+			self.close()
+			raise FileNotFoundError("The output directory does not exist.")
+
+		# Lookup FFI cadence:
+		self.cursor.execute("SELECT DISTINCT cadence FROM todolist WHERE sector=? AND datasource='ffi';", [sector])
+		ffi_cadence = self.cursor.fetchall()
+		if len(ffi_cadence) != 1:
+			self.close()
+			raise ValueError(f"The CADENCE for FFIs from sector {sector:d} is ambigious in the todo-file.")
+		ffi_cadence = ffi_cadence[0]['cadence']
+		if cadence == 'ffi':
+			self.cadence = ffi_cadence
+		else:
+			self.cadence = cadence
+
+		# Only for backward compatibility:
+		self.datasource = 'ffi' if self.cadence == ffi_cadence else 'tpf'
 
 		# Path to the HDF5 file which will contain all the information for a set of CBVs:
-		self.hdf_filepath = os.path.join(self.data_folder, 'cbv-%s-%d.hdf5' % (self.datasource, self.cbv_area))
+		self.hdf_filepath = os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.hdf5')
 
 		# If the file already extsts, determine if it was created using the same settings:
 		if os.path.exists(self.hdf_filepath):
@@ -182,6 +241,7 @@ class CBVCreator(BaseCorrector):
 			if start_over and overwrite: # pragma: no cover
 				os.remove(self.hdf_filepath)
 			elif start_over:
+				self.close()
 				raise ValueError("Mismatch between existing file and provided settings")
 
 		# Store wheter the file already exists:
@@ -195,7 +255,8 @@ class CBVCreator(BaseCorrector):
 			self.hdf.attrs['method'] = 'normal'
 			self.hdf.attrs['datasource'] = self.datasource
 			self.hdf.attrs['cbv_area'] = self.cbv_area
-			self.hdf.attrs['cadence'] = (1800 if datasource == 'ffi' else 120)
+			self.hdf.attrs['cadence'] = self.cadence
+			self.hdf.attrs['sector'] = self.sector
 			self.hdf.attrs['version'] = __version__
 			self.hdf.attrs['Ncbvs'] = self.ncomponents
 			self.hdf.attrs['threshold_variability'] = self.threshold_variability
@@ -205,14 +266,16 @@ class CBVCreator(BaseCorrector):
 			self.hdf.flush()
 
 		# Create directory for plots:
-		self.cbv_plot_folder = os.path.join(self.data_folder, 'plots')
+		self.cbv_plot_folder = os.path.join(self.output_folder, 'plots')
 		os.makedirs(self.cbv_plot_folder, exist_ok=True)
 
 	#----------------------------------------------------------------------------------------------
 	def close(self):
 		"""Close the CBV Creator object."""
+		self._close_basecorrector()
 		if hasattr(self, 'hdf') and self.hdf:
 			self.hdf.close()
+			self.hdf = None
 
 	#----------------------------------------------------------------------------------------------
 	def lightcurve_matrix(self):
@@ -221,22 +284,26 @@ class CBVCreator(BaseCorrector):
 
 		The steps performed are the following:
 
-		1. Only targets with a variability below a user-defined threshold are included.
-		2. Computes correlation matrix for light curves in a given cbv-area and only includes the self.threshold_correlation most correlated light curves.
-		3. Performs gap-filling of light curves and removes time stamps where all flux values are nan.
+		#. Only targets with a variability below a threshold are included.
+
+		#. Computes correlation matrix for light curves in a given cbv-area and only includes the
+		   :meth:`threshold_correlation` most correlated light curves.
+
+		#. Performs gap-filling of light curves and removes time stamps where all flux values are NaN.
 
 		Returns:
-			tuple containing:
+			tuple:
 
-			- `numpy.array`: matrix of light curves to be used in CBV calculation.
-			- `numpy.array`: the indices for the timestamps with nans in all light curves.
-			- `integer`: Number of timestamps.
+			- :class:`numpy.ndarray`: matrix of light curves to be used in CBV calculation.
+			- :class:`numpy.ndarray`: the indices for the timestamps with nans in all light curves.
+			- `int`: Number of timestamps.
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 
 		logger = logging.getLogger(__name__)
+		tqdm_settings = {'disable': None if logger.isEnabledFor(logging.INFO) else True}
 
 		logger.info('Running matrix clean')
 		if logger.isEnabledFor(logging.DEBUG) and 'matrix' in self.hdf: # pragma: no cover
@@ -245,19 +312,13 @@ class CBVCreator(BaseCorrector):
 
 		logger.info("We are running CBV_AREA=%d", self.cbv_area)
 
-		# Convert datasource into query-string for the database:
-		# This will change once more different cadences (i.e. 20s) is defined
-		if self.datasource == 'ffi':
-			search_cadence = "datasource='ffi'"
-		else:
-			search_cadence = "datasource!='ffi'"
-
+		# Set up search parameters for database:
 		search_params = [
-			'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
+			f'status={STATUS.OK.value:d}', # Only including targets with status=OK from photometry
 			"method_used='aperture'", # Only including aperature photometry targets
-			search_cadence,
-			"cbv_area={:d}".format(self.cbv_area),
-			#"sector={:d}".format(sector) # TODO: Add this constraint here
+			f'cadence={self.cadence:d}',
+			f'cbv_area={self.cbv_area:d}',
+			f'sector={self.sector:d}'
 		]
 
 		# Find the median of the variabilities:
@@ -273,7 +334,7 @@ class CBVCreator(BaseCorrector):
 		ax.axvline(self.threshold_variability, color='r')
 		ax.set_xscale('log')
 		ax.set_xlabel('Variability')
-		fig.savefig(os.path.join(self.cbv_plot_folder, 'variability-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, f'variability-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area}.png'))
 		plt.close(fig)
 
 		# Get the list of star that we are going to load in the lightcurves for:
@@ -293,7 +354,6 @@ class CBVCreator(BaseCorrector):
 		# Save aux information about this CBV to an separate file.
 		self.hdf.create_dataset('time', data=lc.time - lc.timecorr)
 		self.hdf.create_dataset('cadenceno', data=lc.cadenceno)
-		self.hdf.attrs['sector'] = lc.sector
 		self.hdf.attrs['camera'] = lc.camera
 		self.hdf.attrs['ccd'] = lc.ccd
 		self.hdf.attrs['data_rel'] = lc.meta['data_rel']
@@ -307,7 +367,7 @@ class CBVCreator(BaseCorrector):
 		varis = np.empty(Nstars, dtype='float64')
 
 		# Loop over stars, fill
-		for k, star in tqdm(enumerate(stars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
+		for k, star in tqdm(enumerate(stars), total=Nstars, **tqdm_settings):
 			# Load lightkurve object
 			lc = self.load_lightcurve(star)
 
@@ -359,7 +419,7 @@ class CBVCreator(BaseCorrector):
 		logger.info("Gap-filling lightcurves...")
 		cadenceno = np.arange(mat.shape[1])
 		count_interp = 0
-		for k in tqdm(range(Nstars), total=Nstars, disable=not logger.isEnabledFor(logging.INFO)):
+		for k in tqdm(range(Nstars), total=Nstars, **tqdm_settings):
 			# Normalize the lightcurves by their variances:
 			mat[k, :] /= varis[k]
 
@@ -390,9 +450,10 @@ class CBVCreator(BaseCorrector):
 		Entropy-cleaning of lightcurve matrix using the SVD U-matrix.
 
 		Parameters:
-			matrix:
-			targ_limit:
+			matrix (:class:`numpy.ndarray`):
+			targ_limit (int, optional): Maximum number of targets to remove during cleaning.
 
+		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
 		logger = logging.getLogger(__name__)
 
@@ -440,14 +501,22 @@ class CBVCreator(BaseCorrector):
 
 		The steps taken in the function are:
 
-		1. run :py:func:`CBVCorrector.lightcurve_matrix` to obtain matrix with gap-filled,
-		nan-removed light curves for the most correlated stars in a given cbv-area.
-		2. Compute principal components and remove significant single-star contributers based on entropy.
-		3. reun SNR test on CBVs, and only retain CBVs that pass the test.
-		4. Save CBVs and make diagnostics plots.
+		#. Run :meth:`lightcurve_matrix` to obtain matrix with gap-filled,
+		   nan-removed light curves for the most correlated stars in a given cbv-area.
+
+		#. Compute principal components.
+
+		#. Run :meth:`entropy_cleaning` to remove significant single-star
+		   contributers based on entropy.
+
+		#. Rerun SNR test on CBVs, and only retain CBVs that pass the test.
+
+		#. Recalculate principal components using cleaned star list.
+
+		#. Save CBVs and make diagnostics plots.
 
 		Parameters:
-			targ_limit (int, optional):
+			targ_limit (int, optional): Maximum number of targets to remove during entropy-cleaning.
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
@@ -458,10 +527,9 @@ class CBVCreator(BaseCorrector):
 		logger.info('------------------------------------')
 
 		if 'cbv-ini' in self.hdf:
-			logger.info('CBV for area %d already calculated', self.cbv_area)
+			logger.info('CBV for SECTOR=%d, CADENCE=%d, AREA=%d already calculated.', self.sector, self.cadence, self.cbv_area)
 			return
-
-		logger.info('Computing CBV for %s area %d', self.datasource, self.cbv_area)
+		logger.info('Computing CBV for SECTOR=%d, CADENCE=%d, AREA=%d...', self.sector, self.cadence, self.cbv_area)
 
 		# Extract or compute cleaned and gapfilled light curve matrix
 		mat, indx_nancol, Ntimes = self.lightcurve_matrix()
@@ -509,7 +577,7 @@ class CBVCreator(BaseCorrector):
 		ax02.axvline(x=cbv.shape[1]+0.5, ls='--', color='k')
 		ax02.set_xlabel('CBV number')
 		ax02.set_ylabel('Variance explained ratio')
-		fig0.savefig(os.path.join(self.cbv_plot_folder, 'cbv-perf-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig0.savefig(os.path.join(self.cbv_plot_folder, f'cbv-perf-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.png'))
 		plt.close(fig0)
 
 		# Plot all the CBVs:
@@ -527,26 +595,26 @@ class CBVCreator(BaseCorrector):
 
 				ax.plot(cbv0[:, k]+0.1, 'r-')
 				ax.plot(cbv[:, k], ls='-', color='k')
-				ax.set_title('Basis Vector %d' % (k+1))
+				ax.set_title(f'Basis Vector {k+1:d}')
 
 		for k, ax in enumerate(axes2.flatten()):
 			if k < U0.shape[1]:
 				ax.plot(-np.abs(U0[:, k]), 'r-')
 				ax.plot(np.abs(U[:, k]), 'k-')
-				ax.set_title('Basis Vector %d' % (k+1))
+				ax.set_title(f'Basis Vector {k+1:d}')
 
-		fig.savefig(os.path.join(self.cbv_plot_folder, 'cbvs_ini-%s-area%d.png' % (self.datasource, self.cbv_area)))
-		fig2.savefig(os.path.join(self.cbv_plot_folder, 'U_cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, f'cbvs_ini-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.png'))
+		fig2.savefig(os.path.join(self.cbv_plot_folder, f'U_cbvs-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.png'))
 		plt.close(fig)
 		plt.close(fig2)
 
 	#----------------------------------------------------------------------------------------------
 	def spike_sep(self):
 		"""
-		Function that separates CBVs into a "slow" and a "spiky" component
+		Separate CBVs into a "slow" and a "spiky" component.
 
 		This is done by filtering the deta and identifying outlier
-		with a peak-finding algorithm
+		with a peak-finding algorithm.
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
@@ -556,10 +624,9 @@ class CBVCreator(BaseCorrector):
 		logger.info('------------------------------------')
 
 		if 'cbv-single-scale' in self.hdf and 'cbv-spike' in self.hdf:
-			logger.info('Separated CBVs for %s area %d already calculated', self.datasource, self.cbv_area)
+			logger.info('Separated CBVs for SECTOR=%d, CADENCE=%d, AREA=%d already calculated.', self.sector, self.cadence, self.cbv_area)
 			return
-
-		logger.info('Computing CBV spike separation for %s area %d', self.datasource, self.cbv_area)
+		logger.info('Computing CBV spike separation for SECTOR=%d, CADENCE=%d, AREA=%d...', self.sector, self.cadence, self.cbv_area)
 
 		# Load initial CBV from "compute_CBV"
 		cbv = self.hdf['cbv-ini']
@@ -628,13 +695,13 @@ class CBVCreator(BaseCorrector):
 				col = 'k'
 
 			axes[k].plot(cbv_new[:, k], ls='-', color=col)
-			axes[k].set_title('Basis Vector %d' % (k+1))
+			axes[k].set_title(f'Basis Vector {k+1:d}')
 
 			axes2[k].plot(cbv_spike[:, k], ls='-', color=col)
-			axes2[k].set_title('Spike Basis Vector %d' % (k+1))
+			axes2[k].set_title(f'Spike Basis Vector {k+1:d}')
 
-		fig.savefig(os.path.join(self.cbv_plot_folder, 'cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
-		fig2.savefig(os.path.join(self.cbv_plot_folder, 'spike-cbvs-%s-area%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, f'cbvs-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.png'))
+		fig2.savefig(os.path.join(self.cbv_plot_folder, f'spike-cbvs-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.png'))
 		plt.close(fig)
 		plt.close(fig2)
 
@@ -658,24 +725,18 @@ class CBVCreator(BaseCorrector):
 		logger = logging.getLogger(__name__)
 		logger.info("--------------------------------------------------------------")
 		if 'inifit' in self.hdf:
-			logger.info("Initial co-trending for light curves in %s CBV area%d already done", self.datasource, self.cbv_area)
+			logger.info("Initial co-trending in SECTOR=%d, CADENCE=%d, AREA=%d already done.", self.sector, self.cadence, self.cbv_area)
 			return
+		logger.info("Initial co-trending in SECTOR=%d, CADENCE=%d, AREA=%d...", self.sector, self.cadence, self.cbv_area)
+		tqdm_settings = {'disable': None if logger.isEnabledFor(logging.INFO) else True}
 
-		logger.info("Initial co-trending for light curves in %s CBV area%d", self.datasource, self.cbv_area)
-
-		# Convert datasource into query-string for the database:
-		# This will change once more different cadences (i.e. 20s) is defined
-		if self.datasource == 'ffi':
-			search_cadence = "datasource='ffi'"
-		else:
-			search_cadence = "datasource!='ffi'"
-
+		# Create search parameters for the database:
 		search_params = [
-			'status={:d}'.format(STATUS.OK.value), # Only including targets with status=OK from photometry
+			f'status={STATUS.OK.value:d}', # Only including targets with status=OK from photometry
 			"method_used='aperture'", # Only including aperature photometry targets
-			search_cadence,
-			"cbv_area={:d}".format(self.cbv_area),
-			#"sector={:d}".format(sector) # TODO: Add this constraint here
+			f'cadence={self.cadence:d}',
+			f"cbv_area={self.cbv_area:d}",
+			f"sector={self.sector:d}"
 		]
 
 		# Load stars from database
@@ -684,7 +745,7 @@ class CBVCreator(BaseCorrector):
 			search=search_params)
 
 		# Load the cbv from file:
-		cbv = CBV(self.data_folder, self.cbv_area, self.datasource)
+		cbv = CBV(os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.hdf5'))
 
 		# Update maximum number of components
 		Ncbvs = cbv.cbv.shape[1]
@@ -697,7 +758,7 @@ class CBVCreator(BaseCorrector):
 		pos = np.full((len(stars), 3), np.NaN, dtype='float64')
 
 		# Loop through stars
-		for k, star in tqdm(enumerate(stars), total=len(stars), disable=not logger.isEnabledFor(logging.INFO)):
+		for k, star in tqdm(enumerate(stars), total=len(stars), **tqdm_settings):
 
 			lc = self.load_lightcurve(star)
 
@@ -734,8 +795,7 @@ class CBVCreator(BaseCorrector):
 				ax2.plot(lc.time, lc_corr)
 				ax2.set_xlabel('Time (TBJD)')
 				ax2.set_ylabel('Relative flux (ppm)')
-				filename = 'lc_corr_ini_TIC%d.png' % lc.targetid
-				fig.savefig(os.path.join(self.plot_folder(lc), filename))
+				fig.savefig(os.path.join(self.plot_folder(lc), f'lc_corr_ini_tic{lc.targetid:011d}.png'))
 				plt.close(fig)
 
 		# Filter away any targets that could not be fitted:
@@ -777,14 +837,13 @@ class CBVCreator(BaseCorrector):
 		ax2.set_ylabel('CBV weight')
 		ax2.set_xlabel('CBV')
 		ax.legend()
-		fig.savefig(os.path.join(self.cbv_plot_folder, 'weights-sector-%s-%d.png' % (self.datasource, self.cbv_area)))
+		fig.savefig(os.path.join(self.cbv_plot_folder, f'weights-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.png'))
 		plt.close(fig)
 
 	#----------------------------------------------------------------------------------------------
 	def compute_distance_map(self):
 		"""
-		3D distance map for weighting initial-fit coefficients
-		into a prior
+		3D distance map for weighting initial-fit coefficients into a prior.
 
 		.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 		"""
@@ -792,7 +851,7 @@ class CBVCreator(BaseCorrector):
 		logger.info("--------------------------------------------------------------")
 
 		if 'inifit' not in self.hdf:
-			raise IOError('Trying to make priors without initial corrections')
+			raise RuntimeError('Trying to make priors without initial corrections.')
 
 		pos_mag0 = np.asarray(self.hdf['inifit_targets'])
 
@@ -813,10 +872,10 @@ class CBVCreator(BaseCorrector):
 		tree = BallTree(pos_mag0, metric=dist)
 
 		# Save the tree to a pickle file to be easily loaded by the CBV class:
-		savePickle(os.path.join(self.data_folder, 'D_%s-area%d.pkl' % (self.datasource, self.cbv_area)), tree)
+		savePickle(os.path.join(self.output_folder, f'cbv-prior-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.pickle'), tree)
 
 	#----------------------------------------------------------------------------------------------
-	def interpolate_to_higher_cadence(self):
+	def interpolate_to_higher_cadence(self, cadence=120):
 		"""
 		Interpolate CBVs generated from FFIs to higher cadence (120 seconds).
 
@@ -824,25 +883,36 @@ class CBVCreator(BaseCorrector):
 		to the higher cadence. All spike-CBVs are set to zero, since there is no good way to
 		interpolate them.
 
+		Parameters:
+			cadence (int):
+
+		Returns:
+			str: Path to the new CBV file.
+
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
 		if self.datasource != 'ffi':
-			raise Exception("Can not interpolate this CBV, since it is doesn't come from a FFI.")
+			raise RuntimeError("Can not interpolate this CBV, since it is doesn't come from a FFI.")
 
 		logger = logging.getLogger(__name__)
 		logger.info("Interpolating to higher cadence")
 
-		newfile = os.path.join(self.data_folder, 'cbv-tpf-%d.hdf5' % self.cbv_area)
+		newfile = os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{cadence:04d}-a{self.cbv_area:d}.hdf5')
 		if os.path.exists(newfile):
 			logger.warning("File already exists: %s", newfile)
 			return
 
 		# Get single star to load timestamps etc from:
-		# TODO: Add sector constraint here
 		stars = self.search_database(
 			select=['lightcurve'],
-			search=["datasource!='ffi'", 'cbv_area=%d' % self.cbv_area],
+			search=[
+				f'status={STATUS.OK.value:d}', # Only including targets with status=OK from photometry
+				"method_used='aperture'", # Only including aperature photometry targets
+				f"sector={self.sector:d}",
+				f"cbv_area={self.cbv_area:d}",
+				f'cadence={cadence:d}',
+			],
 			limit=1
 		)
 
@@ -865,7 +935,7 @@ class CBVCreator(BaseCorrector):
 				hdf.attrs[key] = value
 
 			# Change the headers that are different now:
-			hdf.attrs['cadence'] = 120
+			hdf.attrs['cadence'] = cadence
 			hdf.attrs['datasource'] = 'tpf'
 			hdf.attrs['Ntimes'] = Ntimes
 			hdf.attrs['method'] = 'interpolated'
@@ -877,17 +947,3 @@ class CBVCreator(BaseCorrector):
 			hdf.create_dataset('cbv-spike', data=cbv_spike)
 
 		return newfile
-
-	#----------------------------------------------------------------------------------------------
-	def save_cbv_to_fits(self, version=5):
-		"""
-		Save Cotrending Basis Vectors (CBVs) to FITS file.
-
-		Returns:
-			string: Path to the generated FITS file.
-
-		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
-		"""
-
-		cbv = CBV(self.data_folder, self.cbv_area, self.datasource)
-		return cbv.save_to_fits(self.data_folder, version=version)

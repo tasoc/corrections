@@ -10,6 +10,8 @@ import pytest
 import os.path
 import tempfile
 import json
+import sqlite3
+from contextlib import closing
 import conftest # noqa: F401
 from corrections import TaskManager, STATUS
 
@@ -36,6 +38,7 @@ def test_taskmanager(PRIVATE_TODO_FILE):
 		assert task1['ccd'] == 4
 		assert task1['datasource'] == 'ffi'
 		assert task1['sector'] == 1
+		assert task1['cadence'] == 1800
 		assert task1['cbv_area'] == 143
 
 		# Start task with priority=17:
@@ -51,6 +54,7 @@ def test_taskmanager(PRIVATE_TODO_FILE):
 		assert task2['ccd'] == 4
 		assert task2['datasource'] == 'tpf'
 		assert task2['sector'] == 1
+		assert task2['cadence'] == 120
 		assert task2['cbv_area'] == 143
 
 		# Check that the status did actually change in the todolist:
@@ -67,9 +71,41 @@ def test_taskmanager_notexist(INPUT_DIR):
 			pass
 
 #--------------------------------------------------------------------------------------------------
+def test_taskmanager_invalid_cadence(PRIVATE_TODO_FILE):
+
+	with closing(sqlite3.connect(PRIVATE_TODO_FILE)) as conn:
+		conn.row_factory = sqlite3.Row
+		cursor = conn.cursor()
+		cursor.execute("PRAGMA table_info(todolist)")
+		existing_columns = [r['name'] for r in cursor.fetchall()]
+		# Change the sector to something that the TaskManager should not be able to process:
+		cursor.execute("UPDATE todolist SET sector=99999999 WHERE priority=17;")
+		conn.commit()
+		cursor.close()
+
+	# Just to ensure that CADENCE is not already defined:
+	assert 'cadence' not in existing_columns, "CADENCE should not already be there"
+
+	# The TaskManager should now fail with a ValueError:
+	with pytest.raises(ValueError) as e:
+		with TaskManager(PRIVATE_TODO_FILE):
+			pass
+	assert str(e.value) == 'TODO-file does not contain CADENCE information and it could not be determined automatically. Please recreate TODO-file.'
+
+	# Make sure that the todo-file was not changed anyway:
+	with closing(sqlite3.connect(PRIVATE_TODO_FILE)) as conn:
+		conn.row_factory = sqlite3.Row
+		cursor = conn.cursor()
+		cursor.execute("PRAGMA table_info(todolist)")
+		existing_columns = [r['name'] for r in cursor.fetchall()]
+		cursor.close()
+
+	assert 'cadence' not in existing_columns, "CADENCE was created event though it should not"
+
+#--------------------------------------------------------------------------------------------------
 def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 
-	constraints = {'datasource': 'tpf', 'priority': 17}
+	constraints = {'cadence': 120, 'priority': 17}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
 		numtasks = tm.get_number_tasks(**constraints)
@@ -77,7 +113,7 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task is None, "Task1 should be None"
 		assert numtasks == 0, "Task1 search should give no results"
 
-	constraints = {'datasource': 'tpf', 'priority': 17, 'camera': None}
+	constraints = {'cadence': 120, 'priority': 17, 'camera': None}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task2 = tm.get_task(**constraints)
 		numtasks2 = tm.get_number_tasks(**constraints)
@@ -85,7 +121,7 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task2 == task, "Tasks should be identical"
 		assert numtasks2 == 0, "Task2 search should give no results"
 
-	constraints = {'datasource': 'ffi', 'priority': 17}
+	constraints = {'cadence': 'ffi', 'priority': 17}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task = tm.get_task(**constraints)
 		numtasks = tm.get_number_tasks(**constraints)
@@ -96,7 +132,7 @@ def test_taskmanager_constraints(PRIVATE_TODO_FILE):
 		assert task['ccd'] == 4
 		assert numtasks == 1, "Priority search should give one results"
 
-	constraints = {'datasource': 'ffi', 'priority': 17, 'camera': 1, 'ccd': 4}
+	constraints = {'cadence': 1800, 'priority': 17, 'camera': 1, 'ccd': 4, 'cbv_area': 143}
 	with TaskManager(PRIVATE_TODO_FILE, overwrite=True, cleanup_constraints=constraints) as tm:
 		task3 = tm.get_task(**constraints)
 		numtasks3 = tm.get_number_tasks(**constraints)

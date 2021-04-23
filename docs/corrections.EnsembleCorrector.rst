@@ -8,9 +8,3 @@ Ensemble Corrector (``corrections.EnsembleCorrector``)
 	:undoc-members:
 	:show-inheritance:
 	:inherited-members:
-
-.. automodule:: corrections.ensemble
-    :members:
-    :undoc-members:
-    :show-inheritance:
-	:exclude-members: corrections.EnsembleCorrector

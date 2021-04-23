@@ -48,17 +48,17 @@ def _move_median_central_1d(x, width_points):
 		y[-(k+1)] = nanmedian(x[-(k+2):])
 	return y
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def move_median_central(x, width_points, axis=0):
 	return np.apply_along_axis(_move_median_central_1d, axis, x, width_points)
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def pearson(x, y):
 	indx = np.isfinite(x) & np.isfinite(y)
 	r, _ = stats.pearsonr(x[indx], y[indx]) # Second output (p-value) is not used
 	return r
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def compute_scores(X, n_components):
 	pca = PCA(svd_solver='full')
 
@@ -69,11 +69,11 @@ def compute_scores(X, n_components):
 
 	return pca_scores
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def rms(x, **kwargs):
 	return np.sqrt(nansum(x**2, **kwargs)/len(x))
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def compute_entropy(U):
 
 	HGauss0 = 0.5 + 0.5*np.log(2*np.pi)
@@ -106,11 +106,11 @@ def compute_entropy(U):
 
 	return H
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def reduce_std(x):
 	return np.median(np.abs(x-np.median(x)))
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def reduce_mode(x):
 	kde = KDE(x)
 	kde.fit(gridsize=2000)
@@ -119,7 +119,7 @@ def reduce_mode(x):
 	x = kde.support
 	return x[np.argmax(pdf)]
 
-#------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 def ndim_med_filt(v, x, n, dist='euclidean', mad_frac=2):
 
 	d = distance.cdist(x, x, dist)
@@ -136,23 +136,25 @@ def ndim_med_filt(v, x, n, dist='euclidean', mad_frac=2):
 			idx[i] = True
 	return idx
 
-#------------------------------------------------------------------------------
-def AlmightyCorrcoefEinsumOptimized(O, P):
+#--------------------------------------------------------------------------------------------------
+def AlmightyCorrcoefEinsumOptimized(X, P):
 	"""
-	Correlation coefficients using Einstein sums
+	Correlation coefficients using Einstein sums.
+
+	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	"""
 
-	(n, t) = O.shape      # n traces of t samples
+	(n, t) = X.shape      # n traces of t samples
 	(n_bis, m) = P.shape  # n predictions for each of m candidates
 
-	DO = O - (np.einsum("nt->t", O, optimize='optimal') / np.double(n)) # compute O - mean(O)
+	DX = X - (np.einsum("nt->t", X, optimize='optimal') / np.double(n)) # compute X - mean(X)
 	DP = P - (np.einsum("nm->m", P, optimize='optimal') / np.double(n)) # compute P - mean(P)
 
-	cov = np.einsum("nm,nt->mt", DP, DO, optimize='optimal')
+	cov = np.einsum("nm,nt->mt", DP, DX, optimize='optimal')
 
 	varP = np.einsum("nm,nm->m", DP, DP, optimize='optimal')
-	varO = np.einsum("nt,nt->t", DO, DO, optimize='optimal')
-	tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
+	varX = np.einsum("nt,nt->t", DX, DX, optimize='optimal')
+	tmp = np.einsum("m,t->mt", varP, varX, optimize='optimal')
 
 	return cov / np.sqrt(tmp)
 
