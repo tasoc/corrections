@@ -154,7 +154,7 @@ jobs:
         python -m pip install --upgrade pip wheel
         grep "numpy" requirements.txt | xargs -I {} pip install "{}"
         pip install -r requirements.txt
-        pip install -r requirements-docs.txt
+        pip install -r docs/requirements-docs.txt
 
     - name: Build Sphinx documentation
       run: |
