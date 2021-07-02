@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 A TaskManager which keeps track of which targets to process.
@@ -16,6 +16,34 @@ from numpy import atleast_1d
 from . import STATUS
 
 #--------------------------------------------------------------------------------------------------
+def _build_constraints(priority=None, starid=None, sector=None, cadence=None,
+	camera=None, ccd=None, cbv_area=None, return_list=False):
+
+	constraints = []
+	if priority is not None:
+		constraints.append('todolist.priority IN (' + ','.join([str(int(c)) for c in atleast_1d(priority)]) + ')')
+	if starid is not None:
+		constraints.append('todolist.starid IN (' + ','.join([str(int(c)) for c in atleast_1d(starid)]) + ')')
+	if sector is not None:
+		constraints.append('todolist.sector IN (' + ','.join([str(int(c)) for c in atleast_1d(sector)]) + ')')
+	if cadence == 'ffi':
+		constraints.append("todolist.datasource='ffi'")
+	elif cadence is not None:
+		constraints.append(f'todolist.cadence={cadence:d}')
+	if camera is not None:
+		constraints.append('todolist.camera IN (' + ','.join([str(int(c)) for c in atleast_1d(camera)]) + ')')
+	if ccd is not None:
+		constraints.append('todolist.ccd IN (' + ','.join([str(int(c)) for c in atleast_1d(ccd)]) + ')')
+	if cbv_area is not None:
+		constraints.append('todolist.cbv_area IN (' + ','.join([str(int(c)) for c in atleast_1d(cbv_area)]) + ')')
+
+	# If asked for it, return the list if constraints otherwise return string
+	# which fits into the other queries done by the TaskManager:
+	if return_list:
+		return constraints
+	return ' AND ' + ' AND '.join(constraints) if constraints else ''
+
+#--------------------------------------------------------------------------------------------------
 class TaskManager(object):
 	"""
 	A TaskManager which keeps track of which targets to process.
@@ -27,15 +55,15 @@ class TaskManager(object):
 		Initialize the TaskManager which keeps track of which targets to process.
 
 		Parameters:
-			todo_file (string): Path to the TODO-file.
-			cleanup (boolean, optional): Perform cleanup/optimization of TODO-file before
+			todo_file (str): Path to the TODO-file.
+			cleanup (bool, optional): Perform cleanup/optimization of TODO-file before
 				during initialization. Default=False.
-			overwrite (boolean, optional): Overwrite any previously calculated results. Default=False.
+			overwrite (bool, optional): Overwrite any previously calculated results. Default=False.
 			cleanup_constraints (dict, optional): Dict of constraint for cleanup of the status of
 				previous correction runs. If not specified, all bad results are cleaned up.
-			summary (string, optional): Path to JSON file which will be periodically updated with
+			summary (str, optional): Path to JSON file which will be periodically updated with
 				a status summary of the corrections.
-			summary_interval (integer, optional): Interval at which summary file is updated.
+			summary_interval (int, optional): Interval at which summary file is updated.
 				Default=100.
 
 		Raises:
@@ -73,21 +101,25 @@ class TaskManager(object):
 			self._loghandler.setFormatter(formatter)
 			self.logger.addHandler(self._loghandler)
 
-		# Create table for settings if it doesn't already exits:
-		self.cursor.execute("""CREATE TABLE IF NOT EXISTS corr_settings (
-			corrector TEXT NOT NULL
-		);""")
-		self.conn.commit()
-
-		# Load settings from setting tables:
-		self.cursor.execute("SELECT * FROM corr_settings LIMIT 1;")
-		row = self.cursor.fetchone()
-		if row is not None:
-			self.corrector = row['corrector']
+		# Add cadence to todolist, if it doesn't already exists:
+		# This is only for backwards compatibility.
+		self.cursor.execute("PRAGMA table_info(todolist)")
+		existing_columns = [r['name'] for r in self.cursor.fetchall()]
+		if 'cadence' not in existing_columns:
+			self.logger.debug("Adding CADENCE column to todolist")
+			self.cursor.execute("BEGIN TRANSACTION;")
+			self.cursor.execute("ALTER TABLE todolist ADD COLUMN cadence INTEGER DEFAULT NULL;")
+			self.cursor.execute("UPDATE todolist SET cadence=1800 WHERE datasource='ffi' AND sector < 27;")
+			self.cursor.execute("UPDATE todolist SET cadence=600 WHERE datasource='ffi' AND sector >= 27 AND sector <= 55;")
+			self.cursor.execute("UPDATE todolist SET cadence=120 WHERE datasource!='ffi' AND sector < 27;")
+			self.cursor.execute("SELECT COUNT(*) AS antal FROM todolist WHERE cadence IS NULL;")
+			if self.cursor.fetchone()['antal'] > 0:
+				self.close()
+				raise ValueError("TODO-file does not contain CADENCE information and it could not be determined automatically. Please recreate TODO-file.")
+			self.conn.commit()
 
 		# Add status indicator for corrections to todolist, if it doesn't already exists:
-		self.cursor.execute("PRAGMA table_info(todolist)")
-		if 'corr_status' not in [r['name'] for r in self.cursor.fetchall()]:
+		if 'corr_status' not in existing_columns:
 			self.logger.debug("Adding corr_status column to todolist")
 			self.cursor.execute("ALTER TABLE todolist ADD COLUMN corr_status INTEGER DEFAULT NULL")
 			self.cursor.execute("CREATE INDEX corr_status_idx ON todolist (corr_status);")
@@ -100,6 +132,7 @@ class TaskManager(object):
 			# new column after creation, by finding ketwords in other columns.
 			# This can be a pretty slow process, but it only has to be done once.
 			self.logger.debug("Adding method_used column to diagnostics")
+			self.cursor.execute("BEGIN TRANSACTION;")
 			self.cursor.execute("ALTER TABLE diagnostics ADD COLUMN method_used TEXT NOT NULL DEFAULT 'aperture';")
 			for m in ('aperture', 'halo', 'psf', 'linpsf'):
 				self.cursor.execute("UPDATE diagnostics SET method_used=? WHERE priority IN (SELECT priority FROM todolist WHERE method=?);", [m, m])
@@ -109,6 +142,18 @@ class TaskManager(object):
 		# Create indicies
 		self.cursor.execute("CREATE INDEX IF NOT EXISTS datavalidation_raw_approved_idx ON datavalidation_raw (approved);")
 		self.conn.commit()
+
+		# Create table for settings if it doesn't already exits:
+		self.cursor.execute("""CREATE TABLE IF NOT EXISTS corr_settings (
+			corrector TEXT NOT NULL
+		);""")
+		self.conn.commit()
+
+		# Load settings from setting tables:
+		self.cursor.execute("SELECT * FROM corr_settings LIMIT 1;")
+		row = self.cursor.fetchone()
+		if row is not None:
+			self.corrector = row['corrector']
 
 		# Reset the status of everything for a new run:
 		if overwrite:
@@ -157,26 +202,18 @@ class TaskManager(object):
 		# Add additional constraints from the user input and build SQL query:
 		if cleanup_constraints:
 			if isinstance(cleanup_constraints, dict):
-				cc = cleanup_constraints.copy()
-				if cc.get('datasource'):
-					constraints.append("datasource='ffi'" if cc.pop('datasource') == 'ffi' else "datasource!='ffi'")
-				for key, val in cc.items():
-					if val is not None:
-						constraints.append(key + ' IN (%s)' % ','.join([str(v) for v in atleast_1d(val)]))
+				constraints += _build_constraints(**cleanup_constraints, return_list=True)
 			else:
 				constraints += cleanup_constraints
 
 		constraints = ' AND '.join(constraints)
+		self.logger.debug(constraints)
 		self.cursor.execute("DELETE FROM diagnostics_corr WHERE priority IN (SELECT todolist.priority FROM todolist WHERE " + constraints + ");")
 		self.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE " + constraints + ";")
 		self.conn.commit()
 
 		# Set all targets that did not return good photometry or were not approved by the Data Validation to SKIPPED:
-		self.cursor.execute("UPDATE todolist SET corr_status=%d WHERE corr_status IS NULL AND (status NOT IN (%d,%d) OR todolist.priority IN (SELECT priority FROM datavalidation_raw WHERE approved=0));" % (
-			STATUS.SKIPPED.value,
-			STATUS.OK.value,
-			STATUS.WARNING.value
-		))
+		self.cursor.execute(f"UPDATE todolist SET corr_status={STATUS.SKIPPED.value:d} WHERE corr_status IS NULL AND (status NOT IN ({STATUS.OK.value:d},{STATUS.WARNING.value:d}) OR todolist.priority IN (SELECT priority FROM datavalidation_raw WHERE approved=0));")
 		self.conn.commit()
 
 		# Analyze the tables for better query planning:
@@ -197,6 +234,8 @@ class TaskManager(object):
 			self.summary[s.name] = 0
 		# If we are going to output summary, make sure to fill it up:
 		if self.summary_file:
+			# Ensure it is an absolute file path:
+			self.summary_file = os.path.abspath(self.summary_file)
 			# Extract information from database:
 			self.cursor.execute("SELECT corr_status,COUNT(*) AS cnt FROM todolist GROUP BY corr_status;")
 			for row in self.cursor.fetchall():
@@ -204,19 +243,19 @@ class TaskManager(object):
 				if row['corr_status'] is not None:
 					self.summary[STATUS(row['corr_status']).name] = row['cnt']
 			# Make sure the containing directory exists:
-			if not os.path.isdir(os.path.dirname(self.summary_file)):
-				os.makedirs(os.path.dirname(self.summary_file))
+			os.makedirs(os.path.dirname(self.summary_file), exist_ok=True)
 			# Write summary to file:
 			self.write_summary()
 
 		# Run a cleanup/optimization of the database before we get started:
 		if cleanup:
 			self.logger.info("Cleaning TODOLIST before run...")
+			tmp_isolevel = self.conn.isolation_level
 			try:
 				self.conn.isolation_level = None
 				self.cursor.execute("VACUUM;")
 			finally:
-				self.conn.isolation_level = ''
+				self.conn.isolation_level = tmp_isolevel
 
 	#----------------------------------------------------------------------------------------------
 	def __enter__(self):
@@ -279,9 +318,18 @@ class TaskManager(object):
 			raise
 
 	#----------------------------------------------------------------------------------------------
-	def get_number_tasks(self, starid=None, camera=None, ccd=None, datasource=None, priority=None):
+	def get_number_tasks(self, priority=None, starid=None, sector=None, cadence=None,
+		camera=None, ccd=None, cbv_area=None):
 		"""
 		Get number of tasks due to be processed.
+
+		Parameters:
+			priority (int, optional): Only return task matching this priority.
+			starid (int, optional): Only return tasks matching this starid.
+			sector (int, optional): Only return tasks matching this Sector.
+			cadence (int, optional): Only return tasks matching this cadence.
+			camera (int, optional): Only return tasks matching this camera.
+			ccd (int, optional): Only return tasks matching this CCD.
 
 		Returns:
 			int: Number of tasks due to be processed.
@@ -289,41 +337,31 @@ class TaskManager(object):
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
-		constraints = []
-		if priority is not None:
-			constraints.append('todolist.priority=%d' % priority)
-		if starid is not None:
-			constraints.append('todolist.starid=%d' % starid)
-		if camera is not None:
-			constraints.append('todolist.camera=%d' % camera)
-		if ccd is not None:
-			constraints.append('todolist.ccd=%d' % ccd)
-		if datasource is not None:
-			constraints.append("todolist.datasource='ffi'" if datasource == 'ffi' else "todolist.datasource!='ffi'")
+		constraints = _build_constraints(
+			priority=priority,
+			starid=starid,
+			sector=sector,
+			cadence=cadence,
+			camera=camera,
+			ccd=ccd,
+			cbv_area=cbv_area)
 
-		if constraints:
-			constraints = ' AND ' + " AND ".join(constraints)
-		else:
-			constraints = ''
-
-		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL %s;" % (
-			constraints,
-		))
-
-		num = int(self.cursor.fetchone()['num'])
-		return num
+		self.cursor.execute("SELECT COUNT(*) AS num FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL" + constraints + ";")
+		return int(self.cursor.fetchone()['num'])
 
 	#----------------------------------------------------------------------------------------------
-	def get_task(self, starid=None, camera=None, ccd=None, datasource=None, priority=None, chunk=1):
+	def get_task(self, priority=None, starid=None, sector=None, cadence=None,
+		camera=None, ccd=None, cbv_area=None, chunk=1):
 		"""
 		Get next task to be processed.
 
 		Parameters:
 			priority (int, optional): Only return task matching this priority.
 			starid (int, optional): Only return tasks matching this starid.
+			sector (int, optional): Only return tasks matching this Sector.
+			cadence (int, optional): Only return tasks matching this cadence.
 			camera (int, optional): Only return tasks matching this camera.
 			ccd (int, optional): Only return tasks matching this CCD.
-			datasource (str, optional): Only return tasks matching this datasource.
 			chunk (int, optional): Chunk of tasks to return. Default is to not chunk (=1).
 
 		Returns:
@@ -333,27 +371,16 @@ class TaskManager(object):
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
 
-		constraints = []
-		if priority is not None:
-			constraints.append('todolist.priority=%d' % priority)
-		if starid is not None:
-			constraints.append('todolist.starid=%d' % starid)
-		if camera is not None:
-			constraints.append('todolist.camera=%d' % camera)
-		if ccd is not None:
-			constraints.append('todolist.ccd=%d' % ccd)
-		if datasource is not None:
-			constraints.append("todolist.datasource='ffi'" if datasource == 'ffi' else "todolist.datasource!='ffi'")
+		constraints = _build_constraints(
+			priority=priority,
+			starid=starid,
+			sector=sector,
+			cadence=cadence,
+			camera=camera,
+			ccd=ccd,
+			cbv_area=cbv_area)
 
-		if constraints:
-			constraints = ' AND ' + " AND ".join(constraints)
-		else:
-			constraints = ''
-
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL %s ORDER BY todolist.priority LIMIT %d;" % (
-			constraints,
-			chunk
-		))
+		self.cursor.execute(f"SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL {constraints:s} ORDER BY todolist.priority LIMIT {chunk:d};")
 		tasks = self.cursor.fetchall()
 		if tasks and chunk == 1:
 			return dict(tasks[0])
@@ -375,7 +402,7 @@ class TaskManager(object):
 
 		.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 		"""
-		self.cursor.execute("SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL ORDER BY RANDOM() LIMIT %d;" % chunk)
+		self.cursor.execute(f"SELECT * FROM todolist INNER JOIN diagnostics ON todolist.priority=diagnostics.priority WHERE corr_status IS NULL ORDER BY RANDOM() LIMIT {chunk:d};")
 		tasks = self.cursor.fetchall()
 		if tasks and chunk == 1:
 			return dict(tasks[0])
@@ -399,7 +426,7 @@ class TaskManager(object):
 		else:
 			priorities = [(int(task['priority']),) for task in tasks]
 
-		self.cursor.executemany("UPDATE todolist SET corr_status=%d WHERE priority=?;" % STATUS.STARTED.value, priorities)
+		self.cursor.executemany(f"UPDATE todolist SET corr_status={STATUS.STARTED.value:d} WHERE priority=?;", priorities)
 		self.summary['STARTED'] += self.cursor.rowcount
 		self.conn.commit()
 

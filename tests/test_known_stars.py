@@ -11,6 +11,7 @@ This is escentially a combination of the older tests of ensemble, CBV, and KASOC
 
 import pytest
 import logging
+import warnings
 import numpy as np
 from numpy.testing import assert_array_equal, assert_array_less
 from lightkurve import TessLightCurve
@@ -27,47 +28,55 @@ from corrections.plots import plt
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
 TEST_DATA_EXISTS = os.path.exists(os.path.join(INPUT_DIR, 'test_data_available_v2.txt'))
-DATA_ONLY = pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a full sector of data.")
+DATA_ONLY = [
+	pytest.mark.fulldata,
+	pytest.mark.skipif(not TEST_DATA_EXISTS, reason="This requires a full sector of data.")
+]
 
 # List of stars to test:
 # The parameters are:
 #  1) Corrector (ensemble, cbv, kasoc_filter)
 #  2) TIC-number
-#  3) Datasource (ffi or tpf)
+#  3) Cadence (ffi or 120)
 #  4) Expected VARIANCE
 #  5) Expected RMS (1 hour)
 #  6) Expected PTP
 STAR_LIST = (
-	('cbv', 29281992, 'ffi', 1.485801e+06, 8.949764e+02, 2.572604e+02),
-	('cbv', 29281992, 'tpf', 1.664423e+06, 9.052271e+02, 6.864500e+01),
-	('ensemble', 8196567, 'ffi', 2.419432e+07, 6.305472e+03, 6.530170e+02),
-	pytest.param('ensemble', 8195216, 'ffi', 4.548763e+06, 2.213988e+03, 1.049298e+03, marks=DATA_ONLY),
-	pytest.param('ensemble', 8196502, 'ffi', 6.901682e+07, 5.227739e+03, 2.679721e+03, marks=DATA_ONLY),
-	pytest.param('ensemble', 165109591, 'tpf', 4.462307e+05, 5.684376e+02, 1.107972e+02, marks=DATA_ONLY),
-	pytest.param('ensemble', 147424478, 'tpf', 4.115776e+06, 1.190016e+03, 3.930971e+02, marks=DATA_ONLY),
-	pytest.param('ensemble', 159778915, 'tpf', 3.985035e+06, 5.127329e+02, 1.754027e+03, marks=DATA_ONLY),
-	('kasoc_filter', 29281992, 'ffi', None, None, None), # KASOC Filter performs baaaaaaad here
-	('kasoc_filter', 336732616, 'ffi', 4.311563e+06, 1.429098e+03, 8.663223e+02),
-	('kasoc_filter', 29281992, 'tpf', 3.970388e+04, 1.239991e+02, 6.421494e+01),
-	('kasoc_filter', 336732616, 'tpf', 1.262934e+07, 7.343828e+02, 3.362000e+03) # HATS-3: Known planet
+	('cbv', 29281992, 1800, 1.485801e+06, 8.949764e+02, 2.572604e+02),
+	('cbv', 29281992, 120, 1.664423e+06, 9.052271e+02, 6.864500e+01),
+	('ensemble', 8196567, 1800, 2.419432e+07, 6.305472e+03, 6.530170e+02),
+	pytest.param('ensemble', 8195216, 1800, 4.548763e+06, 2.213988e+03, 1.049298e+03, marks=DATA_ONLY),
+	pytest.param('ensemble', 8196502, 1800, 6.901682e+07, 5.227739e+03, 2.679721e+03, marks=DATA_ONLY),
+	pytest.param('ensemble', 165109591, 120, 4.462307e+05, 5.684376e+02, 1.107972e+02, marks=DATA_ONLY),
+	pytest.param('ensemble', 147424478, 120, 4.115776e+06, 1.190016e+03, 3.930971e+02, marks=DATA_ONLY),
+	pytest.param('ensemble', 159778915, 120, 3.985035e+06, 5.127329e+02, 1.754027e+03, marks=DATA_ONLY),
+	('kasoc_filter', 29281992, 1800, None, None, None), # KASOC Filter performs baaaaaaad here
+	('kasoc_filter', 336732616, 1800, 4.311563e+06, 1.429098e+03, 8.663223e+02),
+	('kasoc_filter', 29281992, 120, 3.970388e+04, 1.239991e+02, 6.421494e+01),
+	('kasoc_filter', 336732616, 120, 1.262934e+07, 7.343828e+02, 3.362000e+03) # HATS-3: Known planet
 )
 
 #--------------------------------------------------------------------------------------------------
 # Here we are doing pure pytest black magic!
 # The "SHARED_INPUT_DIR" is defined in conftest.py and is automatically detected by pytest.
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize('corrector,starid,datasource,var_goal,rms_goal,ptp_goal', STAR_LIST)
-def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, rms_goal, ptp_goal):
+@pytest.mark.parametrize('corrector,starid,cadence,var_goal,rms_goal,ptp_goal', STAR_LIST)
+def test_known_star(SHARED_INPUT_DIR, corrector, starid, cadence, var_goal, rms_goal, ptp_goal):
 	""" Check that the ensemble returns values that are reasonable and within expected bounds """
+
+	# All stars we check here come from the same sector and camera.
+	# Define these here for the future where we may test on other combinations of these:
+	sector = 1
+	camera = 1
 
 	__dir__ = os.path.abspath(os.path.dirname(__file__))
 	logger = logging.getLogger(__name__)
 	logger.info("-------------------------------------------------------------")
-	logger.info("CORRECTOR = %s, DATASOURCE = %s, STARID = %d", corrector, datasource, starid)
+	logger.info("CORRECTOR = %s, SECTOR=%d, CADENCE=%s, STARID=%d", corrector, sector, cadence, starid)
 
 	# All stars are from the same CCD, find the task for it:
 	with corrections.TaskManager(SHARED_INPUT_DIR) as tm:
-		task = tm.get_task(starid=starid, camera=1, datasource=datasource)
+		task = tm.get_task(starid=starid, sector=sector, camera=camera, cadence=cadence)
 
 	# Check that task was actually found:
 	assert task is not None, "Task could not be found"
@@ -75,10 +84,12 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 	# Load lightcurve that will also be plotted together with the result:
 	# This lightcurve is of the same objects, at a state where it was deemed that the
 	# corrections were doing a good job.
-	compare_lc_path = os.path.join(__dir__, 'compare', 'compare-{0}-{1}-{2}.ecsv.gz'.format(corrector, datasource, starid))
+	compare_lc_path = os.path.join(__dir__, 'compare', f'compare-{corrector}-s{sector:04d}-c{cadence:04d}-tic{starid:011d}.ecsv.gz')
 	compare_lc = None
 	if os.path.isfile(compare_lc_path):
 		compare_lc = Table.read(compare_lc_path, format='ascii.ecsv')
+	else:
+		warnings.warn("Comparison data does not exist: " + compare_lc_path)
 
 	# Initiate the class
 	CorrClass = corrections.corrclass(corrector)
@@ -94,6 +105,8 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 
 			# Print input lightcurve properties:
 			print( inlc.show_properties() )
+			assert inlc.sector == sector
+			assert inlc.camera == camera
 
 			# Run correction:
 			tmplc = inlc.copy()
@@ -126,7 +139,7 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 		# Plot output lightcurves:
 		fig, (ax1, ax2, ax3) = plt.subplots(3, 1, squeeze=True, figsize=[10, 10])
 		ax1.plot(inlc.time, inlc.flux, lw=0.5)
-		ax1.set_title("{0} - {1} - TIC {2}".format(corrector, datasource, starid))
+		ax1.set_title(f"{corrector} - Sector {sector:d} - {cadence}s - TIC {starid:d}")
 		if compare_lc:
 			ax2.plot(compare_lc['time'], compare_lc['flux'], label='Compare', lw=0.5)
 			ax3.axhline(0, lw=0.5, ls=':', color='0.7')
@@ -140,7 +153,7 @@ def test_known_star(SHARED_INPUT_DIR, corrector, starid, datasource, var_goal, r
 		ax3.set_ylabel('New - Compare [ppm]')
 		ax3.set_xlabel('Time [TBJD]')
 		ax3.minorticks_on()
-		fig.savefig(os.path.join(__dir__, 'test-{0}-{1}-{2}.png'.format(corrector, datasource, starid)), bbox_inches='tight')
+		fig.savefig(os.path.join(__dir__, f'test-{corrector}-s{sector:04d}-c{cadence:04d}-tic{starid:011d}.png'), bbox_inches='tight')
 		plt.close(fig)
 
 		# Check things that are allowed to change:

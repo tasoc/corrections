@@ -39,7 +39,7 @@ def download_file(url, destination):
 					pbar.update(len(block))
 
 		if os.path.getsize(destination) != total_size:
-			raise Exception("File not downloaded correctly")
+			raise RuntimeError("File not downloaded correctly")
 
 	except: # noqa: E722
 		if os.path.exists(destination):

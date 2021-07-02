@@ -13,6 +13,8 @@ import logging
 from functools import partial
 import multiprocessing
 import corrections
+from corrections.taskmanager import _build_constraints
+from corrections.utilities import CadenceType
 
 #--------------------------------------------------------------------------------------------------
 def main():
@@ -22,12 +24,14 @@ def main():
 	parser.add_argument('-q', '--quiet', help='Only report warnings and errors.', action='store_true')
 	parser.add_argument('-ip', '--iniplot', help='Make Initial fitting plots.', action='store_true')
 	parser.add_argument('--threads', type=int, default=None, help="Number of parallel threads to use. If not specified, all available CPUs will be used.")
+	parser.add_argument('--output', type=str, default=None, help="Directory where output CBVs will be saved.")
 
 	group = parser.add_argument_group('Specifying CBVs to calculate')
-	group.add_argument('-a', '--area', type=int, action='append', default=None, help='Single CBV_area for which to prepare photometry. Default is to run all areas.')
+	group.add_argument('--sector', type=int, default=None, help='Sector to create CBVs for.')
+	group.add_argument('--cadence', type=CadenceType, default='ffi', choices=('ffi', 1800, 600, 120, 20), help='Cadence for the creation of CBVs.')
 	group.add_argument('--camera', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS Camera. Default is to run all cameras.')
 	group.add_argument('--ccd', type=int, choices=(1,2,3,4), action='append', default=None, help='TESS CCD. Default is to run all CCDs.')
-	group.add_argument('--datasource', type=str, choices=('ffi', 'tpf'), default='ffi', help='Data source for the creation of CBVs.')
+	group.add_argument('-a', '--area', type=int, action='append', default=None, help='Single CBV_area for which to prepare photometry. Default is to run all areas.')
 
 	group = parser.add_argument_group('Settings')
 	group.add_argument('--ncbv', type=int, default=16, help='Number of CBVs to compute')
@@ -68,15 +72,13 @@ def main():
 	logger.info("Loading input data from '%s'", input_folder)
 
 	# Build list of constraints:
-	constraints = []
-	if args.camera:
-		constraints.append('camera IN (%s)' % ",".join([str(c) for c in args.camera]))
-	if args.ccd:
-		constraints.append('ccd IN (%s)' % ",".join([str(c) for c in args.ccd]))
-	if args.area:
-		constraints.append('cbv_area IN (%s)' % ",".join([str(c) for c in args.area]))
-	if args.datasource:
-		constraints.append("datasource='ffi'" if args.datasource == 'ffi' else "datasource!='ffi'")
+	constraints = _build_constraints(
+		sector=args.sector,
+		cadence=args.cadence,
+		camera=args.camera,
+		ccd=args.ccd,
+		cbv_area=args.area,
+		return_list=True)
 	if not constraints:
 		constraints = None
 
@@ -88,7 +90,7 @@ def main():
 	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
 	with corrections.BaseCorrector(input_folder) as bc:
 		# Search for valid areas:
-		cbv_areas = [row['cbv_area'] for row in bc.search_database(select='cbv_area', distinct=True, search=constraints)]
+		cbv_areas = [(row['sector'], row['cbv_area']) for row in bc.search_database(select=['sector','cbv_area'], distinct=True, search=constraints)]
 		logger.debug("CBV areas: %s", cbv_areas)
 
 	# Stop if there are no CBV-Areas to process:
@@ -106,13 +108,14 @@ def main():
 	# Create wrapper function which only takes a single cbv_area as input:
 	create_cbv_wrapper = partial(corrections.create_cbv,
 		input_folder=input_folder,
+		output_folder=args.output,
+		cadence=args.cadence,
 		version=args.version,
 		threshold_correlation=args.corr,
 		threshold_snrtest=args.snr,
 		ncbv=args.ncbv,
 		threshold_entropy=args.el,
-		ip=args.iniplot,
-		datasource=args.datasource)
+		ip=args.iniplot)
 
 	# Run the preparation:
 	if threads > 1:

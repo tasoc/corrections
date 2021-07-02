@@ -26,10 +26,17 @@ def test_run_tesscorr_mpi_invalid_method():
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
-def test_run_tesscorr_mpi_invalid_datasource():
-	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--datasource=invalid")
+def test_run_tesscorr_mpi_invalid_sector():
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--sector=invalid")
 	assert exitcode == 2
-	assert "error: argument --datasource: invalid choice: 'invalid'" in err
+	assert "error: argument --sector: invalid int value: 'invalid'" in err
+
+#--------------------------------------------------------------------------------------------------
+@pytest.mark.mpi
+def test_run_tesscorr_mpi_invalid_cadence():
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--cadence=15")
+	assert exitcode == 2
+	assert "error: argument --cadence: invalid choice: 15 (choose from 'ffi', 1800, 600, 120, 20)" in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
@@ -59,23 +66,24 @@ def test_run_tesscorr_mpi(PRIVATE_TODO_FILE, method):
 		tm.cursor.execute("UPDATE todolist SET corr_status=1;")
 		for s in STAR_LIST:
 			if isinstance(s, (tuple, list)):
-				meth, starid, datasource = s[0:3]
+				meth, starid, cadence = s[0:3]
 			else:
-				meth, starid, datasource = s.values[0:3]
+				meth, starid, cadence = s.values[0:3]
 			if meth != method:
 				continue
-			tm.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE starid=? AND datasource=?;", [starid, datasource])
+			tm.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE starid=? AND cadence=?;", [starid, cadence])
 		tm.conn.commit()
 		tm.cursor.execute("SELECT COUNT(*) FROM todolist WHERE corr_status IS NULL;")
 		num = tm.cursor.fetchone()[0]
 
 	print(num)
-	assert num < 10
+	assert num > 0, "There should be at least one star to be processed with each method"
+	assert num < 10, "There should not be more than 10 stars for each method"
 
 	with tempfile.TemporaryDirectory() as tmpdir:
 		params = [
 			'--debug',
-			'--method={method:s}'.format(method=method),
+			f'--method={method:s}',
 			os.path.dirname(PRIVATE_TODO_FILE),
 			tmpdir
 		]
