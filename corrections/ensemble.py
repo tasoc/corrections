@@ -165,7 +165,7 @@ class EnsembleCorrector(BaseCorrector):
 
 		# Sanity checks:
 		if not res.success:
-			raise Exception('Bzeta: Minimization not successful: ' + res.message)
+			raise RuntimeError('Bzeta: Minimization not successful: ' + res.message)
 
 		ens_flux = ens_flux + bzeta
 		return ens_flux/nanmedian(ens_flux), bzeta
@@ -203,7 +203,7 @@ class EnsembleCorrector(BaseCorrector):
 		if not res.success:
 			logger = logging.getLogger(__name__)
 			logger.warning('Sanity check: Minimization not successful: %s', res.message)
-			#raise Exception('Sanity check: Minimization not successful: ' + res.message)
+			#raise RuntimeError('Sanity check: Minimization not successful: ' + res.message)
 
 		# Correct the lightcurve:
 		lc_corr /= k_corr + lc_medians

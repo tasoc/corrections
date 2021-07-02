@@ -269,7 +269,7 @@ class BaseCorrector(object):
 
 		# Check that the status has been changed:
 		if status == STATUS.UNKNOWN: # pragma: no cover
-			raise Exception("STATUS was not set by do_correction")
+			raise ValueError("STATUS was not set by do_correction")
 
 		# Do sanity checks:
 		if status in (STATUS.OK, STATUS.WARNING):
