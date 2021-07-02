@@ -1,7 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Cotrending Basis Vectors.
+
 .. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
+.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
 
 import numpy as np
@@ -46,36 +49,46 @@ class CBV(object):
 	Cotrending Basis Vector object.
 
 	Attributes:
-		cbv (numpy.array)
-		cbv_s (numpy.array)
-		priors
-		inifit (numpy.array)
+		sector (int): TESS Sector.
+		cadence (int): TESS observing cadence in seconds.
+		camera (int): TESS Camera (1-4).
+		ccd (int): TESS CCD (1-4).
+		cbv_area (int):
+		data_rel (int): TESS Data release number.
+		version (int): TASOC version/data release number.
+		filepath (str): Path to file where CVB is stored.
+
+		time (:class:`numpy.ndarray`):
+		cadenceno (:class:`numpy.ndarray`):
+		cbv (:class:`numpy.ndarray`):
+		cbv_s (:class:`numpy.ndarray`):
+		inifit (:class:`numpy.ndarray`):
+		priors:
 
 	.. codeauthor:: Mikkel N. Lund <mikkelnl@phys.au.dk>
 	.. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 	"""
 
 	#----------------------------------------------------------------------------------------------
-	def __init__(self, data_folder, cbv_area, datasource):
+	def __init__(self, filepath):
 		logger = logging.getLogger(__name__)
 
-		if datasource not in ('ffi', 'tpf'):
-			raise ValueError("Invalid datasource: '%s'" % datasource)
+		if not os.path.isfile(filepath):
+			raise FileNotFoundError(f"Could not find CBV file: {filepath}")
 
-		self.data_folder = data_folder
-		self.cbv_area = cbv_area
-		self.datasource = datasource
-
-		filepath = os.path.join(data_folder, 'cbv-%s-%d.hdf5' % (datasource, cbv_area))
-		if not os.path.exists(filepath):
-			raise FileNotFoundError("Could not find CBV file: %s" % filepath)
+		self.filepath = os.path.abspath(filepath)
+		data_folder = os.path.abspath(os.path.dirname(filepath))
 
 		self.inifit = None
 		with h5py.File(filepath, 'r') as hdf:
 			self.sector = int(hdf.attrs['sector'])
 			self.cadence = int(hdf.attrs['cadence'])
+			self.datasource = str(hdf.attrs.get('datasource', ''))
 			self.camera = int(hdf.attrs['camera'])
 			self.ccd = int(hdf.attrs['ccd'])
+			self.cbv_area = int(hdf.attrs['cbv_area'])
+			self.data_rel = int(hdf.attrs.get('data_rel', -1))
+			self.ncomponents = int(hdf.attrs['Ncbvs'])
 			self.threshold_correlation = float(hdf.attrs['threshold_correlation'])
 			self.threshold_variability = float(hdf.attrs['threshold_variability'])
 			self.threshold_snrtest = float(hdf.attrs['threshold_snrtest'])
@@ -84,20 +97,27 @@ class CBV(object):
 
 			self.time = np.asarray(hdf['time'])
 			self.cadenceno = np.asarray(hdf['cadenceno'])
-
 			self.cbv = np.asarray(hdf['cbv-single-scale'])
 			self.cbv_s = np.asarray(hdf['cbv-spike'])
 
 			if 'inifit' in hdf:
 				self.inifit = np.asarray(hdf['inifit'])
 
+		# Catch for backwards capability for old CBV files:
+		if self.datasource == '':
+			self.datasource = 'ffi' if self.cadence == 1800 else 'tpf'
+
+		# Warn about missing DATA_REL headers:
+		if self.data_rel <= 0:
+			logger.warning("The DATA_REL header is not available in the HDF5 file.")
+
 		# Signal-to-Noise test (without actually removing any CBVs):
 		indx_lowsnr = cbv_snr_test(self.cbv, self.threshold_snrtest)
 		self.remove_cols(indx_lowsnr)
 
 		self.priors = None
-		priorpath = os.path.join(data_folder, 'D_%s-area%d.pkl' % (datasource, cbv_area))
-		if os.path.exists(priorpath):
+		priorpath = os.path.join(data_folder, f'cbv-prior-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}.pickle')
+		if os.path.isfile(priorpath):
 			self.priors = loadPickle(priorpath)
 		else:
 			logger.info('Path to prior distance file does not exist: %s', priorpath)
@@ -619,13 +639,13 @@ class CBV(object):
 		return flux_filter, res, diagnostics
 
 	#----------------------------------------------------------------------------------------------
-	def save_to_fits(self, output_folder, datarel=5):
+	def save_to_fits(self, output_folder, version=6):
 		"""
 		Save CBVs to FITS file.
 
 		Parameters:
 			output_folder (str): Path to directory where FITS file should be saved.
-			datarel (int): Data release number to add to file header.
+			version (int): Data release number to add to file header.
 
 		Returns:
 			str: Path to the generated FITS file.
@@ -642,7 +662,7 @@ class CBV(object):
 			raise FileNotFoundError("Invalid output directory")
 
 		# Store the date that the file is created
-		now = datetime.datetime.now()
+		now = datetime.datetime.now(tz=datetime.timezone.utc)
 
 		# Timestamps of start and end of timeseries:
 		tdel = self.cadence/86400
@@ -660,7 +680,9 @@ class CBV(object):
 		hdr['TELESCOP'] = ('TESS', 'telescope')
 		hdr['INSTRUME'] = ('TESS Photometer', 'detector type')
 		hdr['SECTOR'] = (self.sector, 'Observing sector')
-		hdr['DATA_REL'] = (datarel, 'data release version number')
+		hdr['DATA_REL'] = (self.data_rel, 'data release version number')
+		hdr['VERSION'] = (version, 'TASOC data release version number')
+		hdr['CADENCE'] = (self.cadence, '[s] observation cadence')
 		hdr['PROCVER'] = (self.version, 'Version of corrections pipeline')
 		hdr['FILEVER'] = ('1.0', 'File format version')
 		hdr['TSTART'] = (tstart, 'observation start time in TJD')
@@ -687,6 +709,7 @@ class CBV(object):
 		table_header['DATE-END'] = (tstop_tm.utc.isot, 'TSTOP as UTC calendar date')
 		table_header['TELAPSE'] = (telapse, '[d] LC_STOP - LC_START')
 		table_header['TIMEPIXR'] = (0.5, 'bin time beginning=0 middle=0.5 end=1')
+		table_header['TIMEDEL'] = (tdel, '[d] time resolution of data')
 		table_header['CAMERA'] = (self.camera, 'CCD camera')
 		table_header['CCD'] = (self.ccd, 'CCD chip')
 		table_header['CBV_AREA'] = (self.cbv_area, 'CCD area')
@@ -712,7 +735,7 @@ class CBV(object):
 			col_titles[col_name] = 'column title: co-trending basis vector %d' % (n+1)
 
 		# append CBVs as hdu columns
-		table_hdu1 = fits.BinTableHDU.from_columns(cols, header=table_header, name='CBV.SINGLE-SCALE.%d' % self.cbv_area)
+		table_hdu1 = fits.BinTableHDU.from_columns(cols, header=table_header, name=f'CBV.SINGLE-SCALE.{self.cbv_area:d}')
 
 		# Fix table headers:
 		fix_fits_table_headers(table_hdu1, column_titles=col_titles)
@@ -731,7 +754,7 @@ class CBV(object):
 			cols.append(col)
 
 		# append CBVs as hdu columns
-		table_hdu2 = fits.BinTableHDU.from_columns(cols, header=table_header, name='CBV.SPIKE.%d' % self.cbv_area)
+		table_hdu2 = fits.BinTableHDU.from_columns(cols, header=table_header, name=f'CBV.SPIKE.{self.cbv_area:d}')
 
 		# Fix table headers:
 		fix_fits_table_headers(table_hdu2, column_titles=col_titles)
@@ -740,12 +763,7 @@ class CBV(object):
 		table_hdu2.header.comments['TTYPE2'] = 'column title: unique cadence number'
 
 		# Name of the
-		fname = 'tess-s{sector:04d}-c{cadence:04d}-a{cbvarea:d}-v{datarel:d}-tasoc_cbv.fits'.format(
-			sector=self.sector,
-			cadence=self.cadence,
-			cbvarea=self.cbv_area,
-			datarel=datarel
-		)
+		fname = f'tess-s{self.sector:04d}-c{self.cadence:04d}-a{self.cbv_area:d}-v{version:d}-tasoc_cbv.fits.gz'
 		filepath = os.path.join(output_folder, fname)
 
 		# store as HDU list and write to fits file

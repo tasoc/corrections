@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Command-line utility to run TESS detrend correction from command-line.
@@ -15,6 +15,7 @@ import os
 import argparse
 import logging
 import corrections
+from corrections.utilities import CadenceType
 
 #--------------------------------------------------------------------------------------------------
 def main():
@@ -28,11 +29,13 @@ def main():
 	parser.add_argument('-t', '--test', help='Use test data and ignore TESSCORR_INPUT environment variable.', action='store_true')
 	parser.add_argument('-a', '--all', help='Run correction on all targets.', action='store_true')
 	parser.add_argument('-o', '--overwrite', help='Overwrite previous runs and start over.', action='store_true')
-	parser.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
-	parser.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
-	parser.add_argument('--starid', type=int, help='TIC identifier of target.', nargs='?', default=None)
-	parser.add_argument('--datasource', type=str, choices=('ffi','tpf'), default=None, help='Data source or cadence. Default is to run all.')
-	parser.add_argument('--priority', type=int, help='Priority of target.', nargs='?', default=None)
+	group = parser.add_argument_group('Filter which targets to process')
+	group.add_argument('--priority', type=int, default=None, help='Priority of target.')
+	group.add_argument('--starid', type=int, default=None, help='TIC identifier of target.')
+	group.add_argument('--sector', type=int, default=None, help='TESS Sector.')
+	group.add_argument('--cadence', type=CadenceType, choices=('ffi',1800,600,120,20), default=None, help='Cadence. Default is to run all.')
+	group.add_argument('--camera', type=int, choices=(1,2,3,4), default=None, help='TESS Camera. Default is to run all cameras.')
+	group.add_argument('--ccd', type=int, choices=(1,2,3,4), default=None, help='TESS CCD. Default is to run all CCDs.')
 	parser.add_argument('input_folder', type=str, help='Input directory. This directory should contain a TODO-file and corresponding lightcurves.', nargs='?', default=None)
 	parser.add_argument('output_folder', type=str, help='Directory to save output in.', nargs='?', default=None)
 	args = parser.parse_args()
@@ -82,11 +85,12 @@ def main():
 
 	# Constraints on which targets to process:
 	constraints = {
-		'camera': args.camera,
-		'ccd': args.ccd,
-		'datasource': args.datasource,
+		'priority': args.priority,
 		'starid': args.starid,
-		'priority': args.priority
+		'sector': args.sector,
+		'cadence': args.cadence,
+		'camera': args.camera,
+		'ccd': args.ccd
 	}
 
 	# Get the class for the selected method:

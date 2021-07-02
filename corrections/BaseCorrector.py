@@ -179,13 +179,16 @@ class BaseCorrector(object):
 	#----------------------------------------------------------------------------------------------
 	def _close_basecorrector(self):
 		"""Close BaseCorrection object."""
-		if hasattr(self, 'cursor') and self.cursor:
+		if hasattr(self, 'cursor') and hasattr(self, 'conn') and self.cursor is not None:
 			try:
+				self.conn.rollback()
 				self.cursor.close()
+				self.cursor = None
 			except sqlite3.ProgrammingError:
 				pass
-		if hasattr(self, 'conn') and self.conn:
+		if hasattr(self, 'conn') and self.conn is not None:
 			self.conn.close()
+			self.conn = None
 		if hasattr(self, 'todo_file_readonly') and os.path.isfile(self.todo_file_readonly):
 			os.remove(self.todo_file_readonly)
 
@@ -266,7 +269,7 @@ class BaseCorrector(object):
 
 		# Check that the status has been changed:
 		if status == STATUS.UNKNOWN: # pragma: no cover
-			raise Exception("STATUS was not set by do_correction")
+			raise ValueError("STATUS was not set by do_correction")
 
 		# Do sanity checks:
 		if status in (STATUS.OK, STATUS.WARNING):
@@ -453,7 +456,50 @@ class BaseCorrector(object):
 		logger.debug('Loading lightcurve: %s', fname)
 
 		# Load lightcurve file and create a TessLightCurve object:
-		if fname.endswith('.noisy') or fname.endswith('.sysnoise'): # pragma: no cover
+		if fname.endswith(('.fits.gz', '.fits')):
+			with fits.open(fname, mode='readonly', memmap=True) as hdu:
+				# Filter out invalid parts of the input lightcurve:
+				hdu = _filter_fits_hdu(hdu)
+
+				# Quality flags from the pixels:
+				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
+
+				# Corrections applied to timestamps:
+				timecorr = hdu['LIGHTCURVE'].data['TIMECORR']
+
+				# Create the QUALITY column and fill it with flags of bad data points:
+				quality = np.zeros_like(hdu['LIGHTCURVE'].data['TIME'], dtype='int32')
+				bad_data = ~np.isfinite(hdu['LIGHTCURVE'].data['FLUX_RAW'])
+				bad_data |= (pixel_quality & TESSQualityFlags.DEFAULT_BITMASK != 0)
+				quality[bad_data] |= CorrectorQualityFlags.FlaggedBadData
+
+				# Create lightkurve object:
+				lc = TessLightCurve(
+					time=hdu['LIGHTCURVE'].data['TIME'],
+					flux=hdu['LIGHTCURVE'].data['FLUX_RAW'],
+					flux_err=hdu['LIGHTCURVE'].data['FLUX_RAW_ERR'],
+					centroid_col=hdu['LIGHTCURVE'].data['MOM_CENTR1'],
+					centroid_row=hdu['LIGHTCURVE'].data['MOM_CENTR2'],
+					quality=quality,
+					cadenceno=np.asarray(hdu['LIGHTCURVE'].data['CADENCENO'], dtype='int32'),
+					time_format='btjd',
+					time_scale='tdb',
+					targetid=hdu[0].header.get('TICID'),
+					label=hdu[0].header.get('OBJECT'),
+					camera=hdu[0].header.get('CAMERA'),
+					ccd=hdu[0].header.get('CCD'),
+					sector=hdu[0].header.get('SECTOR'),
+					ra=hdu[0].header.get('RA_OBJ'),
+					dec=hdu[0].header.get('DEC_OBJ'),
+					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
+					meta={'data_rel': hdu[0].header.get('DATA_REL')}
+				)
+
+				# Apply manual exclude flag:
+				manexcl = manual_exclude(lc)
+				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
+
+		elif fname.endswith(('.noisy', '.sysnoise')): # pragma: no cover
 			data = np.loadtxt(fname)
 
 			# Quality flags from the pixels:
@@ -494,48 +540,6 @@ class BaseCorrector(object):
 				meta={}
 			)
 
-		elif fname.endswith('.fits') or fname.endswith('.fits.gz'):
-			with fits.open(fname, mode='readonly', memmap=True) as hdu:
-				# Filter out invalid parts of the input lightcurve:
-				hdu = _filter_fits_hdu(hdu)
-
-				# Quality flags from the pixels:
-				pixel_quality = np.asarray(hdu['LIGHTCURVE'].data['PIXEL_QUALITY'], dtype='int32')
-
-				# Corrections applied to timestamps:
-				timecorr = hdu['LIGHTCURVE'].data['TIMECORR']
-
-				# Create the QUALITY column and fill it with flags of bad data points:
-				quality = np.zeros_like(hdu['LIGHTCURVE'].data['TIME'], dtype='int32')
-				bad_data = ~np.isfinite(hdu['LIGHTCURVE'].data['FLUX_RAW'])
-				bad_data |= (pixel_quality & TESSQualityFlags.DEFAULT_BITMASK != 0)
-				quality[bad_data] |= CorrectorQualityFlags.FlaggedBadData
-
-				# Create lightkurve object:
-				lc = TessLightCurve(
-					time=hdu['LIGHTCURVE'].data['TIME'],
-					flux=hdu['LIGHTCURVE'].data['FLUX_RAW'],
-					flux_err=hdu['LIGHTCURVE'].data['FLUX_RAW_ERR'],
-					centroid_col=hdu['LIGHTCURVE'].data['MOM_CENTR1'],
-					centroid_row=hdu['LIGHTCURVE'].data['MOM_CENTR2'],
-					quality=quality,
-					cadenceno=np.asarray(hdu['LIGHTCURVE'].data['CADENCENO'], dtype='int32'),
-					time_format='btjd',
-					time_scale='tdb',
-					targetid=hdu[0].header.get('TICID'),
-					label=hdu[0].header.get('OBJECT'),
-					camera=hdu[0].header.get('CAMERA'),
-					ccd=hdu[0].header.get('CCD'),
-					sector=hdu[0].header.get('SECTOR'),
-					ra=hdu[0].header.get('RA_OBJ'),
-					dec=hdu[0].header.get('DEC_OBJ'),
-					quality_bitmask=CorrectorQualityFlags.DEFAULT_BITMASK,
-					meta={}
-				)
-
-				# Apply manual exclude flag:
-				manexcl = manual_exclude(lc)
-				lc.quality[manexcl] |= CorrectorQualityFlags.ManualExclude
 		else:
 			raise ValueError("Invalid file format")
 
@@ -590,7 +594,7 @@ class BaseCorrector(object):
 		# Get the filename of the original file from the task:
 		fname = lc.meta.get('task').get('lightcurve')
 
-		if fname.endswith('.fits') or fname.endswith('.fits.gz'):
+		if fname.endswith(('.fits.gz', '.fits')):
 			logger.debug("Saving as FITS file")
 
 			if self.CorrMethod == 'cbv':
@@ -648,7 +652,7 @@ class BaseCorrector(object):
 
 		# For the simulated ASCII files, simply create a new ASCII files next to the original one,
 		# with an extension ".corr":
-		elif fname.endswith('.noisy') or fname.endswith('.sysnoise'): # pragma: no cover
+		elif fname.endswith(('.noisy', '.sysnoise')): # pragma: no cover
 			save_file = os.path.join(output_folder, os.path.dirname(fname), os.path.splitext(os.path.basename(fname))[0] + '.corr')
 
 			# Create new ASCII file:

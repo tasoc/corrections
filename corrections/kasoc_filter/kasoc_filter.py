@@ -482,15 +482,19 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 
 	# Check input:
 	Ng = len(time)
-	assert len(flux) == Ng, "TIME and FLUX should have the same number of elements."
-	assert position.shape == (Ng,2), "TIME and POSITION should have the same number of elements."
-	if dt is None: dt = median(diff(time))
+	if len(flux) != Ng:
+		raise ValueError("TIME and FLUX should have the same number of elements.")
+	if position.shape != (Ng,2):
+		raise ValueError("TIME and POSITION should have the same number of elements.")
+	if dt is None:
+		dt = median(diff(time))
 
 	# Since many of the routines used here can not handle NaN values,
 	# we start by removing all NaN values from the input, but store their
 	# location so they can be inserted again later on:
 	indx_finite = np.all(isfinite(position), axis=1)
-	if not any(indx_finite): raise Exception("No valid positions")
+	if not any(indx_finite):
+		raise RuntimeError("No valid positions")
 
 	# Check that all the chunks defined by the breaks actually contain data:
 	position_breaks = np.sort(position_breaks) # Make sure it is sorted in time
@@ -791,8 +795,10 @@ def filter_position_1d(time, flux, star_movement, timescale_position_smooth=None
 	"""Filter the lightcurve for correlations in the stars position on the CCD."""
 
 	# Check input:
-	assert len(time) == len(flux), "TIME and FLUX should have the same number of elements."
-	if timescale_position_smooth is not None and dt is None: dt = median(diff(time))
+	if len(time) != len(flux):
+		raise ValueError("TIME and FLUX should have the same number of elements.")
+	if timescale_position_smooth is not None and dt is None:
+		dt = median(diff(time))
 
 	# Settings:
 	# num_knots = 15
@@ -903,8 +909,10 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	if position is not None:
 		if not isinstance(position, dict):
 			position = {'pixels': position, 'break': np.array([], dtype='float64')}
-		assert position['pixels'].shape == (N, 2), "POSITION must have the shape (N,2)"
-	assert it > 0, "IT must be at least one."
+		if position['pixels'].shape != (N, 2):
+			raise ValueError("POSITION must have the shape (N,2)")
+	if it < 1:
+		raise ValueError("IT must be at least one.")
 
 	# Get the logger to use for printing messages:
 	logger = logging.getLogger(__name__)

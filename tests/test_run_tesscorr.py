@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Tests that run run_tesscorr with several different inputs.
@@ -7,71 +7,55 @@ Tests that run run_tesscorr with several different inputs.
 """
 
 import pytest
-import os.path
 import tempfile
-import subprocess
-import shlex
-import sys
+from conftest import capture_run_cli
 from test_known_stars import STAR_LIST
 
 #--------------------------------------------------------------------------------------------------
-def capture_run_tesscorr(params):
-
-	command = '"%s" run_tesscorr.py %s' % (sys.executable, params.strip())
-	print(command)
-
-	cmd = shlex.split(command)
-	proc = subprocess.Popen(cmd,
-		cwd=os.path.join(os.path.dirname(__file__), '..'),
-		stdout=subprocess.PIPE,
-		stderr=subprocess.PIPE,
-		universal_newlines=True
-	)
-	out, err = proc.communicate()
-	exitcode = proc.returncode
-	proc.kill()
-
-	print("ExitCode: %d" % exitcode)
-	print("StdOut:\n%s" % out)
-	print("StdErr:\n%s" % err)
-	return out, err, exitcode
-
-#--------------------------------------------------------------------------------------------------
 def test_run_tesscorr_invalid_method():
-	out, err, exitcode = capture_run_tesscorr("-t --starid=29281992 --method=invalid")
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --method=invalid")
 	assert exitcode == 2
 	assert "error: argument -m/--method: invalid choice: 'invalid'" in err
 
 #--------------------------------------------------------------------------------------------------
-def test_run_tesscorr_invalid_datasource():
-	out, err, exitcode = capture_run_tesscorr("-t --starid=29281992 --datasource=invalid")
+def test_run_tesscorr_invalid_sector():
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --sector=invalid")
 	assert exitcode == 2
-	assert "error: argument --datasource: invalid choice: 'invalid'" in err
+	assert "error: argument --sector: invalid int value: 'invalid'" in err
+
+#--------------------------------------------------------------------------------------------------
+def test_run_tesscorr_invalid_cadence():
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --cadence=15")
+	assert exitcode == 2
+	assert "error: argument --cadence: invalid choice: 15 (choose from 'ffi', 1800, 600, 120, 20)" in err
 
 #--------------------------------------------------------------------------------------------------
 def test_run_tesscorr_invalid_camera():
-	out, err, exitcode = capture_run_tesscorr("-t --starid=29281992 --camera=5")
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --camera=5")
 	assert exitcode == 2
 	assert 'error: argument --camera: invalid choice: 5 (choose from 1, 2, 3, 4)' in err
 
 #--------------------------------------------------------------------------------------------------
 def test_run_tesscorr_invalid_ccd():
-	out, err, exitcode = capture_run_tesscorr("-t --starid=29281992 --ccd=14")
+	out, err, exitcode = capture_run_cli('run_tesscorr.py', "-t --starid=29281992 --ccd=14")
 	assert exitcode == 2
 	assert 'error: argument --ccd: invalid choice: 14 (choose from 1, 2, 3, 4)' in err
 
 #--------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize("method,starid,datasource,var_goal,rms_goal,ptp_goal", STAR_LIST)
-def test_run_tesscorr(SHARED_INPUT_DIR, method, starid, datasource, var_goal,rms_goal, ptp_goal):
+@pytest.mark.parametrize("method,starid,cadence,var_goal,rms_goal,ptp_goal", STAR_LIST)
+def test_run_tesscorr(SHARED_INPUT_DIR, method, starid, cadence, var_goal,rms_goal, ptp_goal):
 	with tempfile.TemporaryDirectory() as tmpdir:
-		params = '-o -d -p --starid={starid:d} --method={method:s} --datasource={datasource:s} "{input_dir:s}" "{output:s}"'.format(
-			starid=starid,
-			method=method,
-			datasource=datasource,
-			input_dir=SHARED_INPUT_DIR,
-			output=tmpdir
-		)
-		out, err, exitcode = capture_run_tesscorr(params)
+		params = [
+			'--overwrite',
+			'--debug',
+			'--plot',
+			f'--starid={starid:d}',
+			f'--method={method:s}',
+			f'--cadence={cadence:d}',
+			SHARED_INPUT_DIR,
+			tmpdir
+		]
+		out, err, exitcode = capture_run_cli('run_tesscorr.py', params)
 
 	assert ' - ERROR - ' not in err
 	assert exitcode == 0

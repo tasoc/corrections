@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tests that run run_tesscorr with several different inputs.
+Tests that run run_tesscorr_mpi with several different inputs.
 
 .. codeauthor:: Rasmus Handberg <rasmush@phys.au.dk>
 """
@@ -9,65 +9,46 @@ Tests that run run_tesscorr with several different inputs.
 import pytest
 import os.path
 import tempfile
-import subprocess
-import shlex
-import sys
 from test_known_stars import STAR_LIST
 import conftest # noqa: F401
+from conftest import capture_run_cli
 from corrections import TaskManager
 
 # Skip these tests if mpi4py can not be loaded:
 pytest.importorskip("mpi4py")
 
 #--------------------------------------------------------------------------------------------------
-def capture_run_tesscorr_mpi(params, mpiexec=True):
-
-	command = '"%s" run_tesscorr_mpi.py %s' % (sys.executable, params.strip())
-	if mpiexec:
-		command = 'mpiexec -n 2 ' + command
-	print(command)
-
-	cmd = shlex.split(command)
-	proc = subprocess.Popen(cmd,
-		cwd=os.path.join(os.path.dirname(__file__), '..'),
-		stdout=subprocess.PIPE,
-		stderr=subprocess.PIPE,
-		universal_newlines=True
-	)
-	out, err = proc.communicate()
-	exitcode = proc.returncode
-	proc.kill()
-
-	print("ExitCode: %d" % exitcode)
-	print("StdOut:\n%s" % out)
-	print("StdErr:\n%s" % err)
-	return out, err, exitcode
-
-#--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_method():
-	out, err, exitcode = capture_run_tesscorr_mpi("--method=invalid", mpiexec=False)
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--method=invalid")
 	assert exitcode == 2
 	assert "error: argument -m/--method: invalid choice: 'invalid'" in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
-def test_run_tesscorr_mpi_invalid_datasource():
-	out, err, exitcode = capture_run_tesscorr_mpi("--datasource=invalid", mpiexec=False)
+def test_run_tesscorr_mpi_invalid_sector():
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--sector=invalid")
 	assert exitcode == 2
-	assert "error: argument --datasource: invalid choice: 'invalid'" in err
+	assert "error: argument --sector: invalid int value: 'invalid'" in err
+
+#--------------------------------------------------------------------------------------------------
+@pytest.mark.mpi
+def test_run_tesscorr_mpi_invalid_cadence():
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--cadence=15")
+	assert exitcode == 2
+	assert "error: argument --cadence: invalid choice: 15 (choose from 'ffi', 1800, 600, 120, 20)" in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_camera():
-	out, err, exitcode = capture_run_tesscorr_mpi("--camera=5", mpiexec=False)
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--camera=5")
 	assert exitcode == 2
 	assert 'error: argument --camera: invalid choice: 5 (choose from 1, 2, 3, 4)' in err
 
 #--------------------------------------------------------------------------------------------------
 @pytest.mark.mpi
 def test_run_tesscorr_mpi_invalid_ccd():
-	out, err, exitcode = capture_run_tesscorr_mpi("--ccd=14", mpiexec=False)
+	out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', "--ccd=14")
 	assert exitcode == 2
 	assert 'error: argument --ccd: invalid choice: 14 (choose from 1, 2, 3, 4)' in err
 
@@ -85,26 +66,28 @@ def test_run_tesscorr_mpi(PRIVATE_TODO_FILE, method):
 		tm.cursor.execute("UPDATE todolist SET corr_status=1;")
 		for s in STAR_LIST:
 			if isinstance(s, (tuple, list)):
-				meth, starid, datasource = s[0:3]
+				meth, starid, cadence = s[0:3]
 			else:
-				meth, starid, datasource = s.values[0:3]
+				meth, starid, cadence = s.values[0:3]
 			if meth != method:
 				continue
-			tm.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE starid=? AND datasource=?;", [starid, datasource])
+			tm.cursor.execute("UPDATE todolist SET corr_status=NULL WHERE starid=? AND cadence=?;", [starid, cadence])
 		tm.conn.commit()
 		tm.cursor.execute("SELECT COUNT(*) FROM todolist WHERE corr_status IS NULL;")
 		num = tm.cursor.fetchone()[0]
 
 	print(num)
-	assert num < 10
+	assert num > 0, "There should be at least one star to be processed with each method"
+	assert num < 10, "There should not be more than 10 stars for each method"
 
 	with tempfile.TemporaryDirectory() as tmpdir:
-		params = '-d --method={method:s} "{input_dir:s}" "{output:s}"'.format(
-			method=method,
-			input_dir=os.path.dirname(PRIVATE_TODO_FILE),
-			output=tmpdir
-		)
-		out, err, exitcode = capture_run_tesscorr_mpi(params)
+		params = [
+			'--debug',
+			f'--method={method:s}',
+			os.path.dirname(PRIVATE_TODO_FILE),
+			tmpdir
+		]
+		out, err, exitcode = capture_run_cli('run_tesscorr_mpi.py', params, mpiexec=True)
 
 	assert ' - INFO - %d tasks to be run' % num in err
 	assert ' - INFO - Master starting with 1 workers' in err
