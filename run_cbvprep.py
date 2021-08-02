@@ -90,7 +90,7 @@ def main():
 	# Use the BaseCorrector to search the database for which CBV_AREAS to run:
 	with corrections.BaseCorrector(input_folder) as bc:
 		# Search for valid areas:
-		cbv_areas = [(row['sector'], row['cbv_area']) for row in bc.search_database(select=['sector','cbv_area'], distinct=True, search=constraints)]
+		cbv_areas = [(row['sector'], row['cbv_area']) for row in bc.search_database(select=['sector','cbv_area'], distinct=True, search=constraints, order_by=['sector', 'cbv_area'])]
 		logger.debug("CBV areas: %s", cbv_areas)
 
 	# Stop if there are no CBV-Areas to process:
