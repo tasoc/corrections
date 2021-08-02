@@ -901,7 +901,7 @@ class CBVCreator(BaseCorrector):
 		newfile = os.path.join(self.output_folder, f'cbv-s{self.sector:04d}-c{cadence:04d}-a{self.cbv_area:d}.hdf5')
 		if os.path.exists(newfile):
 			logger.warning("File already exists: %s", newfile)
-			return
+			return newfile
 
 		# Get single star to load timestamps etc from:
 		stars = self.search_database(
