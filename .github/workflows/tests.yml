@@ -24,6 +24,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+      with:
+        lfs: false
 
     - name: Setup Python 3.7
       uses: actions/setup-python@v3
@@ -64,6 +66,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
       with:
+        lfs: false
         fetch-depth: 0
 
     - name: Create LFS file list
@@ -139,7 +142,7 @@ jobs:
     #  run: |
     #    sphinx-build -a -W --no-color -b coverage -d docs/_build/doctrees docs docs/_build/coverage
 
-  # Release tagged commits to:
+  # Release tagged commits to GitHub releases:
   release:
     name: Create release
     if: startsWith( github.ref, 'refs/tags/v' )
@@ -149,6 +152,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
       with:
+        lfs: false
         fetch-depth: 0
 
     - name: Create LFS file list
