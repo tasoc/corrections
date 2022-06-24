@@ -23,21 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+      with:
+        lfs: false
 
     - name: Setup Python 3.7
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v3
       with:
         python-version: 3.7
-
-    - name: Cache pip
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-py3.7-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-py3.7-
-          ${{ runner.os }}-pip-
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -60,14 +54,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: [3.6, 3.7, 3.8]
-        include:
-        - os: ubuntu-latest
-          pippath: ~/.cache/pip
-        - os: macos-latest
-          pippath: ~/Library/Caches/pip
-        - os: windows-latest
-          pippath: ~\AppData\Local\pip\Cache
+        python-version: ['3.7', '3.8', '3.9', '3.10']
 
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -77,8 +64,9 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
+        lfs: false
         fetch-depth: 0
 
     - name: Create LFS file list
@@ -95,18 +83,10 @@ jobs:
       run: git lfs pull
 
     - name: Setup Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-
-    - name: Cache pip
-      uses: actions/cache@v2
-      with:
-        path: ${{ matrix.pippath }}
-        key: ${{ runner.os }}-pip-py${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-py${{ matrix.python-version }}-
-          ${{ runner.os }}-pip-
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -126,7 +106,7 @@ jobs:
       run: pytest --cov
 
     - name: Upload coverage
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v3
       with:
         env_vars: OS,PYTHON
 
@@ -137,23 +117,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         lfs: false
 
     - name: Setup Python 3.7
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v3
       with:
         python-version: 3.7
-
-    - name: Cache pip
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-py3.7-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-py3.7-
-          ${{ runner.os }}-pip-
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -170,7 +142,7 @@ jobs:
     #  run: |
     #    sphinx-build -a -W --no-color -b coverage -d docs/_build/doctrees docs docs/_build/coverage
 
-  # Release tagged commits to:
+  # Release tagged commits to GitHub releases:
   release:
     name: Create release
     if: startsWith( github.ref, 'refs/tags/v' )
@@ -178,8 +150,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
+        lfs: false
         fetch-depth: 0
 
     - name: Create LFS file list
@@ -196,18 +169,10 @@ jobs:
       run: git lfs pull
 
     - name: Setup Python 3.7
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v3
       with:
         python-version: 3.7
-
-    - name: Cache pip
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-py3.7-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-py3.7-
-          ${{ runner.os }}-pip-
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -222,6 +187,12 @@ jobs:
       id: vars
       run: echo ::set-output name=tag::${GITHUB_REF#refs/tags/v}
 
+    - name: Generate changelog
+      id: changelog
+      uses: metcalfc/changelog-generator@v3.0.0
+      with:
+        myToken: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
@@ -232,4 +203,8 @@ jobs:
         release_name: Version ${{ steps.vars.outputs.tag }}
         body: |
           Version ${{ steps.vars.outputs.tag }}
+
+          Changelog
+          ---------
+          ${{ steps.changelog.outputs.changelog }}
         draft: true

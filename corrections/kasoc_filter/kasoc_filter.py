@@ -433,8 +433,7 @@ def filter_phase(t, x, Plist, smooth_factor=1000):
 		imax = nanargmax(np.abs(phase_smooth_t), axis=1)
 
 		s = nanstd(x)
-		fig = plt.figure()
-		fig.canvas.set_window_title('phasecurve')
+		fig = plt.figure(num='phasecurve')
 		fig.subplots_adjust(hspace=0.05)
 		for k, P in enumerate(Plist):
 			# Plot phasecurve for this period:
@@ -444,10 +443,10 @@ def filter_phase(t, x, Plist, smooth_factor=1000):
 			ax.axvline(phase[k,imax[k]]/P, color='b', linestyle='--') # Line indicating the (likely) planet transit
 			ax.set_xlim(0, 1)
 			ax.set_ylim(-6*s, 6*s)
-			ax.text(0.02, 0.97, 'P = %f d' % P, horizontalalignment='left', verticalalignment='top', transform=ax.transAxes, backgroundcolor='w', color='k')
+			ax.text(0.02, 0.97, f'P = {P:f} d', horizontalalignment='left', verticalalignment='top', transform=ax.transAxes, backgroundcolor='w', color='k')
 			if k != Np-1: plt.setp(ax.get_xticklabels(), visible=False)
 		ax.set_xlabel('Phase')
-		fig.text(0.03, 0.5, u'Flux (counts/s)', ha='center', va='center', rotation='vertical', transform=fig.transFigure)
+		fig.text(0.03, 0.5, 'Flux (counts/s)', ha='center', va='center', rotation='vertical', transform=fig.transFigure)
 		if _output_format != 'native':
 			fig.savefig(os.path.join(_output_folder, _output_prefix+'phasecurve.'+_output_format), format=_output_format, bbox_inches='tight')
 			plt.close(fig)
@@ -510,8 +509,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 		Nchunks = 2
 
 	# Plot the position of the star as a function of time:
-	fig = plt.figure()
-	fig.canvas.set_window_title('Pixel positions vs time')
+	fig = plt.figure(num='Pixel positions vs time')
 	fig.subplots_adjust(hspace=0.05)
 	ax1 = fig.add_subplot(211)
 	#ax1.scatter(time, position[:,0], color='b', s=1)
@@ -537,8 +535,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 	NN = NearestNeighbors(n_neighbors=2, algorithm='kd_tree')
 
 	# Prepare the plot which will be filled in the loop below:
-	fig1 = plt.figure(figsize=(1.7*8,6))
-	fig1.canvas.set_window_title('Pixel positions')
+	fig1 = plt.figure(num='Pixel positions', figsize=(1.7*8,6))
 	fig1ax1 = fig1.add_subplot(121)
 	#fig1ax1.scatter(position[:,0], position[:,1], color='k', s=1)
 	fig1ax1.set_xlabel('$x$ (pixels)', fontsize=10)
@@ -553,8 +550,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 	plt.yticks(fontsize=10)
 	fig1ax2.axis('equal')
 
-	fig2 = plt.figure()
-	fig2.canvas.set_window_title('Position changes')
+	fig2 = plt.figure(num='Position changes')
 	fig2.subplots_adjust(hspace=0.05)
 	fig2ax1 = fig2.add_subplot(211)
 	fig2ax1.set_xlim(time[0], time[-1])
@@ -571,8 +567,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 	plt.xticks(fontsize=10)
 	plt.yticks(fontsize=10)
 
-	fig3 = plt.figure()
-	fig3.canvas.set_window_title('Position sigma clipping')
+	fig3 = plt.figure(num='Position sigma clipping')
 	fig3ax1 = fig3.add_subplot(211)
 	fig3ax1.set_xlabel('Time (days)', fontsize=10)
 	fig3ax1.set_ylabel('Nearest neighbor distance (pixels)', fontsize=10)
@@ -587,8 +582,7 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 	plt.yticks(fontsize=10)
 	fig3ax2.axis('equal')
 
-	fig4 = plt.figure()
-	fig4.canvas.set_window_title('Position PCA axis')
+	fig4 = plt.figure(num='Position PCA axis')
 
 	flag_bad_pos = zeros(Ng, dtype='bool')
 	curvelength = []
@@ -681,14 +675,14 @@ def extract_star_movement_1d(time, flux, position, dt=None, rapid_movement_sigma
 		fig4ax1 = fig4.add_subplot(Nchunks-1, 2, 2*chk+1)
 		fig4ax1.scatter(pos2[indx_good,0], pos2[indx_good,1], color='k', s=1, alpha=0.3)
 		fig4ax1.scatter(poscurve1[indx_good,0], poscurve1[indx_good,1], color='r', s=2)
-		fig4ax1.set_title(r"$\chi^2 = %f$" % chi2_1, fontsize=12)
+		fig4ax1.set_title(rf"$\chi^2 = {chi2_1:f}$", fontsize=12)
 		plt.xticks(fontsize=10)
 		plt.yticks(fontsize=10)
 		fig4ax1.axis('equal')
 		fig4ax2 = fig4.add_subplot(Nchunks-1, 2, 2*chk+2)
 		fig4ax2.scatter(pos2[indx_good,1], pos2[indx_good,0], color='k', s=1, alpha=0.3)
 		fig4ax2.scatter(poscurve2[indx_good,0], poscurve2[indx_good,1], color='g', s=2)
-		fig4ax2.set_title(r"$\chi^2 = %f$" % chi2_2, fontsize=12)
+		fig4ax2.set_title(rf"$\chi^2 = {chi2_2:f}$", fontsize=12)
 		plt.xticks(fontsize=10)
 		plt.yticks(fontsize=10)
 		fig4ax2.axis('equal')
@@ -982,8 +976,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 	figsize = [8*1.7, 6*1.7]
 	figsize[0] = figsize[0] * max(ncols/3, 1)
 	figsize[1] = figsize[1] * max(it/3, 1)
-	fig = plt.figure(figsize=figsize)
-	fig.canvas.set_window_title('Decorrelation')
+	fig = plt.figure(num='Decorrelation', figsize=figsize)
 	fig.subplots_adjust(hspace=0.05)
 
 	# Repeat the determination of xlong and xpos to better disentangle them:
@@ -1032,7 +1025,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 				ax2.plot(curvelength_chunk, xpos[chunk][indx_possort], 'r-')
 
 				plt.yticks(fontsize=10)
-				if i == 0: ax2.set_title('Position-flux #%d' % (kc+1))
+				if i == 0: ax2.set_title(f'Position-flux #{kc+1:d}')
 				if i == it-1:
 					ax2.set_xlabel('Curve length (pixels)', fontsize=10)
 					plt.xticks(fontsize=10)
@@ -1118,8 +1111,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 
 		# Plot the derived filter compoments:
 		if _output_folder is not None:
-			fig = plt.figure() # num='turnover'
-			fig.canvas.set_window_title('turnover')
+			fig = plt.figure(num='turnover')
 			fig.subplots_adjust(hspace=0.05)
 			ax1 = plt.subplot(211)
 			ax1.axhspan(scale_clip-scale_width, scale_clip+scale_width, facecolor='0.5', edgecolor=None, alpha=0.5)
@@ -1158,8 +1150,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 		mask_short = isfinite(xshort)
 		mask_filt = isfinite(filt)
 
-		fig = plt.figure()
-		fig.canvas.set_window_title('components')
+		fig = plt.figure(num='components')
 		ax = fig.add_subplot(111)
 		h1 = plt.scatter(t, x, color='k', s=2)
 		h2, = plt.plot(tg[mask_long], xlong[mask_long], 'b-')
@@ -1278,8 +1269,7 @@ def filter(t, x, quality=None, position=None, P=None, jumps=None, timescale_long
 
 	# Plot the final filtered timeseries:
 	if _output_folder is not None:
-		fig = plt.figure()
-		fig.canvas.set_window_title('final filter')
+		fig = plt.figure(num='final filter')
 		fig.subplots_adjust(hspace=0.05)
 		ax1 = plt.subplot(211)
 		ax1.plot(t, x, 'b.', markersize=2)
